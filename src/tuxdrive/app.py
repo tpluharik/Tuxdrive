@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import uuid
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,6 +87,8 @@ class OAuthWizard(Gtk.Dialog):
         self.complete_callback = complete_callback
         self.question: ConfigQuestion | None = None
         self.remote = ""
+        self.session_id = uuid.uuid4().hex
+        self._closed = False
 
         content = self.get_content_area()
         content.set_border_width(24)
@@ -141,11 +144,13 @@ class OAuthWizard(Gtk.Dialog):
         self.cancel_button = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
         self.next_button = self.add_button("Open browser and connect", Gtk.ResponseType.OK)
         self.connect("response", self._on_response)
+        self.connect("delete-event", self._on_delete)
         self.show_all()
         self.question_box.hide()
 
     def _on_response(self, _dialog: Gtk.Dialog, response: int) -> None:
         if response != Gtk.ResponseType.OK:
+            self._cancel_authorization()
             self.destroy()
             return
         if self.question is None:
@@ -162,6 +167,7 @@ class OAuthWizard(Gtk.Dialog):
                 self.provider,
                 self.client_id.get_text().strip(),
                 self.client_secret.get_text().strip(),
+                self.session_id,
             )
         else:
             answer = self._answer()
@@ -170,9 +176,27 @@ class OAuthWizard(Gtk.Dialog):
                 return
             state = self.question.state
             self._busy("Waiting for authorization… Check your web browser.")
-            _run_thread(self.client.continue_oauth, self._step_ready, self.remote, state, answer)
+            _run_thread(
+                self.client.continue_oauth,
+                self._step_ready,
+                self.remote,
+                state,
+                answer,
+                self.session_id,
+            )
+
+    def _on_delete(self, *_args) -> bool:
+        self._cancel_authorization()
+        return False
+
+    def _cancel_authorization(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self.client.cancel_oauth(self.session_id)
 
     def _step_ready(self, result: ConfigResult | None, error: Exception | None) -> bool:
+        if self._closed:
+            return False
         self._not_busy()
         if error:
             self._set_error(str(error))
@@ -236,7 +260,7 @@ class OAuthWizard(Gtk.Dialog):
         self.spinner.start()
         self.status.set_text(message)
         self.next_button.set_sensitive(False)
-        self.cancel_button.set_sensitive(False)
+        self.cancel_button.set_sensitive(True)
 
     def _not_busy(self) -> None:
         self.spinner.stop()

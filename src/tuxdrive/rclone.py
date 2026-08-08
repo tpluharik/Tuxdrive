@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import signal
 import shutil
+import socket
 import subprocess
+import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -45,6 +48,9 @@ class RcloneClient:
 
     def __init__(self, executable: str = "rclone") -> None:
         self.executable = executable
+        self._oauth_guard = threading.Lock()
+        self._oauth_process: subprocess.Popen[str] | None = None
+        self._oauth_session: str | None = None
 
     def available(self) -> bool:
         resolved = resolve_rclone(self.executable)
@@ -89,6 +95,7 @@ class RcloneClient:
         provider: Provider,
         client_id: str = "",
         client_secret: str = "",
+        session_id: str = "",
     ) -> ConfigResult:
         self._validate_remote_name(remote)
         args = ["config", "create", remote, provider.rclone_type]
@@ -97,13 +104,14 @@ class RcloneClient:
         if client_secret:
             args.extend(["client_secret", client_secret])
         args.append("--non-interactive")
-        return self._configuration_step(args)
+        return self._configuration_step(args, session_id)
 
     def continue_oauth(
         self,
         remote: str,
         state: str,
         answer: str,
+        session_id: str = "",
     ) -> ConfigResult:
         self._validate_remote_name(remote)
         return self._configuration_step(
@@ -117,7 +125,8 @@ class RcloneClient:
                 "--result",
                 answer,
                 "--non-interactive",
-            ]
+            ],
+            session_id,
         )
 
     def reconnect(self, remote: str) -> subprocess.CompletedProcess[str]:
@@ -146,8 +155,8 @@ class RcloneClient:
         except json.JSONDecodeError:
             return {}
 
-    def _configuration_step(self, args: list[str]) -> ConfigResult:
-        result = self._run(args, timeout=600)
+    def _configuration_step(self, args: list[str], session_id: str = "") -> ConfigResult:
+        result = self._run_oauth(args, session_id, timeout=600)
         output = result.stdout.strip()
         if not output:
             return ConfigResult(complete=True)
@@ -174,6 +183,83 @@ class RcloneClient:
                 error=value.get("Error", ""),
             ),
         )
+
+    def _run_oauth(
+        self, args: list[str], session_id: str, timeout: int
+    ) -> subprocess.CompletedProcess[str]:
+        if not self.available():
+            self.ensure_available()
+        if "--continue" in args and self._callback_port_busy():
+            raise RcloneError(
+                "The OAuth callback port (127.0.0.1:53682) is already in use. "
+                "Close the earlier TuxDrive/rclone authorization attempt, then try again."
+            )
+        environment = os.environ.copy()
+        environment.setdefault("LC_ALL", "C.UTF-8")
+        with self._oauth_guard:
+            if self._oauth_process is not None and self._oauth_process.poll() is None:
+                raise RcloneError("Another cloud authorization is already in progress.")
+            process = subprocess.Popen(
+                [self.executable, *args],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=environment,
+                start_new_session=True,
+            )
+            self._oauth_process = process
+            self._oauth_session = session_id
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired as exc:
+            self.cancel_oauth(session_id)
+            raise RcloneError("Authorization timed out. Please try again.") from exc
+        finally:
+            with self._oauth_guard:
+                if self._oauth_process is process:
+                    self._oauth_process = None
+                    self._oauth_session = None
+        if process.returncode:
+            raise RcloneError(self._friendly_oauth_error(stderr or stdout))
+        return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
+
+    def cancel_oauth(self, session_id: str) -> None:
+        """Stop only the authorization process owned by the requesting wizard."""
+        with self._oauth_guard:
+            process = self._oauth_process
+            if process is None or self._oauth_session != session_id or process.poll() is not None:
+                return
+            try:
+                os.killpg(process.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                return
+        try:
+            process.wait(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
+    @staticmethod
+    def _callback_port_busy() -> bool:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.settimeout(0.15)
+            return probe.connect_ex(("127.0.0.1", 53682)) == 0
+
+    @staticmethod
+    def _friendly_oauth_error(message: str) -> str:
+        text = message.strip()
+        if "address already in use" in text.lower():
+            return (
+                "The OAuth callback port (127.0.0.1:53682) is already in use. "
+                "Close the earlier TuxDrive/rclone authorization attempt, then try again."
+            )
+        meaningful = [line.strip() for line in text.splitlines() if line.strip()]
+        for line in reversed(meaningful):
+            if line.lower().startswith(("fatal error:", "error:")):
+                return line[:500]
+        return (meaningful[0] if meaningful else "Cloud authorization failed")[:500]
 
     def _run(
         self,
