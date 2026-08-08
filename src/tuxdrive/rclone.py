@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .models import Provider
+from .bootstrap import install_rclone, resolve_rclone
 
 
 class RcloneError(RuntimeError):
@@ -46,7 +47,17 @@ class RcloneClient:
         self.executable = executable
 
     def available(self) -> bool:
-        return bool(shutil.which(self.executable))
+        resolved = resolve_rclone(self.executable)
+        if resolved:
+            self.executable = resolved
+            return True
+        return False
+
+    def ensure_available(self) -> str:
+        if self.available():
+            return self.executable
+        self.executable = install_rclone()
+        return self.executable
 
     def version(self) -> str:
         result = self._run(["version"])
@@ -170,7 +181,10 @@ class RcloneClient:
         timeout: int = 60,
     ) -> subprocess.CompletedProcess[str]:
         if not self.available():
-            raise RcloneError("rclone is not installed or is not on PATH")
+            try:
+                self.ensure_available()
+            except Exception as exc:
+                raise RcloneError(str(exc)) from exc
         environment = os.environ.copy()
         environment.setdefault("LC_ALL", "C.UTF-8")
         try:

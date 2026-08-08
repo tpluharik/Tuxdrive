@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 import threading
@@ -11,17 +12,34 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from . import __version__
+from .diagnostics import (
+    application_log_path,
+    configure_logging,
+    crash_log_path,
+    install_crash_handlers,
+    log_boot_failure,
+    log_directory,
+)
+
+LOGGER = configure_logging(__version__)
+install_crash_handlers(LOGGER)
+
 try:
     import gi
 
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gdk, Gio, GLib, Gtk
 except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host desktop
-    print(
-        "TuxDrive requires GTK 3 Python bindings. Install the .deb package or "
-        "run: sudo apt install python3-gi gir1.2-gtk-3.0",
-        file=sys.stderr,
+    message = (
+        "TuxDrive could not load its desktop runtime. Reinstall with:\n\n"
+        "sudo apt install ./tuxdrive_0.2.0_all.deb\n\n"
+        f"Technical detail: {exc}\nCrash log: {crash_log_path()}"
     )
+    log_boot_failure(message)
+    print(message, file=sys.stderr)
+    if shutil.which("zenity"):
+        subprocess.run(["zenity", "--error", "--title=TuxDrive startup failure", f"--text={message}"], check=False)
     raise SystemExit(2) from exc
 
 from .config import ConfigStore, cache_home
@@ -680,10 +698,13 @@ class TuxDriveApplication(Gtk.Application):
         self.engine = SyncEngine(self.config.settings.rclone_path)
         self.window: MainWindow | None = None
         self.indicator = None
+        self._runtime_ready_once = False
         self._last_started: dict[str, datetime] = {}
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
+        self.hold()
+        LOGGER.info("GTK application startup completed")
         self._install_css()
         GLib.timeout_add_seconds(30, self._scheduler_tick)
         self.configure_autostart()
@@ -692,14 +713,14 @@ class TuxDriveApplication(Gtk.Application):
     def do_activate(self) -> None:
         if self.window is None:
             self.window = MainWindow(self)
-            self._import_existing_accounts()
-        if not (self.background or self.config.settings.start_minimized):
+            self.window.message("Preparing the cloud transfer engine…")
+            _run_thread(self._load_runtime, self._runtime_loaded)
+        tray_available = self.indicator is not None
+        if not (tray_available and (self.background or self.config.settings.start_minimized)):
             self.window.show_all()
             self.window.present()
         self.background = False
-        for job in self.config.jobs:
-            if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:
-                self.run_job(job, quiet=True)
+        LOGGER.info("Application activated; window_visible=%s", self.window.get_visible())
 
     def add_account(self, account: Account) -> None:
         self.config.accounts = [item for item in self.config.accounts if item.remote != account.remote]
@@ -717,6 +738,7 @@ class TuxDriveApplication(Gtk.Application):
                 self.window.message(f"{job.name} is already synchronizing.")
             return
         job.last_status = "Mounting…" if job.mode is SyncMode.VIRTUAL_DRIVE else "Synchronizing…"
+        self._set_tray_state("syncing", job.name)
         self._last_started[job.id] = datetime.now(timezone.utc)
         if self.window:
             self.window.refresh()
@@ -745,6 +767,8 @@ class TuxDriveApplication(Gtk.Application):
         job.last_error = "" if result.success else result.message
         if result.success and job.mode is not SyncMode.VIRTUAL_DRIVE:
             job.initialized = True
+        self._set_tray_state("ready" if result.success else "error", result.message)
+        LOGGER.info("Job %s finished: success=%s message=%s", job.id, result.success, result.message)
         self.save()
         if self.window:
             self.window.refresh()
@@ -770,6 +794,7 @@ class TuxDriveApplication(Gtk.Application):
 
     def _create_indicator(self) -> None:
         if AyatanaAppIndicator3 is None:
+            LOGGER.error("AyatanaAppIndicator3 is unavailable; tray icon cannot be created")
             return
         self.indicator = AyatanaAppIndicator3.Indicator.new(
             "tuxdrive",
@@ -778,6 +803,9 @@ class TuxDriveApplication(Gtk.Application):
         )
         self.indicator.set_status(AyatanaAppIndicator3.IndicatorStatus.ACTIVE)
         self.indicator.set_title("TuxDrive")
+        self.indicator.set_icon_theme_path("/usr/share/icons/hicolor/scalable/apps")
+        self.indicator.set_icon_full("tuxdrive", "TuxDrive is running")
+        self.indicator.set_attention_icon_full("tuxdrive-error", "TuxDrive needs attention")
         menu = Gtk.Menu()
         show = Gtk.MenuItem(label="Open TuxDrive")
         show.connect("activate", lambda _item: self.activate())
@@ -799,12 +827,34 @@ class TuxDriveApplication(Gtk.Application):
                 self.window.refresh()
 
         pause_all.connect("toggled", toggle_pause)
+        logs = Gtk.MenuItem(label="Open diagnostic logs")
+        logs.connect("activate", lambda _item: MainWindow._open_path(log_directory()))
         quit_item = Gtk.MenuItem(label="Quit")
         quit_item.connect("activate", lambda _item: self.quit())
-        for item in (show, sync_all, pause_all, Gtk.SeparatorMenuItem(), quit_item):
+        for item in (show, sync_all, pause_all, logs, Gtk.SeparatorMenuItem(), quit_item):
             menu.append(item)
         menu.show_all()
         self.indicator.set_menu(menu)
+        LOGGER.info("Tray indicator initialized")
+        GLib.timeout_add_seconds(
+            2,
+            lambda: (self.notify("TuxDrive loaded", "Cloud synchronization is running in the tray"), False)[1],
+        )
+
+    def _set_tray_state(self, state: str, detail: str = "") -> None:
+        if not self.indicator or AyatanaAppIndicator3 is None:
+            return
+        icon = {
+            "ready": "tuxdrive",
+            "syncing": "tuxdrive-sync",
+            "error": "tuxdrive-error",
+        }.get(state, "tuxdrive")
+        self.indicator.set_icon_full(icon, f"TuxDrive: {detail or state}")
+        self.indicator.set_status(
+            AyatanaAppIndicator3.IndicatorStatus.ATTENTION
+            if state == "error"
+            else AyatanaAppIndicator3.IndicatorStatus.ACTIVE
+        )
 
     def save(self) -> None:
         self.store.save(self.config)
@@ -829,15 +879,28 @@ class TuxDriveApplication(Gtk.Application):
         elif target.exists():
             target.unlink()
 
-    def _import_existing_accounts(self) -> None:
-        if not self.rclone.available():
+    def _load_runtime(self) -> dict[str, Provider]:
+        executable = self.rclone.ensure_available()
+        self.engine.rclone_path = executable
+        LOGGER.info("Cloud transfer engine ready: %s", executable)
+        return self.rclone.discover_accounts()
+
+    def _runtime_loaded(
+        self, existing: dict[str, Provider] | None, error: Exception | None
+    ) -> bool:
+        if error:
+            LOGGER.error(
+                "Runtime initialization failed",
+                exc_info=(type(error), error, error.__traceback__),
+            )
+            self._set_tray_state("error", "Runtime initialization failed")
             if self.window:
-                self.window.message("rclone is missing. Reinstall TuxDrive using the .deb package.", Gtk.MessageType.ERROR)
-            return
-        try:
-            existing = self.rclone.discover_accounts()
-        except RcloneError:
-            return
+                self.window.message(
+                    f"Runtime preparation failed: {error}. Logs: {crash_log_path()}",
+                    Gtk.MessageType.ERROR,
+                )
+            return False
+        existing = existing or {}
         known = {account.remote for account in self.config.accounts}
         for remote, provider in existing.items():
             if remote not in known:
@@ -845,6 +908,14 @@ class TuxDriveApplication(Gtk.Application):
         self.save()
         if self.window:
             self.window.refresh()
+            self.window.message("TuxDrive loaded and is running in the tray.")
+        self._set_tray_state("ready", "Loaded")
+        if not self._runtime_ready_once:
+            self._runtime_ready_once = True
+            for job in self.config.jobs:
+                if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:
+                    self.run_job(job, quiet=True)
+        return False
 
     @staticmethod
     def _install_css() -> None:
@@ -860,7 +931,9 @@ class TuxDriveApplication(Gtk.Application):
         )
 
     def do_shutdown(self) -> None:
+        LOGGER.info("TuxDrive shutting down")
         self.engine.shutdown()
+        self.release()
         Gtk.Application.do_shutdown(self)
 
 
@@ -868,11 +941,14 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="TuxDrive cloud synchronization client")
     parser.add_argument("--background", action="store_true", help="start without opening the main window")
     parser.add_argument("--version", action="store_true", help="show version and exit")
+    parser.add_argument("--diagnostics", action="store_true", help="show diagnostic log locations and exit")
     args, gtk_args = parser.parse_known_args(argv)
     if args.version:
-        from . import __version__
-
         print(f"TuxDrive {__version__}")
+        return 0
+    if args.diagnostics:
+        print(f"Application log: {application_log_path()}")
+        print(f"Crash log: {crash_log_path()}")
         return 0
     application = TuxDriveApplication(background=args.background)
     return application.run([sys.argv[0], *gtk_args])
