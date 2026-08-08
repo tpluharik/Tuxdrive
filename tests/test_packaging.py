@@ -1,0 +1,19 @@
+import unittest
+from pathlib import Path
+
+
+class PackagingTests(unittest.TestCase):
+    def test_launcher_points_to_parent_of_installed_package(self):
+        launcher = Path("packaging/tuxdrive-launcher").read_text(encoding="utf-8")
+        self.assertIn('PYTHONPATH="/usr/lib', launcher)
+        self.assertNotIn('PYTHONPATH="/usr/lib/tuxdrive', launcher)
+        self.assertIn("-m tuxdrive.app", launcher)
+
+    def test_build_has_installed_layout_import_smoke_test(self):
+        build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
+        self.assertIn('PYTHONPATH="$PACKAGE_ROOT/usr/lib"', build_script)
+        self.assertIn('find_spec("tuxdrive.app")', build_script)
+
+
+if __name__ == "__main__":
+    unittest.main()

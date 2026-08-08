@@ -1,5 +1,5 @@
 #!/bin/sh
-export PYTHONPATH="/usr/lib/tuxdrive${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH="/usr/lib${PYTHONPATH:+:$PYTHONPATH}"
 state_root="${XDG_STATE_HOME:-${HOME}/.local/state}/tuxdrive"
 mkdir -p "$state_root"
 chmod 700 "$state_root"

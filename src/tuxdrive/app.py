@@ -33,7 +33,7 @@ try:
 except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host desktop
     message = (
         "TuxDrive could not load its desktop runtime. Reinstall with:\n\n"
-        "sudo apt install ./tuxdrive_0.2.0_all.deb\n\n"
+        f"sudo apt install ./tuxdrive_{__version__}_all.deb\n\n"
         f"Technical detail: {exc}\nCrash log: {crash_log_path()}"
     )
     log_boot_failure(message)
