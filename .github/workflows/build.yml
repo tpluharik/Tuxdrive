@@ -1,0 +1,26 @@
+name: Build TuxDrive
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Unit tests
+        run: PYTHONPATH=src python -m unittest discover -s tests -v
+      - name: Compile Python sources
+        run: python -m compileall -q src
+      - name: Build Debian package
+        run: sh scripts/build-deb.sh
+      - name: Inspect Debian package
+        run: dpkg-deb --info dist/tuxdrive_0.1.0_all.deb && dpkg-deb --contents dist/tuxdrive_0.1.0_all.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tuxdrive-deb
+          path: dist/tuxdrive_0.1.0_all.deb

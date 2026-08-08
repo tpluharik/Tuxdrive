@@ -78,4 +78,3 @@ TuxDrive implements the core desktop behaviors of the Windows clients through pu
 ## License
 
 MIT. rclone is a separate program distributed under its own license.
-

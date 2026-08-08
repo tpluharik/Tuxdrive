@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tuxdrive"
+version = "0.1.0"
+description = "Native Google Drive and Microsoft OneDrive desktop client for Ubuntu"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "TuxDrive contributors"}]
+dependencies = []
+
+[project.scripts]
+tuxdrive = "tuxdrive.app:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

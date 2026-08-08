@@ -1,0 +1,13 @@
+[Unit]
+Description=TuxDrive cloud synchronization client
+After=graphical-session.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/tuxdrive --background
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

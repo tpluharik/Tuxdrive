@@ -1,0 +1,13 @@
+Package: tuxdrive
+Version: 0.1.0
+Section: net
+Priority: optional
+Architecture: all
+Maintainer: TuxDrive contributors <tpluharik@users.noreply.github.com>
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, rclone (>= 1.58), fuse3, xdg-utils
+Recommends: libnotify-bin
+Homepage: https://github.com/tpluharik/Tuxdrive
+Description: Google Drive and Microsoft OneDrive client for Ubuntu
+ TuxDrive provides browser-based OAuth, multiple cloud accounts, two-way and
+ one-way synchronization, selective folders, conflict handling, tray controls,
+ notifications, and files-on-demand virtual drives through rclone and FUSE.

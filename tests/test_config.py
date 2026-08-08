@@ -1,0 +1,44 @@
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+
+from tuxdrive.config import ConfigStore
+from tuxdrive.models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
+
+
+class ConfigStoreTests(unittest.TestCase):
+    def test_round_trip_and_private_permissions(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "nested" / "config.json"
+            store = ConfigStore(path)
+            value = AppConfig(
+                accounts=[Account("google-main", Provider.GOOGLE_DRIVE, "Work Drive")],
+                jobs=[
+                    SyncJob(
+                        account_remote="google-main",
+                        local_path="/tmp/cloud",
+                        remote_path="Projects",
+                        mode=SyncMode.TWO_WAY,
+                        conflict_policy=ConflictPolicy.KEEP_BOTH,
+                    )
+                ],
+            )
+            store.save(value)
+            loaded = store.load()
+            self.assertEqual(loaded.accounts[0].provider, Provider.GOOGLE_DRIVE)
+            self.assertEqual(loaded.jobs[0].remote_spec, "google-main:Projects")
+            self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+
+    def test_invalid_config_is_quarantined(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            path.write_text("{not json", encoding="utf-8")
+            with self.assertRaises(RuntimeError):
+                ConfigStore(path).load()
+            self.assertTrue(path.with_suffix(".json.invalid").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()
