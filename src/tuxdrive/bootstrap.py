@@ -4,6 +4,7 @@ import hashlib
 import os
 import platform
 import shutil
+import subprocess
 import tempfile
 import urllib.request
 import zipfile
@@ -27,20 +28,42 @@ def user_rclone_path() -> Path:
 
 
 def resolve_rclone(configured: str = "rclone") -> str | None:
+    candidates: list[Path] = []
     if configured and configured != "rclone":
-        explicit = Path(configured).expanduser()
-        if explicit.is_file() and os.access(explicit, os.X_OK):
-            return str(explicit)
-    bundled = Path("/usr/lib/tuxdrive/bin/rclone")
-    if bundled.is_file() and os.access(bundled, os.X_OK):
-        return str(bundled)
+        candidates.append(Path(configured).expanduser())
+    candidates.extend(
+        [
+            Path("/usr/lib/tuxdrive/bin/rclone"),
+            user_rclone_path(),
+        ]
+    )
     system = shutil.which("rclone")
     if system:
-        return system
-    local = user_rclone_path()
-    if local.is_file() and os.access(local, os.X_OK):
-        return str(local)
+        candidates.append(Path(system))
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.is_file() and os.access(candidate, os.X_OK) and rclone_compatible(candidate):
+            return str(candidate)
     return None
+
+
+def rclone_compatible(executable: Path) -> bool:
+    """Require the bisync safety features used by TuxDrive."""
+    try:
+        result = subprocess.run(
+            [str(executable), "bisync", "--help"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    help_text = result.stdout + result.stderr
+    return all(flag in help_text for flag in ("--resilient", "--recover", "--resync-mode"))
 
 
 def install_rclone(progress: Callable[[str], None] | None = None) -> str:

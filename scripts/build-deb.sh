@@ -2,8 +2,8 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.2.3_all"
-OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.2.3_all.deb"
+PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.2.4_all"
+OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.2.4_all.deb"
 
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p \
@@ -40,7 +40,7 @@ chmod 0644 "$PACKAGE_ROOT/DEBIAN/control"
 # Verify the exact installed layout used by /usr/bin/tuxdrive. This catches
 # PYTHONPATH/package-placement regressions before a .deb can be published.
 PYTHONPATH="$PACKAGE_ROOT/usr/lib" /usr/bin/python3 -c \
-  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.2.3"; assert importlib.util.find_spec("tuxdrive.app")'
+  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.2.4"; assert importlib.util.find_spec("tuxdrive.app")'
 
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
 printf '%s\n' "$OUTPUT"

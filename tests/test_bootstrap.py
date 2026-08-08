@@ -13,7 +13,16 @@ class BootstrapTests(unittest.TestCase):
             executable = Path(temporary) / "rclone"
             executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
             executable.chmod(0o755)
-            self.assertEqual(resolve_rclone(str(executable)), str(executable))
+            with patch("tuxdrive.bootstrap.rclone_compatible", return_value=True):
+                self.assertEqual(resolve_rclone(str(executable)), str(executable))
+
+    def test_incompatible_system_rclone_is_rejected(self):
+        with patch("tuxdrive.bootstrap.shutil.which", return_value="/usr/bin/rclone"), patch(
+            "tuxdrive.bootstrap.Path.is_file", return_value=True
+        ), patch("tuxdrive.bootstrap.os.access", return_value=True), patch(
+            "tuxdrive.bootstrap.rclone_compatible", return_value=False
+        ):
+            self.assertIsNone(resolve_rclone())
 
     def test_release_checksums_cover_supported_architectures(self):
         self.assertEqual(len(RCLONE_SHA256["amd64"]), 64)

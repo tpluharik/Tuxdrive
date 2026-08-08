@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from tuxdrive.engine import SyncEngine
@@ -58,6 +59,14 @@ class SyncEngineCommandTests(unittest.TestCase):
             command = self.engine.mount_command(job)
             self.assertEqual(command[:4], ["/usr/bin/rclone", "mount", "google:", "/mnt/Google"])
             self.assertEqual(command[command.index("--vfs-cache-mode") + 1], "full")
+
+    def test_failure_summary_surfaces_fatal_detail(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = os.path.join(temporary, "sync.log")
+            with open(log, "w", encoding="utf-8") as handle:
+                handle.write("Usage:\nFatal error: unknown flag: --resilient\n")
+            message = self.engine._failure_summary(Path(log), 1)
+        self.assertEqual(message, "Synchronization failed: unknown flag: --resilient")
 
 
 if __name__ == "__main__":

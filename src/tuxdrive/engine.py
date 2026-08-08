@@ -226,7 +226,7 @@ class SyncEngine:
                 result = JobResult(
                     job.id,
                     False,
-                    f"Synchronization failed (rclone exit {return_code})",
+                    self._failure_summary(log_path, return_code),
                     log_path,
                 )
         except OSError as exc:
@@ -245,6 +245,20 @@ class SyncEngine:
         if policy is ConflictPolicy.CLOUD_WINS:
             return ["--conflict-resolve", "path2"]
         return ["--conflict-resolve", "none"]
+
+    @staticmethod
+    def _failure_summary(log_path: Path, return_code: int) -> str:
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            lines = []
+        for line in reversed(lines[-200:]):
+            cleaned = line.strip()
+            lowered = cleaned.lower()
+            if lowered.startswith("fatal error:"):
+                detail = cleaned.split(":", 1)[1].strip()
+                return f"Synchronization failed: {detail[:300]}"
+        return f"Synchronization failed (rclone exit {return_code}); see log"
 
     @staticmethod
     def _log_path(job: SyncJob) -> Path:
