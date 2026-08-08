@@ -14,6 +14,17 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('PYTHONPATH="$PACKAGE_ROOT/usr/lib"', build_script)
         self.assertIn('find_spec("tuxdrive.app")', build_script)
 
+    def test_gtk3_and_gdk3_are_pinned_before_repository_import(self):
+        app = Path("src/tuxdrive/app.py").read_text(encoding="utf-8")
+        gdk_requirement = 'gi.require_version("Gdk", "3.0")'
+        gtk_requirement = 'gi.require_version("Gtk", "3.0")'
+        repository_import = "from gi.repository import Gtk, Gdk, Gio, GLib"
+        self.assertIn(gdk_requirement, app)
+        self.assertIn(gtk_requirement, app)
+        self.assertIn(repository_import, app)
+        self.assertLess(app.index(gdk_requirement), app.index(repository_import))
+        self.assertLess(app.index(gtk_requirement), app.index(repository_import))
+
 
 if __name__ == "__main__":
     unittest.main()

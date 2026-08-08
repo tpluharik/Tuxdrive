@@ -28,8 +28,11 @@ install_crash_handlers(LOGGER)
 try:
     import gi
 
+    # Pin GDK before importing it. Ubuntu 26.04 ships both GDK 3 and 4; without
+    # this explicit requirement PyGObject may load GDK 4 before GTK 3.
+    gi.require_version("Gdk", "3.0")
     gi.require_version("Gtk", "3.0")
-    from gi.repository import Gdk, Gio, GLib, Gtk
+    from gi.repository import Gtk, Gdk, Gio, GLib
 except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host desktop
     message = (
         "TuxDrive could not load its desktop runtime. Reinstall with:\n\n"
