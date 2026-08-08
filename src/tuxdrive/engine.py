@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from . import __version__
+from .bootstrap import install_rclone, resolve_rclone
 from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
 
@@ -201,11 +203,18 @@ class SyncEngine:
         dry_run: bool,
     ) -> None:
         log_path.parent.mkdir(parents=True, exist_ok=True)
-        command = self.command_for_job(job, dry_run=dry_run)
         cancelled = False
         try:
+            resolved = resolve_rclone(self.rclone_path)
+            if resolved is None:
+                resolved = install_rclone()
+            self.rclone_path = resolved
+            command = self.command_for_job(job, dry_run=dry_run)
             with log_path.open("a", encoding="utf-8") as log:
-                log.write(f"\n[{datetime.now(timezone.utc).isoformat()}] Starting sync\n")
+                log.write(
+                    f"\n[{datetime.now(timezone.utc).isoformat()}] Starting TuxDrive "
+                    f"{__version__} sync with {self.rclone_path}\n"
+                )
                 process = subprocess.Popen(
                     command,
                     stdout=log,
@@ -229,8 +238,8 @@ class SyncEngine:
                     self._failure_summary(log_path, return_code),
                     log_path,
                 )
-        except OSError as exc:
-            result = JobResult(job.id, False, str(exc), log_path)
+        except (OSError, RuntimeError) as exc:
+            result = JobResult(job.id, False, f"Synchronization could not start: {exc}", log_path)
         finally:
             with self._lock:
                 self._processes.pop(job.id, None)

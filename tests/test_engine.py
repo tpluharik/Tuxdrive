@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from tuxdrive.engine import SyncEngine
 from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode
@@ -67,6 +67,23 @@ class SyncEngineCommandTests(unittest.TestCase):
                 handle.write("Usage:\nFatal error: unknown flag: --resilient\n")
             message = self.engine._failure_summary(Path(log), 1)
         self.assertEqual(message, "Synchronization failed: unknown flag: --resilient")
+
+    def test_worker_replaces_incompatible_rclone_before_launch(self):
+        job = SyncJob(account_remote="google", local_path="/data/Drive")
+        completed = []
+        process = MagicMock()
+        process.wait.return_value = 0
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "tuxdrive.engine.resolve_rclone", return_value=None
+        ), patch("tuxdrive.engine.install_rclone", return_value="/private/rclone"), patch(
+            "tuxdrive.engine.subprocess.Popen", return_value=process
+        ) as popen:
+            self.engine._run_worker(
+                job, Path(temporary) / "sync.log", completed.append, False
+            )
+        self.assertEqual(self.engine.rclone_path, "/private/rclone")
+        self.assertEqual(popen.call_args.args[0][0], "/private/rclone")
+        self.assertTrue(completed[0].success)
 
 
 if __name__ == "__main__":
