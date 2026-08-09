@@ -1,6 +1,6 @@
 {
   "version": "0.5.0",
   "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.5.0_all.deb",
-  "sha256": "ae344b9c92f6e1e71c22ba0a222bab1b0e61193f5924d12da0ad3d3812050ba3",
+  "sha256": "1fada047707d18ea9445e03e5703f186859e0da60f36bf0a3a7e70de27f1cb7a",
   "notes": "New TuxDrive penguin identity, provider-specific Google Drive and OneDrive icons, and verified in-app updates."
 }

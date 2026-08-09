@@ -251,7 +251,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.4.4_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.5.0_all.deb`.
 
 ## 11. Data safety
 
