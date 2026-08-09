@@ -1,6 +1,6 @@
 {
-  "version": "0.6.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.1_all.deb",
-  "sha256": "bdb3a31de32fd0cf4867a3884bec093ccd4b5499445584595b288a5746ba9ccd",
-  "notes": "Adds visible update progress and results, display-only job renaming, and hardened streaming startup with preflight diagnostics, orphaned FUSE mount cleanup, detailed logs, and a longer connection window."
+  "version": "0.6.2",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.2_all.deb",
+  "sha256": "8731ec1fdbdbbf7ed07a42137146d79d36fe859ec478fc7ed658b50be521798e",
+  "notes": "Completes Proton Drive setup with explicit credential and 2FA fields, protected secret storage, remote validation before Connected status, and an in-place reconnect path for previously incomplete Proton remotes."
 }

@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.6.1 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.6.2 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.6.1 on Ubuntu 26.04: installation, provider authori
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.1_all.deb
+sudo apt install ./tuxdrive_0.6.2_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -50,10 +50,18 @@ Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive,
 - **Display name** is the friendly name shown in the sidebar.
 - **OAuth client ID/secret** are optional for personal testing. A dedicated provider application is recommended for regular or organizational use.
 - Google Drive, OneDrive, Dropbox, Box, and pCloud normally open browser OAuth. Sign in on the provider's page and approve access; TuxDrive does not receive the cloud password.
-- MEGA and Proton Drive use guided provider credential questions. Nextcloud asks for the server URL, username, and preferably an app password. These values are handled by rclone and retained in its private configuration, not TuxDrive's account JSON.
+- MEGA and Proton Drive use explicit provider credential fields. Nextcloud asks for the server URL, username, and preferably an app password. Secret values are protected before rclone stores them in its private configuration; they are never stored in TuxDrive's account JSON.
 - Every provider exposes the same lazy-loading folder tree, multi-folder selection, two-way/one-way modes, and streaming-drive option after connection.
 - Proton Drive support follows rclone's beta backend. TuxDrive disables that backend's metadata cache so changes made by another client can be discovered, but provider protocol changes may still require a future TuxDrive/rclone update.
 - If the browser callback port is busy, cancel the old authorization window and retry. TuxDrive stops stale OAuth callback processes before opening a new session.
+
+### Proton Drive authentication
+
+Enter the Proton account email and password. If the account uses two-factor authentication, enter either the current six-digit code or, for a connection that can authenticate again later, the account's OTP secret key. Enter a mailbox password only for older Proton accounts configured in two-password mode. TuxDrive tests a root-folder listing before it accepts the account, so an incomplete remote is no longer displayed as **Connected**.
+
+If Proton Drive was added with TuxDrive 0.6.0 or 0.6.1 and folder browsing says that a username and password are required, open the account's menu and choose **Reconnect / refresh credentials**. Fill in the Proton fields; synchronized-job definitions do not need to be recreated.
+
+Proton Drive support uses rclone's beta backend. Proton protocol changes may require an updated TuxDrive transfer engine, and Proton may apply additional authentication checks to some accounts.
 
 The account menu provides:
 
@@ -236,7 +244,11 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.6.1 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.6.2 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+
+### Proton Drive says username and password are required
+
+The account was created without the Proton backend credentials. Open its menu, choose **Reconnect / refresh credentials**, enter the required Proton email and password (plus 2FA/OTP information when applicable), and wait for **Verifying cloud access** to complete. TuxDrive retains the existing sync jobs and validates the repaired remote before returning it to the connected state.
 
 ### Job reports recovery sync required
 
@@ -260,7 +272,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.6.1_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.6.2_all.deb`.
 
 ## 11. Data safety
 

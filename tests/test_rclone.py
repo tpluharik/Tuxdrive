@@ -105,6 +105,46 @@ class RcloneClientTests(unittest.TestCase):
             ["config", "create", "cloud", "webdav", "vendor", "nextcloud"],
         )
 
+    def test_proton_credentials_are_protected_and_written(self):
+        client = RcloneClient()
+        credentials = {
+            "username": "user@proton.me",
+            "password": "raw-password",
+            "2fa": "123456",
+        }
+        with patch.object(
+            client, "_obscure", side_effect=lambda value: f"obscured:{value}"
+        ) as obscure, patch.object(
+            client,
+            "_run_oauth",
+            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        ) as run:
+            result = client.begin_oauth(
+                "proton", Provider.PROTON_DRIVE, credentials=credentials
+            )
+        self.assertTrue(result.complete)
+        args = run.call_args.args[0]
+        self.assertIn("username", args)
+        self.assertIn("user@proton.me", args)
+        self.assertIn("obscured:raw-password", args)
+        self.assertIn("obscured:123456", args)
+        self.assertNotIn("raw-password", args)
+        self.assertEqual(obscure.call_count, 2)
+        self.assertEqual(args[-1], "--non-interactive")
+
+    def test_remote_is_listed_before_account_is_accepted(self):
+        client = RcloneClient()
+        with patch.object(
+            client,
+            "_run",
+            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        ) as run:
+            client.validate_remote("proton")
+        self.assertEqual(
+            run.call_args.args[0],
+            ["lsf", "proton:", "--dirs-only", "--max-depth", "1"],
+        )
+
     def test_account_discovery_recognizes_added_backends(self):
         configured = {
             "drop": {"type": "dropbox"},

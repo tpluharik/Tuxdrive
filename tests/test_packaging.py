@@ -38,6 +38,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('label="Rename"', app)
         self.assertIn("Gtk.ProgressBar()", app)
         self.assertIn('"Downloading… {fraction:.0%}"', app)
+        self.assertIn("Verifying cloud access…", app)
+        self.assertIn("Reconnect / refresh credentials", app)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

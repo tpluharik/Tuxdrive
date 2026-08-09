@@ -15,13 +15,13 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.6.1 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.6.2 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
 - provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
-- Proton Drive uses rclone's beta backend with metadata caching disabled to reduce stale external-change listings
+- Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected in rclone's private configuration and the remote is tested before it is shown as connected
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
@@ -59,7 +59,7 @@ Version 0.6.1 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.1_all.deb
+sudo apt install ./tuxdrive_0.6.2_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -75,7 +75,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.6.1_all.deb`.
+The installer is written to `dist/tuxdrive_0.6.2_all.deb`.
 
 ## Update from the app
 

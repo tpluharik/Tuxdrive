@@ -83,6 +83,7 @@ class OAuthWizard(Gtk.Dialog):
         client: RcloneClient,
         provider: Provider,
         complete_callback: Callable[[Account], None],
+        existing: Account | None = None,
     ) -> None:
         super().__init__(title=f"Connect {provider.label}", transient_for=parent, modal=True)
         self.set_icon_name(provider.icon_name)
@@ -90,6 +91,7 @@ class OAuthWizard(Gtk.Dialog):
         self.client = client
         self.provider = provider
         self.complete_callback = complete_callback
+        self.existing = existing
         self.question: ConfigQuestion | None = None
         self.remote = ""
         self.session_id = uuid.uuid4().hex
@@ -114,12 +116,12 @@ class OAuthWizard(Gtk.Dialog):
         grid = Gtk.Grid(column_spacing=12, row_spacing=10)
         self.name_entry = Gtk.Entry()
         self.name_entry.set_text(
-            provider.key_prefix
-            + "-"
-            + datetime.now().strftime("%H%M")
+            existing.remote if existing else
+            provider.key_prefix + "-" + datetime.now().strftime("%H%M")
         )
+        self.name_entry.set_sensitive(existing is None)
         self.display_entry = Gtk.Entry()
-        self.display_entry.set_text(provider.label)
+        self.display_entry.set_text(existing.display_name if existing else provider.label)
         self.client_id = Gtk.Entry()
         self.client_secret = Gtk.Entry()
         self.client_secret.set_visibility(False)
@@ -132,6 +134,15 @@ class OAuthWizard(Gtk.Dialog):
             grid.attach(self.client_id, 1, 2, 1, 1)
             grid.attach(Gtk.Label(label="OAuth client secret (optional)", xalign=0), 0, 3, 1, 1)
             grid.attach(self.client_secret, 1, 3, 1, 1)
+        self.credential_entries: dict[str, Gtk.Entry] = {}
+        for offset, (key, label, secret, _required) in enumerate(provider.credential_fields, start=2):
+            entry = Gtk.Entry()
+            entry.set_visibility(not secret)
+            if secret:
+                entry.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, offset, 1, 1)
+            grid.attach(entry, 1, offset, 1, 1)
+            self.credential_entries[key] = entry
         content.pack_start(grid, False, False, 0)
 
         self.question_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -170,6 +181,17 @@ class OAuthWizard(Gtk.Dialog):
                 self._set_error("Account key may contain only letters, numbers, dot, dash, and underscore.")
                 return
             self.remote = remote
+            credentials = {
+                key: entry.get_text().strip()
+                for key, entry in self.credential_entries.items()
+            }
+            missing = [
+                label for key, label, _secret, required in self.provider.credential_fields
+                if required and not credentials.get(key)
+            ]
+            if missing:
+                self._set_error("Required: " + ", ".join(missing))
+                return
             self._busy("Preparing secure authorization…")
             _run_thread(
                 self.client.begin_oauth,
@@ -179,6 +201,7 @@ class OAuthWizard(Gtk.Dialog):
                 self.client_id.get_text().strip(),
                 self.client_secret.get_text().strip(),
                 self.session_id,
+                credentials,
             )
         else:
             answer = self._answer()
@@ -216,13 +239,8 @@ class OAuthWizard(Gtk.Dialog):
             self._set_error("Authorization returned no result")
             return False
         if result.complete:
-            account = Account(
-                remote=self.remote,
-                provider=self.provider,
-                display_name=self.display_entry.get_text().strip() or self.provider.label,
-            )
-            self.complete_callback(account)
-            self.destroy()
+            self._busy("Verifying cloud access…")
+            _run_thread(self.client.validate_remote, self._validation_ready, self.remote)
             return False
         self.question = result.question
         self._show_question(result.question)
@@ -235,6 +253,8 @@ class OAuthWizard(Gtk.Dialog):
         self.display_entry.set_sensitive(False)
         self.client_id.set_sensitive(False)
         self.client_secret.set_sensitive(False)
+        for entry in self.credential_entries.values():
+            entry.set_sensitive(False)
         self.question_box.show()
         self.help_label.set_text((question.error + "\n\n" if question.error else "") + question.help)
         if self.answer_widget:
@@ -259,6 +279,20 @@ class OAuthWizard(Gtk.Dialog):
         self.answer_widget.show()
         self.next_button.set_label("Continue")
         self.status.set_text("Choose an option and continue")
+
+    def _validation_ready(self, _result, error: Exception | None) -> bool:
+        self._not_busy()
+        if error:
+            self._set_error(f"Connection validation failed: {error}")
+            return False
+        account = Account(
+            remote=self.remote,
+            provider=self.provider,
+            display_name=self.display_entry.get_text().strip() or self.provider.label,
+        )
+        self.complete_callback(account)
+        self.destroy()
+        return False
 
     def _answer(self) -> str:
         if isinstance(self.answer_widget, Gtk.ComboBoxText):
@@ -394,8 +428,14 @@ class CloudFolderTree(Gtk.Box):
             child = self.store.iter_children(target)
         if error:
             self.store.set_value(target, 3, False)
+            detail = str(error)
+            if "username and password are required" in detail.lower():
+                detail += (
+                    "\nOpen the Proton Drive account menu and choose "
+                    "Reconnect / refresh credentials."
+                )
             self.status.set_markup(
-                f"<span foreground='#c01c28'>{GLib.markup_escape_text(str(error))}</span>"
+                f"<span foreground='#c01c28'>{GLib.markup_escape_text(detail)}</span>"
             )
             return False
         parent_path = self.store.get_value(target, 2)
@@ -1128,6 +1168,12 @@ class MainWindow(Gtk.ApplicationWindow):
             self.message("This Nextcloud account uses its configured server URL.")
 
     def _reconnect(self, _item: Gtk.MenuItem, account: Account) -> None:
+        if not account.provider.browser_oauth:
+            OAuthWizard(
+                self, self.controller.rclone, account.provider,
+                self.controller.add_account, existing=account,
+            )
+            return
         self.message("Authorization is opening in your browser…", Gtk.MessageType.INFO)
         _run_thread(self.controller.rclone.reconnect, self._reconnect_done, account.remote)
 

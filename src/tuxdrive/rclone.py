@@ -108,6 +108,7 @@ class RcloneClient:
         client_id: str = "",
         client_secret: str = "",
         session_id: str = "",
+        credentials: dict[str, str] | None = None,
     ) -> ConfigResult:
         self._validate_remote_name(remote)
         args = ["config", "create", remote, provider.rclone_type]
@@ -116,8 +117,35 @@ class RcloneClient:
             args.extend(["client_id", client_id])
         if client_secret:
             args.extend(["client_secret", client_secret])
+        secret_keys = {
+            key for key, _label, secret, _required in provider.credential_fields if secret
+        }
+        for key, value in (credentials or {}).items():
+            if not value:
+                continue
+            args.extend([key, self._obscure(value) if key in secret_keys else value])
         args.append("--non-interactive")
         return self._configuration_step(args, session_id)
+
+    def validate_remote(self, remote: str) -> None:
+        self._validate_remote_name(remote)
+        self._run(["lsf", f"{remote}:", "--dirs-only", "--max-depth", "1"])
+
+    def _obscure(self, value: str) -> str:
+        if not self.available():
+            self.ensure_available()
+        result = subprocess.run(
+            [self.executable, "obscure", "-"],
+            input=value,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        if result.returncode or not result.stdout.strip():
+            raise RcloneError("Could not protect the provider password before configuration")
+        return result.stdout.strip()
 
     def continue_oauth(
         self,

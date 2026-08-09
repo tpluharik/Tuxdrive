@@ -94,6 +94,28 @@ class Provider(str, Enum):
         return ()
 
     @property
+    def credential_fields(self) -> tuple[tuple[str, str, bool, bool], ...]:
+        """(config key, UI label, secret, required) for non-OAuth providers."""
+        return {
+            self.MEGA: (
+                ("user", "MEGA email", False, True),
+                ("pass", "MEGA password", True, True),
+            ),
+            self.PROTON_DRIVE: (
+                ("username", "Proton account email", False, True),
+                ("password", "Proton password", True, True),
+                ("2fa", "Current 2FA code (optional)", True, False),
+                ("otp_secret_key", "OTP secret key (optional)", True, False),
+                ("mailbox_password", "Mailbox password (two-password accounts)", True, False),
+            ),
+            self.NEXTCLOUD: (
+                ("url", "Nextcloud WebDAV URL", False, True),
+                ("user", "Nextcloud username", False, True),
+                ("pass", "Nextcloud app password", True, True),
+            ),
+        }.get(self, ())
+
+    @property
     def home_url(self) -> str:
         return {
             self.GOOGLE_DRIVE: "https://drive.google.com/drive/my-drive",
