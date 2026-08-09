@@ -4,6 +4,15 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive** and **Microsoft 
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
+## Community and development
+
+TuxDrive is publicly readable. Direct repository writes remain restricted to maintainers, while everyone can participate through [Issues](https://github.com/tpluharik/Tuxdrive/issues), comments, forks, and pull requests.
+
+- [Report a bug](https://github.com/tpluharik/Tuxdrive/issues/new?template=bug_report.yml)
+- [Suggest a feature](https://github.com/tpluharik/Tuxdrive/issues/new?template=feature_request.yml)
+- [Contribution guide](CONTRIBUTING.md)
+- [Code of conduct](CODE_OF_CONDUCT.md)
+
 Version 0.4.4 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works

@@ -1,0 +1,6 @@
+blank_issues_enabled: true
+contact_links:
+  - name: TuxDrive illustrated user guide
+    url: https://github.com/tpluharik/Tuxdrive/blob/main/docs/USER_GUIDE.md
+    about: Check setup, streaming, exceptions, logs, and troubleshooting before opening an issue.
+
