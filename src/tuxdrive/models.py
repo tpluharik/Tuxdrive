@@ -85,7 +85,13 @@ class Provider(str, Enum):
 
     @property
     def initial_options(self) -> tuple[str, ...]:
-        return ("vendor", "nextcloud") if self is self.NEXTCLOUD else ()
+        if self is self.NEXTCLOUD:
+            return ("vendor", "nextcloud")
+        if self is self.PROTON_DRIVE:
+            # Proton's backend warns that its metadata cache can become stale
+            # when another client changes a mounted drive.
+            return ("enable_caching", "false")
+        return ()
 
     @property
     def home_url(self) -> str:

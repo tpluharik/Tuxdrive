@@ -48,6 +48,7 @@ Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive,
 - Google Drive, OneDrive, Dropbox, Box, and pCloud normally open browser OAuth. Sign in on the provider's page and approve access; TuxDrive does not receive the cloud password.
 - MEGA and Proton Drive use guided provider credential questions. Nextcloud asks for the server URL, username, and preferably an app password. These values are handled by rclone and retained in its private configuration, not TuxDrive's account JSON.
 - Every provider exposes the same lazy-loading folder tree, multi-folder selection, two-way/one-way modes, and streaming-drive option after connection.
+- Proton Drive support follows rclone's beta backend. TuxDrive disables that backend's metadata cache so changes made by another client can be discovered, but provider protocol changes may still require a future TuxDrive/rclone update.
 - If the browser callback port is busy, cancel the old authorization window and retry. TuxDrive stops stale OAuth callback processes before opening a new session.
 
 The account menu provides:

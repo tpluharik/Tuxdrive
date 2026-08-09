@@ -21,6 +21,7 @@ Version 0.6.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
 - provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
+- Proton Drive uses rclone's beta backend with metadata caching disabled to reduce stale external-change listings
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
