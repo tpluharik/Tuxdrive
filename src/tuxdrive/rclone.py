@@ -38,6 +38,13 @@ class ConfigResult:
     question: ConfigQuestion | None = None
 
 
+@dataclass(slots=True)
+class DriveLocation:
+    key: str
+    name: str
+    scoped_remote: str
+
+
 class RcloneClient:
     """Small, auditable interface to rclone.
 
@@ -142,6 +149,44 @@ class RcloneClient:
         spec = f"{remote}:{remote_path.strip('/')}"
         result = self._run(["lsf", spec, "--dirs-only", "--max-depth", "1"])
         return sorted(line.rstrip("/") for line in result.stdout.splitlines() if line.strip())
+
+    def google_drive_locations(self, remote: str) -> list[DriveLocation]:
+        self._validate_remote_name(remote)
+        locations = [
+            DriveLocation(
+                "my_drive",
+                "My Drive",
+                google_scoped_remote(remote, "my_drive"),
+            ),
+            DriveLocation(
+                "shared_with_me",
+                "Shared with me",
+                google_scoped_remote(remote, "shared_with_me"),
+            ),
+            DriveLocation(
+                "configured",
+                "Previously configured root",
+                remote,
+            ),
+        ]
+        result = self._run(["backend", "drives", f"{remote}:"])
+        try:
+            shared_drives = json.loads(result.stdout or "[]")
+        except json.JSONDecodeError as exc:
+            raise RcloneError("Google returned an invalid Shared Drive list") from exc
+        for item in shared_drives:
+            if not isinstance(item, dict) or not item.get("id"):
+                continue
+            drive_id = str(item["id"])
+            name = str(item.get("name") or drive_id)
+            locations.append(
+                DriveLocation(
+                    f"shared_drive:{drive_id}",
+                    f"Shared Drive · {name}",
+                    google_scoped_remote(remote, "shared_drive", drive_id),
+                )
+            )
+        return locations
 
     def public_link(self, remote_spec: str) -> str:
         result = self._run(["link", remote_spec])
@@ -303,3 +348,14 @@ def rclone_config_path() -> Path:
     xdg = os.environ.get("XDG_CONFIG_HOME")
     base = Path(xdg) if xdg else Path.home() / ".config"
     return base / "rclone" / "rclone.conf"
+
+
+def google_scoped_remote(remote: str, kind: str, drive_id: str = "") -> str:
+    """Build an rclone connection string without copying OAuth credentials."""
+    if kind == "my_drive":
+        return f"{remote},team_drive=,root_folder_id=root,shared_with_me=false"
+    if kind == "shared_with_me":
+        return f"{remote},team_drive=,root_folder_id=root,shared_with_me=true"
+    if kind == "shared_drive" and drive_id:
+        return f"{remote},team_drive={drive_id},root_folder_id=,shared_with_me=false"
+    return remote

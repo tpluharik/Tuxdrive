@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from tuxdrive.models import Provider
-from tuxdrive.rclone import RcloneClient
+from tuxdrive.rclone import RcloneClient, google_scoped_remote
 
 
 class RcloneClientTests(unittest.TestCase):
@@ -62,6 +62,26 @@ class RcloneClientTests(unittest.TestCase):
             folders = client.list_directories("work", "Shared")
         self.assertEqual(folders, ["Projects", "Reports"])
         self.assertEqual(run.call_args.args[0][1], "work:Shared")
+
+    def test_google_locations_include_my_drive_shared_with_me_and_shared_drives(self):
+        client = RcloneClient()
+        output = json.dumps([{"id": "drive-123", "name": "Operations"}])
+        with patch.object(
+            client,
+            "_run",
+            return_value=subprocess.CompletedProcess([], 0, stdout=output, stderr=""),
+        ):
+            locations = client.google_drive_locations("work")
+        self.assertEqual(locations[0].name, "My Drive")
+        self.assertEqual(locations[1].name, "Shared with me")
+        self.assertTrue(any(item.name == "Shared Drive · Operations" for item in locations))
+        shared = next(item for item in locations if item.key == "shared_drive:drive-123")
+        self.assertIn("team_drive=drive-123", shared.scoped_remote)
+
+    def test_google_scopes_override_a_preconfigured_shared_drive(self):
+        self.assertIn("team_drive=", google_scoped_remote("work", "my_drive"))
+        self.assertIn("root_folder_id=root", google_scoped_remote("work", "my_drive"))
+        self.assertIn("shared_with_me=true", google_scoped_remote("work", "shared_with_me"))
 
 
 if __name__ == "__main__":

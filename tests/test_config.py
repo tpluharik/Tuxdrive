@@ -20,6 +20,8 @@ class ConfigStoreTests(unittest.TestCase):
                         account_remote="google-main",
                         local_path="/tmp/cloud",
                         remote_path="Projects",
+                        remote_scope="google-main,team_drive=drive-1,root_folder_id=",
+                        cloud_location_name="Shared Drive · Projects",
                         mode=SyncMode.TWO_WAY,
                         conflict_policy=ConflictPolicy.KEEP_BOTH,
                     )
@@ -28,7 +30,11 @@ class ConfigStoreTests(unittest.TestCase):
             store.save(value)
             loaded = store.load()
             self.assertEqual(loaded.accounts[0].provider, Provider.GOOGLE_DRIVE)
-            self.assertEqual(loaded.jobs[0].remote_spec, "google-main:Projects")
+            self.assertEqual(
+                loaded.jobs[0].remote_spec,
+                "google-main,team_drive=drive-1,root_folder_id=:Projects",
+            )
+            self.assertEqual(loaded.jobs[0].cloud_location_name, "Shared Drive · Projects")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
     def test_invalid_config_is_quarantined(self):

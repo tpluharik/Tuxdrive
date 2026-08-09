@@ -49,7 +49,7 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
-from .rclone import ConfigQuestion, ConfigResult, RcloneClient, RcloneError
+from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -457,12 +457,19 @@ class SyncJobDialog(Gtk.Dialog):
         self.local = Gtk.FileChooserButton(title="Choose local folder", action=Gtk.FileChooserAction.SELECT_FOLDER)
         default = Path.home() / ("TuxDrive" if len(accounts) > 1 else accounts[0].provider.label.replace(" ", ""))
         self.local.set_filename(existing.local_path if existing else str(default))
+        self.location = Gtk.ComboBoxText()
+        self.location.set_sensitive(False)
+        self.location.append("loading", "Loading cloud locations…")
+        self.location.set_active_id("loading")
+        self.locations: dict[str, DriveLocation] = {}
         self.folder_tree = CloudFolderTree(
             client,
             self.account.get_active_id(),
             [existing.remote_path] if existing else [""],
         )
         self.account.connect("changed", self._account_changed)
+        self.location.connect("changed", self._location_changed)
+        self._load_locations()
         self.mode = Gtk.ComboBoxText()
         for mode in SyncMode:
             self.mode.append(mode.value, mode.label)
@@ -497,6 +504,7 @@ class SyncJobDialog(Gtk.Dialog):
         rows = [
             ("Name", self.name),
             ("Cloud account", self.account),
+            ("Drive / cloud location", self.location),
             ("Local folder / mount point", self.local),
             ("Cloud folders to synchronize", self.folder_tree),
             ("Mode", self.mode),
@@ -533,6 +541,8 @@ class SyncJobDialog(Gtk.Dialog):
             value = SyncJob(
                 name=f"{base_name} · {leaf}" if multi else base_name,
                 account_remote=self.account.get_active_id(),
+                remote_scope=self._selected_scope(),
+                cloud_location_name=self._selected_location_name(),
                 local_path=str(Path(filename) / leaf) if multi else filename,
                 remote_path=remote_path,
                 mode=SyncMode(self.mode.get_active_id()),
@@ -557,7 +567,89 @@ class SyncJobDialog(Gtk.Dialog):
     def _account_changed(self, combo: Gtk.ComboBoxText) -> None:
         remote = combo.get_active_id()
         if remote:
-            self.folder_tree.reset(remote, [""])
+            self._load_locations()
+
+    def _load_locations(self) -> None:
+        remote = self.account.get_active_id()
+        if not remote:
+            return
+        account = next(item for item in self.accounts if item.remote == remote)
+        self.location.remove_all()
+        self.locations = {}
+        if account.provider is not Provider.GOOGLE_DRIVE:
+            value = DriveLocation("default", "OneDrive", remote)
+            self.locations[value.key] = value
+            self.location.append(value.key, value.name)
+            self.location.set_active_id(value.key)
+            self.location.set_sensitive(False)
+            self.folder_tree.reset(remote, [self.existing.remote_path] if self.existing else [""])
+            return
+        self.location.append("loading", "Loading My Drive and Shared Drives…")
+        self.location.set_active_id("loading")
+        self.location.set_sensitive(False)
+        self.folder_tree.status.set_text("Discovering Google Drive locations…")
+        _run_thread(
+            self.client.google_drive_locations,
+            lambda locations, error, requested=remote: self._locations_loaded(
+                requested, locations, error
+            ),
+            remote,
+        )
+
+    def _locations_loaded(
+        self,
+        requested_remote: str,
+        locations: list[DriveLocation] | None,
+        error: Exception | None,
+    ) -> bool:
+        remote = self.account.get_active_id()
+        if not remote or remote != requested_remote:
+            return False
+        if error:
+            fallback = DriveLocation("configured", "Configured Google Drive root", remote)
+            locations = [fallback]
+            self.folder_tree.status.set_markup(
+                f"<span foreground='#c01c28'>{GLib.markup_escape_text(str(error))}</span>"
+            )
+        self.location.remove_all()
+        self.locations = {item.key: item for item in locations or []}
+        for item in locations or []:
+            self.location.append(item.key, item.name)
+        preferred = None
+        if self.existing:
+            if self.existing.remote_scope:
+                preferred = next(
+                    (
+                        item.key
+                        for item in locations or []
+                        if item.scoped_remote == self.existing.remote_scope
+                    ),
+                    None,
+                )
+            else:
+                preferred = "configured"
+        selected = preferred or (locations[0].key if locations else None)
+        if selected:
+            self.location.set_active_id(selected)
+            self.location.set_sensitive(len(locations or []) > 1)
+            location = self.locations[selected]
+            initial = [self.existing.remote_path] if self.existing else [""]
+            self.folder_tree.reset(location.scoped_remote, initial)
+        return False
+
+    def _location_changed(self, combo: Gtk.ComboBoxText) -> None:
+        key = combo.get_active_id()
+        location = self.locations.get(key)
+        if location:
+            self.folder_tree.reset(location.scoped_remote, [""])
+
+    def _selected_scope(self) -> str:
+        location = self.locations.get(self.location.get_active_id())
+        return location.scoped_remote if location else self.account.get_active_id()
+
+    def _selected_location_name(self) -> str:
+        location = self.locations.get(self.location.get_active_id())
+        return location.name if location else "Cloud drive"
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -718,7 +810,11 @@ class MainWindow(Gtk.ApplicationWindow):
         title = Gtk.Label(xalign=0)
         title.set_markup(f"<b>{GLib.markup_escape_text(job.name)}</b>")
         detail = Gtk.Label(
-            label=f"{job.mode.label} · {job.account_remote}:{job.remote_path}  →  {job.local_path}",
+            label=(
+                f"{job.mode.label} · "
+                f"{job.cloud_location_name or job.account_remote}:/{job.remote_path}"
+                f"  →  {job.local_path}"
+            ),
             xalign=0,
         )
         detail.set_ellipsize(3)

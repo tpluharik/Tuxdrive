@@ -31,6 +31,16 @@ class SyncEngineCommandTests(unittest.TestCase):
         job = SyncJob(account_remote="one", local_path="/data/One", initialized=True)
         self.assertNotIn("--resync", self.engine.command_for_job(job))
 
+    def test_google_location_scope_is_used_in_sync_command(self):
+        job = SyncJob(
+            account_remote="google",
+            remote_scope="google,team_drive=abc,root_folder_id=",
+            local_path="/data/Drive",
+            remote_path="Reports",
+        )
+        command = self.engine.command_for_job(job)
+        self.assertEqual(command[3], "google,team_drive=abc,root_folder_id=:Reports")
+
     def test_one_way_direction(self):
         download = SyncJob(
             account_remote="one",

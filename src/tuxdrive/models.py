@@ -66,6 +66,8 @@ class SyncJob:
     account_remote: str
     local_path: str
     remote_path: str = ""
+    remote_scope: str = ""
+    cloud_location_name: str = ""
     mode: SyncMode = SyncMode.TWO_WAY
     name: str = "Cloud files"
     enabled: bool = True
@@ -83,7 +85,8 @@ class SyncJob:
     @property
     def remote_spec(self) -> str:
         remote_path = self.remote_path.strip("/")
-        return f"{self.account_remote}:{remote_path}" if remote_path else f"{self.account_remote}:"
+        remote = self.remote_scope or self.account_remote
+        return f"{remote}:{remote_path}" if remote_path else f"{remote}:"
 
     @property
     def local(self) -> Path:
