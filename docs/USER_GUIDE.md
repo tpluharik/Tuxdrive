@@ -1,6 +1,8 @@
 # TuxDrive User Guide
 
-This guide covers TuxDrive 0.4.4 on Ubuntu 26.04: installation, browser OAuth, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, logs, and recovery.
+<p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
+
+This guide covers TuxDrive 0.5.0 on Ubuntu 26.04: installation, browser OAuth, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -9,7 +11,7 @@ This guide covers TuxDrive 0.4.4 on Ubuntu 26.04: installation, browser OAuth, c
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.4.4_all.deb
+sudo apt install ./tuxdrive_0.5.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -27,6 +29,12 @@ The main window contains:
 7. **Enable switch** — pause or resume an individual job.
 8. **Live activity log** — current application and transfer activity.
 9. **Settings** — startup, notification, and minimized-start preferences.
+
+The black-and-white penguin identifies TuxDrive itself. Google Drive and OneDrive use their provider icons while connected and in the account chooser; blue sync and red error badges show changing activity.
+
+### Update TuxDrive
+
+Open **Settings** and select **Check for updates**. If a newer version is listed in this repository, choose **Download and install**. TuxDrive verifies the package checksum before Ubuntu displays its system authorization prompt. When installation completes, restart TuxDrive. If the check fails, the existing installation remains unchanged and the error is shown in the app.
 
 ## 2. Connect an account with OAuth
 
@@ -252,4 +260,3 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.4.4_all.deb`.
 - Keep unsafe Google flagged-file access disabled unless the content is trusted.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
-

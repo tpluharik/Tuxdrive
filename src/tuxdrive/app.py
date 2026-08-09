@@ -53,6 +53,7 @@ from .models import (
     paths_overlap, safe_streaming_overlap,
 )
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
+from .updater import UpdateManager, UpdateRelease
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -84,6 +85,7 @@ class OAuthWizard(Gtk.Dialog):
         complete_callback: Callable[[Account], None],
     ) -> None:
         super().__init__(title=f"Connect {provider.label}", transient_for=parent, modal=True)
+        self.set_icon_name("tuxdrive-google-drive" if provider is Provider.GOOGLE_DRIVE else "tuxdrive-onedrive")
         self.set_default_size(580, 460)
         self.client = client
         self.provider = provider
@@ -726,6 +728,9 @@ class MainWindow(Gtk.ApplicationWindow):
         header = Gtk.HeaderBar(title="TuxDrive", subtitle="OneDrive + Google Drive for Ubuntu")
         header.set_show_close_button(True)
         self.set_titlebar(header)
+        brand = Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.LARGE_TOOLBAR)
+        brand.set_tooltip_text("TuxDrive")
+        header.pack_start(brand)
         add_account = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
         add_account.set_tooltip_text("Connect cloud account")
         add_account.connect("clicked", self._choose_provider)
@@ -812,7 +817,12 @@ class MainWindow(Gtk.ApplicationWindow):
             elif any(job.last_error for job in account_jobs):
                 account_state, account_icon = "Needs attention", "tuxdrive-error"
             else:
-                account_state, account_icon = "Connected", "tuxdrive"
+                account_state = "Connected"
+                account_icon = (
+                    "tuxdrive-google-drive"
+                    if account.provider is Provider.GOOGLE_DRIVE
+                    else "tuxdrive-onedrive"
+                )
             icon = Gtk.Image.new_from_icon_name(account_icon, Gtk.IconSize.DND)
             text = Gtk.Label(xalign=0)
             text.set_markup(
@@ -941,8 +951,12 @@ class MainWindow(Gtk.ApplicationWindow):
             buttons=Gtk.ButtonsType.NONE,
             text="Which cloud account do you want to connect?",
         )
-        dialog.add_button("Google Drive", 1)
-        dialog.add_button("Microsoft OneDrive", 2)
+        google = dialog.add_button("Google Drive", 1)
+        google.set_image(Gtk.Image.new_from_icon_name("tuxdrive-google-drive", Gtk.IconSize.BUTTON))
+        google.set_always_show_image(True)
+        onedrive = dialog.add_button("Microsoft OneDrive", 2)
+        onedrive.set_image(Gtk.Image.new_from_icon_name("tuxdrive-onedrive", Gtk.IconSize.BUTTON))
+        onedrive.set_always_show_image(True)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         response = dialog.run()
         dialog.destroy()
@@ -1077,7 +1091,14 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _show_settings(self, _button: Gtk.Widget) -> None:
         dialog = Gtk.Dialog(title="TuxDrive settings", transient_for=self, modal=True)
+        dialog.set_icon_name("tuxdrive")
         dialog.get_content_area().set_border_width(24)
+        identity = Gtk.Box(spacing=12)
+        identity.pack_start(Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.DIALOG), False, False, 0)
+        version = Gtk.Label(xalign=0)
+        version.set_markup(f"<b>TuxDrive {GLib.markup_escape_text(__version__)}</b>\n<small>Ubuntu cloud desktop client</small>")
+        identity.pack_start(version, True, True, 0)
+        dialog.get_content_area().pack_start(identity, False, False, 6)
         launch = Gtk.CheckButton(label="Start TuxDrive automatically after sign-in")
         launch.set_active(self.controller.config.settings.launch_at_login)
         notifications = Gtk.CheckButton(label="Show desktop notifications")
@@ -1086,16 +1107,63 @@ class MainWindow(Gtk.ApplicationWindow):
         minimized.set_active(self.controller.config.settings.start_minimized)
         for widget in (launch, notifications, minimized):
             dialog.get_content_area().pack_start(widget, False, False, 6)
+        dialog.add_button("Check for updates", 2)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Save", Gtk.ResponseType.OK)
         dialog.show_all()
-        if dialog.run() == Gtk.ResponseType.OK:
+        response = dialog.run()
+        if response == Gtk.ResponseType.OK:
             self.controller.config.settings.launch_at_login = launch.get_active()
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
             self.controller.save()
             self.controller.configure_autostart()
         dialog.destroy()
+        if response == 2:
+            self._check_for_updates()
+
+    def _check_for_updates(self) -> None:
+        self.message("Checking the TuxDrive repository for updates…")
+        _run_thread(self.controller.updater.check, self._update_checked)
+
+    def _update_checked(self, release: UpdateRelease | None, error: Exception | None) -> bool:
+        if error:
+            self.message(f"Update check failed: {error}", Gtk.MessageType.ERROR)
+            return False
+        if release is None:
+            self.message(f"TuxDrive {__version__} is up to date.")
+            return False
+        dialog = Gtk.MessageDialog(
+            transient_for=self, modal=True, message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.NONE, text=f"TuxDrive {release.version} is available",
+        )
+        dialog.format_secondary_text(
+            (release.notes + "\n\n" if release.notes else "")
+            + "The package will be downloaded, verified with SHA-256, and installed after system authorization."
+        )
+        dialog.add_button("Later", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Download and install", Gtk.ResponseType.OK)
+        accepted = dialog.run() == Gtk.ResponseType.OK
+        dialog.destroy()
+        if accepted:
+            self.message(f"Downloading and verifying TuxDrive {release.version}…")
+            _run_thread(self.controller.updater.download, self._update_downloaded, release)
+        return False
+
+    def _update_downloaded(self, package: Path | None, error: Exception | None) -> bool:
+        if error or package is None:
+            self.message(f"Update download failed: {error}", Gtk.MessageType.ERROR)
+            return False
+        self.message("Installing update; approve the system authorization prompt…")
+        _run_thread(self.controller.updater.install, self._update_installed, package)
+        return False
+
+    def _update_installed(self, _result, error: Exception | None) -> bool:
+        if error:
+            self.message(f"Update installation failed: {error}", Gtk.MessageType.ERROR)
+        else:
+            self.message("TuxDrive was updated successfully. Restart the app to use the new version.")
+        return False
 
     def message(self, text: str, kind: Gtk.MessageType = Gtk.MessageType.INFO) -> None:
         self.infobar.set_message_type(kind)
@@ -1198,6 +1266,7 @@ class MainWindow(Gtk.ApplicationWindow):
 class TuxDriveApplication(Gtk.Application):
     def __init__(self, background: bool = False) -> None:
         super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        self.updater = UpdateManager(__version__)
         self.background = background
         self.store = ConfigStore()
         try:

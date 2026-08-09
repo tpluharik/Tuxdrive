@@ -1,5 +1,7 @@
 # TuxDrive
 
+<p align="center"><img src="branding/tuxdrive-logo.png" width="180" alt="TuxDrive black-and-white penguin head logo"></p>
+
 TuxDrive is a native Ubuntu desktop client for **Google Drive** and **Microsoft OneDrive**. It combines a GTK desktop interface with rclone's mature cloud backends, browser-based OAuth, and transfer engine.
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
@@ -13,7 +15,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.4.4 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.5.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
@@ -42,6 +44,9 @@ Version 0.4.4 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 - import of existing Google Drive and OneDrive remotes from rclone
 - live in-app activity and synchronization logs
 - account, folder, and tray icons with connected, synchronizing, paused, and error states
+- original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
+- provider-specific Google Drive and OneDrive icons in account selection and connected-account views
+- in-app repository update checks with HTTPS download, SHA-256 verification, and PolicyKit-authorized installation
 - startup, application, thread-exception, and native crash logging
 
 ## Install on Ubuntu
@@ -49,7 +54,7 @@ Version 0.4.4 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.4.4_all.deb
+sudo apt install ./tuxdrive_0.5.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select Google Drive or Microsoft OneDrive, and complete authorization in your browser. Then add a local synchronized folder or virtual drive.
@@ -65,7 +70,11 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.4.4_all.deb`.
+The installer is written to `dist/tuxdrive_0.5.0_all.deb`.
+
+## Update from the app
+
+Open **Settings → Check for updates**. TuxDrive reads `update/latest.json` from this repository, compares versions, downloads the listed `.deb` over HTTPS, verifies its SHA-256 checksum, and asks Ubuntu PolicyKit for authorization before installing it. No cloud credentials are involved. Restart TuxDrive after a successful update.
 
 ## Crash and startup diagnostics
 
