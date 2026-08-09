@@ -48,7 +48,7 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
-from .models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
+from .models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode, paths_overlap
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
@@ -954,11 +954,18 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog = SyncJobDialog(self, self.controller.rclone, self.controller.config.accounts)
         if dialog.run() == Gtk.ResponseType.OK:
             jobs = dialog.jobs()
-            existing_paths = {Path(item.local_path) for item in self.controller.config.jobs}
+            existing_jobs = list(self.controller.config.jobs)
             if not jobs:
                 self.message("Select at least one cloud folder.", Gtk.MessageType.ERROR)
-            elif any(Path(job.local_path) in existing_paths for job in jobs):
-                self.message("That local folder is already managed by TuxDrive.", Gtk.MessageType.ERROR)
+            elif any(
+                paths_overlap(job.local_path, item.local_path)
+                for job in jobs
+                for item in existing_jobs
+            ):
+                self.message(
+                    "That folder overlaps another TuxDrive job. Streaming drives need a separate empty folder.",
+                    Gtk.MessageType.ERROR,
+                )
             else:
                 self.controller.config.jobs.extend(jobs)
                 self.controller.save()
@@ -987,11 +994,14 @@ class MainWindow(Gtk.ApplicationWindow):
                 return
             updated = values[0]
             duplicate = any(
-                item.id != job.id and Path(item.local_path) == Path(updated.local_path)
+                item.id != job.id and paths_overlap(item.local_path, updated.local_path)
                 for item in self.controller.config.jobs
             )
             if duplicate:
-                self.message("That local folder is already managed by TuxDrive.", Gtk.MessageType.ERROR)
+                self.message(
+                    "That folder overlaps another TuxDrive job. Choose a separate empty folder.",
+                    Gtk.MessageType.ERROR,
+                )
             else:
                 index = self.controller.config.jobs.index(job)
                 if (job.local_path, job.remote_spec, job.mode) != (
@@ -1191,6 +1201,7 @@ class TuxDriveApplication(Gtk.Application):
         self.indicator = None
         self._runtime_ready_once = False
         self._last_started: dict[str, datetime] = {}
+        self._mount_failures: dict[str, list[datetime]] = {}
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
@@ -1281,6 +1292,16 @@ class TuxDriveApplication(Gtk.Application):
         self.save()
         if result.success and not result.incremental:
             self.start_callbacks(job)
+        if result.mount_lost and job.enabled:
+            recent = self._mount_failures.setdefault(job.id, [])
+            cutoff = now.timestamp() - 300
+            recent[:] = [item for item in recent if item.timestamp() >= cutoff]
+            recent.append(now)
+            if len(recent) <= 3:
+                delay = 3 * len(recent)
+                job.last_status = f"Streaming drive disconnected; retrying in {delay} seconds…"
+                self.save()
+                GLib.timeout_add_seconds(delay, self._retry_mount, job.id)
         if self.window:
             self.window.refresh()
             if not result.success:
@@ -1290,6 +1311,12 @@ class TuxDriveApplication(Gtk.Application):
                     self.window.message(f"{job.name}: {job.last_status}", Gtk.MessageType.ERROR)
         if not result.incremental or not result.success:
             self.notify(job.name, result.message)
+        return False
+
+    def _retry_mount(self, job_id: str) -> bool:
+        job = next((item for item in self.config.jobs if item.id == job_id), None)
+        if job and job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:
+            self.run_job(job, quiet=True)
         return False
 
     def start_callbacks(self, job: SyncJob) -> None:

@@ -8,6 +8,12 @@ from typing import Any
 from uuid import uuid4
 
 
+def paths_overlap(first: str | Path, second: str | Path) -> bool:
+    left = Path(first).expanduser().resolve(strict=False)
+    right = Path(second).expanduser().resolve(strict=False)
+    return left == right or left in right.parents or right in left.parents
+
+
 class Provider(str, Enum):
     GOOGLE_DRIVE = "google_drive"
     ONEDRIVE = "onedrive"

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from tuxdrive.engine import SyncEngine
 from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
-from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode
+from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode, paths_overlap
 
 
 class SyncEngineCommandTests(unittest.TestCase):
@@ -74,6 +74,25 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--vfs-cache-mode") + 1], "full")
             self.assertEqual(command[command.index("--vfs-read-chunk-size") + 1], "8M")
             self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "10G")
+
+    def test_overlapping_sync_and_streaming_paths_are_detected(self):
+        self.assertTrue(paths_overlap("/data/TuxDrive", "/data/TuxDrive/CEVRO"))
+        self.assertTrue(paths_overlap("/data/TuxDrive/CEVRO", "/data/TuxDrive"))
+        self.assertFalse(paths_overlap("/data/TuxDrive", "/data/StreamingDrive"))
+
+    def test_streaming_mount_rejects_a_nonempty_directory(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            mountpoint = Path(temporary) / "mount"
+            mountpoint.mkdir()
+            (mountpoint / "existing").mkdir()
+            job = SyncJob(
+                account_remote="google",
+                local_path=str(mountpoint),
+                mode=SyncMode.VIRTUAL_DRIVE,
+            )
+            result = self.engine.start_mount(job)
+        self.assertFalse(result.success)
+        self.assertIn("empty local folder", result.message)
 
     def test_failure_summary_surfaces_fatal_detail(self):
         with tempfile.TemporaryDirectory() as temporary:

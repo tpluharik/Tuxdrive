@@ -6,6 +6,7 @@ import shutil
 import signal
 import subprocess
 import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,6 +29,7 @@ class JobResult:
     requires_resync: bool = False
     blocked_path: str = ""
     incremental: bool = False
+    mount_lost: bool = False
 
 
 class SyncEngine:
@@ -36,6 +38,7 @@ class SyncEngine:
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._mounts: dict[str, subprocess.Popen[str]] = {}
         self._monitors: dict[str, ChangeMonitor] = {}
+        self._intentional_unmounts: set[str] = set()
         self._lock = threading.RLock()
 
     @property
@@ -141,6 +144,16 @@ class SyncEngine:
         if job.mode is SyncMode.VIRTUAL_DRIVE:
             result = self.start_mount(job)
             callback(result)
+            if result.success:
+                with self._lock:
+                    process = self._mounts.get(job.id)
+                if process:
+                    threading.Thread(
+                        target=self._watch_mount,
+                        args=(job, process, result.log_path, callback),
+                        name=f"tuxdrive-mount-{job.id[:8]}",
+                        daemon=True,
+                    ).start()
             return result.success
         with self._lock:
             if job.id in self._processes:
@@ -174,8 +187,24 @@ class SyncEngine:
             if existing and existing.poll() is None:
                 return JobResult(job.id, True, "Virtual drive is already mounted", log_path)
         job.local.mkdir(parents=True, exist_ok=True)
+        try:
+            contents = list(job.local.iterdir())
+        except OSError as exc:
+            return JobResult(job.id, False, f"Cannot access streaming mount point: {exc}", log_path)
+        if contents and not os.path.ismount(job.local):
+            return JobResult(
+                job.id,
+                False,
+                "Streaming drive needs its own empty local folder. Edit the job and choose "
+                "an empty folder that is not inside another synchronized folder.",
+                log_path,
+            )
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_handle = log_path.open("a", encoding="utf-8")
+        log_handle.write(
+            f"\n[{datetime.now(timezone.utc).isoformat()}] Starting files-on-demand mount\n"
+        )
+        log_handle.flush()
         try:
             process = subprocess.Popen(
                 self.mount_command(job),
@@ -188,22 +217,47 @@ class SyncEngine:
             log_handle.close()
             return JobResult(job.id, False, str(exc), log_path)
         log_handle.close()
+        deadline = time.monotonic() + 12
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                return JobResult(job.id, False, self._mount_failure_summary(log_path), log_path)
+            if os.path.ismount(job.local):
+                with self._lock:
+                    self._mounts[job.id] = process
+                return JobResult(
+                    job.id,
+                    True,
+                    "Files-on-demand drive connected; content streams when a file is opened",
+                    log_path,
+                )
+            time.sleep(0.1)
         try:
-            process.wait(timeout=0.8)
-        except subprocess.TimeoutExpired:
-            with self._lock:
-                self._mounts[job.id] = process
-            return JobResult(
-                job.id,
-                True,
-                "Files-on-demand drive connected; content streams when a file is opened",
-                log_path,
-            )
-        return JobResult(job.id, False, "Virtual drive exited during startup; see log", log_path)
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        return JobResult(
+            job.id,
+            False,
+            "Streaming drive did not become available within 12 seconds; see the job log",
+            log_path,
+        )
+
+    @staticmethod
+    def _mount_failure_summary(log_path: Path) -> str:
+        try:
+            lines = [line.strip() for line in log_path.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines() if line.strip()]
+        except OSError:
+            lines = []
+        detail = lines[-1] if lines else "rclone exited before mounting the folder"
+        return f"Streaming drive could not start: {detail[:350]}"
 
     def stop_mount(self, job: SyncJob) -> bool:
         with self._lock:
             process = self._mounts.pop(job.id, None)
+            if process and process.poll() is None:
+                self._intentional_unmounts.add(job.id)
         if process and process.poll() is None:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
@@ -217,6 +271,31 @@ class SyncEngine:
             return True
         return False
 
+    def _watch_mount(
+        self,
+        job: SyncJob,
+        process: subprocess.Popen[str],
+        log_path: Path,
+        callback: Callable[[JobResult], None],
+    ) -> None:
+        return_code = process.wait()
+        with self._lock:
+            if self._mounts.get(job.id) is process:
+                self._mounts.pop(job.id, None)
+            intentional = job.id in self._intentional_unmounts
+            self._intentional_unmounts.discard(job.id)
+        if not intentional:
+            callback(
+                JobResult(
+                    job.id,
+                    False,
+                    f"Files-on-demand drive disconnected unexpectedly (rclone exit {return_code}); "
+                    "TuxDrive will retry automatically",
+                    log_path,
+                    mount_lost=True,
+                )
+            )
+
     def shutdown(self) -> None:
         with self._lock:
             job_ids = list(self._processes)
@@ -225,9 +304,11 @@ class SyncEngine:
             self.cancel(job_id)
         for monitor in list(self._monitors.values()):
             monitor.stop()
-        for _, process in mounted:
+        for job_id, process in mounted:
             if process.poll() is None:
                 try:
+                    with self._lock:
+                        self._intentional_unmounts.add(job_id)
                     os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
