@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tuxdrive.engine import SyncEngine
-from tuxdrive.callbacks import FileChange, FileState, changes_between
+from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
 from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode
 
 
@@ -161,6 +161,19 @@ class SyncEngineCommandTests(unittest.TestCase):
             [(item.path, item.deleted) for item in changes],
             [("changed.txt", False), ("created.txt", False), ("deleted.txt", True)],
         )
+
+    def test_office_lock_and_partial_files_are_never_synchronized(self):
+        self.assertTrue(is_transient_path(".~lock.Cloud.pptx#"))
+        self.assertTrue(is_transient_path("folder/~$Budget.xlsx"))
+        self.assertTrue(is_transient_path("download.part"))
+        job = SyncJob(account_remote="google", local_path="/data/Drive")
+        self.assertIsNone(
+            self.engine._incremental_command(
+                job, FileChange(".~lock.Cloud.pptx#", "local")
+            )
+        )
+        command = self.engine.command_for_job(job)
+        self.assertIn(".~lock.*#", command)
 
 
 if __name__ == "__main__":

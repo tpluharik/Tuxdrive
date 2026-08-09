@@ -13,7 +13,7 @@ from typing import Callable
 
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
-from .callbacks import ChangeMonitor, FileChange
+from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
 from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
 
@@ -71,7 +71,7 @@ class SyncEngine:
         ]
         if job.acknowledge_google_abuse:
             common.append("--drive-acknowledge-abuse")
-        for pattern in job.exclude_patterns:
+        for pattern in dict.fromkeys([*job.exclude_patterns, *TRANSIENT_PATTERNS]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
         if job.bandwidth_limit.strip():
@@ -259,6 +259,8 @@ class SyncEngine:
         relative = change.path.strip("/")
         if not relative or ".." in Path(relative).parts:
             raise RuntimeError(f"unsafe incremental path: {change.path}")
+        if is_transient_path(relative):
+            return None
         local = str(job.local / relative)
         remote = f"{job.remote_spec.rstrip('/')}/{relative}"
         if change.side == "local":
@@ -300,6 +302,9 @@ class SyncEngine:
                     command = self._incremental_command(job, change)
                     if command is None:
                         continue
+                    if change.side == "local" and not change.deleted and not local_path.exists():
+                        log.write(f"Skipped vanished temporary save: {change.path}\n")
+                        continue
                     process = subprocess.Popen(
                         command,
                         stdout=log,
@@ -311,6 +316,13 @@ class SyncEngine:
                         self._processes[job.id] = process
                     code = process.wait()
                     if code:
+                        if (
+                            change.side == "local"
+                            and not change.deleted
+                            and not local_path.exists()
+                        ):
+                            log.write(f"Ignored save artifact that vanished during transfer: {change.path}\n")
+                            continue
                         raise RuntimeError(f"incremental transfer failed for {change.path} (rclone exit {code})")
                     completed += 1
             callback(JobResult(job.id, True, f"Incremental sync complete: {completed} changed path(s)", log_path, incremental=True))

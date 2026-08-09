@@ -13,6 +13,28 @@ from typing import Callable
 from .models import SyncJob, SyncMode
 
 
+TRANSIENT_PATTERNS = (
+    ".~lock.*#",      # LibreOffice lock files
+    "~$*",            # Microsoft Office lock files
+    ".goutputstream-*",
+    ".nfs*",
+    "*.part",
+    "*.partial",
+    "*.crdownload",
+    "*.swp",
+    "*.swx",
+    "*~",
+)
+
+
+def is_transient_path(relative: str) -> bool:
+    return any(
+        fnmatch.fnmatch(part, pattern)
+        for part in Path(relative).parts
+        for pattern in TRANSIENT_PATTERNS
+    )
+
+
 @dataclass(frozen=True, slots=True)
 class FileState:
     size: int
@@ -68,7 +90,7 @@ class ChangeMonitor:
 
     def _excluded(self, relative: str) -> bool:
         candidate = relative.replace(os.sep, "/")
-        return any(
+        return is_transient_path(candidate) or any(
             fnmatch.fnmatch(candidate, pattern.lstrip("/"))
             or fnmatch.fnmatch("/" + candidate, pattern)
             for pattern in self.job.exclude_patterns
@@ -161,4 +183,3 @@ class ChangeMonitor:
                 last_remote_scan = time.monotonic()
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                 local, remote = new_local, new_remote
-
