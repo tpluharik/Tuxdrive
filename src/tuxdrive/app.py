@@ -852,6 +852,7 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _job_row(self, job: SyncJob) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
+        mounted = job.id in self.controller.engine.mounted_jobs
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_border_width(14)
         top = Gtk.Box(spacing=12)
@@ -861,7 +862,7 @@ class MainWindow(Gtk.ApplicationWindow):
             icon_name = "tuxdrive-error"
         elif not job.enabled:
             icon_name = "media-playback-pause-symbolic"
-        elif job.initialized or job.mode is SyncMode.VIRTUAL_DRIVE:
+        elif job.initialized or mounted:
             icon_name = "tuxdrive"
         else:
             icon_name = "folder-remote-symbolic"
@@ -890,9 +891,26 @@ class MainWindow(Gtk.ApplicationWindow):
         top.pack_end(toggle, False, False, 0)
         outer.pack_start(top, False, False, 0)
         actions = Gtk.Box(spacing=8)
-        sync = Gtk.Button(label="Mount" if job.mode is SyncMode.VIRTUAL_DRIVE else "Sync now")
-        sync.connect("clicked", lambda _button: self.controller.run_job(job))
-        cancel = Gtk.Button(label="Stop")
+        sync = Gtk.Button(label=(
+            "Open drive" if mounted else
+            "Start streaming" if job.mode is SyncMode.VIRTUAL_DRIVE else
+            "Sync now"
+        ))
+        if job.mode is SyncMode.VIRTUAL_DRIVE:
+            sync.set_tooltip_text(
+                "Show cloud files immediately; download content only when a file is opened"
+            )
+        sync.connect(
+            "clicked",
+            lambda _button: (
+                self._open_path(job.local)
+                if mounted
+                else self.controller.run_job(job)
+            ),
+        )
+        cancel = Gtk.Button(
+            label="Disconnect" if job.mode is SyncMode.VIRTUAL_DRIVE else "Stop"
+        )
         cancel.connect("clicked", lambda _button: self.controller.stop_job(job))
         open_button = Gtk.Button(label="Open folder")
         open_button.connect("clicked", lambda _button: self._open_path(job.local))
@@ -1211,7 +1229,11 @@ class TuxDriveApplication(Gtk.Application):
                 self.window.message(f"{job.name} is already synchronizing.")
             return
         self.engine.stop_callbacks(job.id)
-        job.last_status = "Mounting…" if job.mode is SyncMode.VIRTUAL_DRIVE else "Synchronizing…"
+        job.last_status = (
+            "Connecting files-on-demand drive…"
+            if job.mode is SyncMode.VIRTUAL_DRIVE
+            else "Synchronizing…"
+        )
         LOGGER.info(
             "Starting job %s (%s): %s -> %s",
             job.id,

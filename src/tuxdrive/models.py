@@ -33,7 +33,7 @@ class SyncMode(str, Enum):
             self.TWO_WAY: "Two-way sync",
             self.DOWNLOAD_ONLY: "Download mirror",
             self.UPLOAD_ONLY: "Upload mirror",
-            self.VIRTUAL_DRIVE: "Virtual drive (files on demand)",
+            self.VIRTUAL_DRIVE: "Streaming drive (files on demand)",
         }[self]
 
 

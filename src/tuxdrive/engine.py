@@ -43,6 +43,13 @@ class SyncEngine:
         with self._lock:
             return set(self._processes)
 
+    @property
+    def mounted_jobs(self) -> set[str]:
+        with self._lock:
+            return {
+                job_id for job_id, process in self._mounts.items() if process.poll() is None
+            }
+
     def command_for_job(self, job: SyncJob, dry_run: bool = False) -> list[str]:
         local = str(job.local)
         common = [
@@ -99,10 +106,22 @@ class SyncEngine:
             str(job.local),
             "--vfs-cache-mode",
             "full",
+            "--vfs-read-chunk-size",
+            "8M",
+            "--vfs-read-chunk-size-limit",
+            "128M",
+            "--vfs-read-chunk-streams",
+            "4",
             "--vfs-cache-max-age",
             "24h",
+            "--vfs-cache-max-size",
+            "10G",
+            "--vfs-cache-min-free-space",
+            "1G",
             "--vfs-cache-poll-interval",
             "1m",
+            "--vfs-write-back",
+            "5s",
             "--cache-dir",
             str(cache),
             "--dir-cache-time",
@@ -174,7 +193,12 @@ class SyncEngine:
         except subprocess.TimeoutExpired:
             with self._lock:
                 self._mounts[job.id] = process
-            return JobResult(job.id, True, "Virtual drive mounted", log_path)
+            return JobResult(
+                job.id,
+                True,
+                "Files-on-demand drive connected; content streams when a file is opened",
+                log_path,
+            )
         return JobResult(job.id, False, "Virtual drive exited during startup; see log", log_path)
 
     def stop_mount(self, job: SyncJob) -> bool:

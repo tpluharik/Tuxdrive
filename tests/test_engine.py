@@ -72,6 +72,8 @@ class SyncEngineCommandTests(unittest.TestCase):
             command = self.engine.mount_command(job)
             self.assertEqual(command[:4], ["/usr/bin/rclone", "mount", "google:", "/mnt/Google"])
             self.assertEqual(command[command.index("--vfs-cache-mode") + 1], "full")
+            self.assertEqual(command[command.index("--vfs-read-chunk-size") + 1], "8M")
+            self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "10G")
 
     def test_failure_summary_surfaces_fatal_detail(self):
         with tempfile.TemporaryDirectory() as temporary:
