@@ -6,6 +6,8 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
+🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature suggestions and top-20 roadmap](docs/ROADMAP.md)**
+
 ## Community and development
 
 TuxDrive is publicly readable. Direct repository writes remain restricted to maintainers, while everyone can participate through [Issues](https://github.com/tpluharik/Tuxdrive/issues), comments, forks, and pull requests.
@@ -15,13 +17,16 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.6.2 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.7.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
 - provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
 - Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected in rclone's private configuration and the remote is tested before it is shown as connected
+- Proton Drive opens a dedicated in-app 2FA challenge only when Proton requests a fresh code
+- direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
+- generated Ed25519 identities, exchanged public keys, host-key pinning, editable IP/DNS address and port, and per-share folder selection
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
@@ -59,12 +64,14 @@ Version 0.6.2 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.2_all.deb
+sudo apt install ./tuxdrive_0.7.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
 
 For a streaming drive, choose an empty mount folder. It may be a child of a normal synchronized tree, for example `~/Tuxdrive/tpluarikgdrive/Online`, and TuxDrive automatically excludes that subtree from the parent sync. A streaming drive must not be the parent of another sync job. Once connected, opening the mount folder loads the remote directory tree while file bodies remain online until opened.
+
+For direct collaboration, open the network icon in TuxDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxDrive pins the host public key and verifies the peer before starting two-way synchronization. Internet connections may require router port forwarding or a peer-reachable VPN address.
 
 This is the only installation command required: APT resolves the Ubuntu desktop libraries automatically, while TuxDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts.
 
@@ -75,7 +82,13 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.6.2_all.deb`.
+The installer is written to `dist/tuxdrive_0.7.0_all.deb`.
+
+The current suite contains 53 automated tests covering transfer-engine bootstrap, configuration safety, synchronization commands, streaming, OAuth/provider setup, Proton 2FA, encrypted peer authentication, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for the detailed test catalogue, safety invariants, manual release matrix and current coverage boundaries.
+
+## Suggestions and roadmap
+
+The prioritized [feature suggestions and top-20 roadmap](docs/ROADMAP.md) focuses on recoverable cloud synchronization and private peer collaboration. The first proposed additions are local version history, ransomware/mass-change protection, integrity auditing and a conflict review center. Community discussion should use the feature-request issue form so design, security and test requirements remain reviewable.
 
 ## Update from the app
 

@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.6.2 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.7.0 on Ubuntu 26.04: installation, provider authorization, direct encrypted peer sharing, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.6.2 on Ubuntu 26.04: installation, provider authori
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.2_all.deb
+sudo apt install ./tuxdrive_0.7.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -57,7 +57,7 @@ Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive,
 
 ### Proton Drive authentication
 
-Enter the Proton account email and password. If the account uses two-factor authentication, enter either the current six-digit code or, for a connection that can authenticate again later, the account's OTP secret key. Enter a mailbox password only for older Proton accounts configured in two-password mode. TuxDrive tests a root-folder listing before it accepts the account, so an incomplete remote is no longer displayed as **Connected**.
+Enter the Proton account email and password. If Proton reports that two-factor authentication is required, TuxDrive opens a separate dialog for the current code and retries verification. You may instead provide the account's OTP secret key during setup when recurring automatic authentication is appropriate. Enter a mailbox password only for older Proton accounts configured in two-password mode. TuxDrive tests a root-folder listing before it accepts the account, so an incomplete remote is no longer displayed as **Connected**.
 
 If Proton Drive was added with TuxDrive 0.6.0 or 0.6.1 and folder browsing says that a username and password are required, open the account's menu and choose **Reconnect / refresh credentials**. Fill in the Proton fields; synchronized-job definitions do not need to be recreated.
 
@@ -79,7 +79,46 @@ TuxDrive lists these separately:
 
 Changing the cloud location refreshes the visual folder tree. This prevents a remote preconfigured for one Shared Drive from hiding My Drive or other shared locations.
 
-## 3. Add synchronized folders
+## 3. Direct encrypted peer sharing
+
+Select the network icon in the title bar or open **Settings → Peer-to-peer sharing**. This mode synchronizes a folder directly between two computers running TuxDrive. The sharing computer runs an authenticated SFTP endpoint backed by its selected local folder; the connecting computer uses an ordinary TuxDrive two-way synchronization job. File data travels only between the two endpoints and is not stored by TuxDrive, GitHub, or a cloud provider.
+
+![Direct peer sharing setup](assets/05-peer-sharing.svg)
+
+### Exchange identities
+
+Each installation creates a private Ed25519 identity under its private TuxDrive configuration directory. Select **This computer's public identity key → Copy public key** on both computers and exchange only the public lines through a trusted channel. Never send either file without the `.pub` suffix and never paste a private key into chat or email.
+
+### On the computer sharing the folder
+
+1. Open **Share a folder** and select the local folder.
+2. Enter the current LAN/public IP address or DNS name that the other computer will use.
+3. Choose an unprivileged TCP port, such as `22022`.
+4. Paste the connecting computer's public identity key into **Allowed peer public key**.
+5. Select **Save and start**, then **Copy invitation**.
+6. Send the invitation to the other user through a trusted channel.
+
+The IP/DNS address, port, local folder, and allowed public key remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
+
+### On the computer connecting to the folder
+
+1. Open **Connect to a peer**, paste the invitation, and select **Load invitation**.
+2. Review the displayed IP/DNS address, port, and host public key with the sharing user.
+3. Select a local folder and choose **Save and connect**.
+4. TuxDrive first creates a temporary connection, pins and verifies the host key, and lists the peer folder. Only after that succeeds does it save the connection and start two-way synchronization.
+
+The saved peer entry lets you continuously edit a changing IP/DNS address or port. Changes are verified before replacing the working endpoint. The same move, deletion, conflict, callback, exception, and logging rules used by cloud two-way synchronization apply.
+
+### Network and security limitations
+
+- The sharing computer must remain running and TuxDrive must remain active.
+- For internet access behind NAT, forward the selected TCP port to the sharing computer. Carrier-grade NAT may require a VPN with peer-reachable addresses instead.
+- Permit only the selected port in the host firewall. Restrict it to the other peer's source IP where practical.
+- The connecting public key authenticates the guest; the invitation's pinned host public key authenticates the server. If either key changes unexpectedly, stop and verify with the other user instead of bypassing validation.
+- This is direct encrypted transport, not anonymous communication. Endpoint IP addresses are visible to each peer and to intervening network operators.
+- Keep backups of important collaborative data: two-way synchronization intentionally propagates allowed changes and deletions.
+
+## 4. Add synchronized folders
 
 Select **Add folder**. Choose the account, drive/location, and one or more cloud folders in the tree.
 
@@ -111,7 +150,7 @@ Select **Add folder**. Choose the account, drive/location, and one or more cloud
 - **Google security warning** — unsafe opt-in for files Google marks as malware/spam. Leave disabled unless the file is trusted.
 - **Synchronization exceptions** — clickable rules; add a pattern or remove it with the minus button.
 
-## 4. Operate a synchronization job
+## 5. Operate a synchronization job
 
 Each job offers:
 
@@ -126,7 +165,7 @@ Each job offers:
 
 Status icons and labels change for idle/connected, synchronizing, paused, and error states. The account icon summarizes all jobs belonging to that account.
 
-## 5. Incremental synchronization
+## 6. Incremental synchronization
 
 When **Sync saved file changes immediately** is enabled:
 
@@ -138,7 +177,7 @@ When **Sync saved file changes immediately** is enabled:
 
 LibreOffice/Microsoft Office lock files, editor swap files, browser partial downloads, and `.part` files are ignored automatically. A temporary file that disappears during transfer is treated as a harmless skipped event.
 
-## 6. Streaming files on demand
+## 7. Streaming files on demand
 
 A streaming drive exposes real file names, folders, sizes, and modification times without downloading file bodies. Opening a file reads it in chunks and places accessed content in a bounded cache (10 GB by default). Writes are uploaded after the write-back delay.
 
@@ -176,7 +215,7 @@ Safety rules:
 
 If the mount exits unexpectedly, TuxDrive updates the status and retries up to three times in five minutes.
 
-## 7. Exceptions and blocked files
+## 8. Exceptions and blocked files
 
 ![Exceptions and interactive recovery](assets/05-exceptions-recovery.svg)
 
@@ -197,7 +236,7 @@ When Google blocks a file as suspected malware or spam, TuxDrive shows an intera
 
 To remove an exception, choose **Edit**, find **Synchronization exceptions**, and click the minus button beside the rule.
 
-## 8. Tray and settings
+## 9. Tray and settings
 
 ![Tray controls, settings, and logs](assets/06-tray-logs.svg)
 
@@ -217,7 +256,7 @@ Settings control:
 
 Closing the main window hides it; synchronization continues in the tray. Use **Quit** to stop the application and unmount streaming drives.
 
-## 9. Logs and diagnostics
+## 10. Logs and diagnostics
 
 | Location | Purpose |
 |---|---|
@@ -234,7 +273,7 @@ tuxdrive --diagnostics
 
 The expandable **Live activity log** shows recent application and transfer messages directly in the UI.
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Streaming folder is empty
 
@@ -244,7 +283,7 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.6.2 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.7.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
 ### Proton Drive says username and password are required
 
@@ -272,9 +311,9 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.6.2_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.7.0_all.deb`.
 
-## 11. Data safety
+## 12. Data safety
 
 - Back up important data before introducing any bidirectional synchronization tool.
 - Review conflict and maximum-deletion settings before the first run.

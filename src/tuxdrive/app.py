@@ -49,9 +49,10 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import (
-    Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode,
+    Account, AppConfig, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode,
     paths_overlap, safe_streaming_overlap,
 )
+from .peer import PeerError, PeerInvitation, PeerManager, normalize_public_key, validate_host, validate_port
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .updater import UpdateManager, UpdateRelease
 
@@ -96,6 +97,7 @@ class OAuthWizard(Gtk.Dialog):
         self.remote = ""
         self.session_id = uuid.uuid4().hex
         self._closed = False
+        self._initial_credentials: dict[str, str] = {}
 
         content = self.get_content_area()
         content.set_border_width(24)
@@ -185,6 +187,7 @@ class OAuthWizard(Gtk.Dialog):
                 key: entry.get_text().strip()
                 for key, entry in self.credential_entries.items()
             }
+            self._initial_credentials = credentials
             missing = [
                 label for key, label, _secret, required in self.provider.credential_fields
                 if required and not credentials.get(key)
@@ -233,6 +236,12 @@ class OAuthWizard(Gtk.Dialog):
             return False
         self._not_busy()
         if error:
+            if (
+                self.provider is Provider.PROTON_DRIVE
+                and self.client.requires_proton_2fa(error)
+            ):
+                self._prompt_proton_2fa(str(error))
+                return False
             self._set_error(str(error))
             return False
         if result is None:
@@ -283,6 +292,12 @@ class OAuthWizard(Gtk.Dialog):
     def _validation_ready(self, _result, error: Exception | None) -> bool:
         self._not_busy()
         if error:
+            if (
+                self.provider is Provider.PROTON_DRIVE
+                and self.client.requires_proton_2fa(error)
+            ):
+                self._prompt_proton_2fa(str(error))
+                return False
             self._set_error(f"Connection validation failed: {error}")
             return False
         account = Account(
@@ -293,6 +308,58 @@ class OAuthWizard(Gtk.Dialog):
         self.complete_callback(account)
         self.destroy()
         return False
+
+    def _prompt_proton_2fa(self, detail: str) -> None:
+        dialog = Gtk.Dialog(title="Proton Drive two-factor authentication", transient_for=self, modal=True)
+        dialog.set_icon_name(self.provider.icon_name)
+        area = dialog.get_content_area()
+        area.set_border_width(22)
+        area.set_spacing(10)
+        prompt = Gtk.Label(
+            label=(
+                "Proton requires a fresh two-factor authentication code. "
+                "Open your authenticator app and enter the current six-digit code."
+            ),
+            xalign=0,
+        )
+        prompt.set_line_wrap(True)
+        code = Gtk.Entry()
+        code.set_placeholder_text("000000")
+        code.set_max_length(12)
+        code.set_input_purpose(Gtk.InputPurpose.DIGITS)
+        code.set_activates_default(True)
+        technical = Gtk.Expander(label="Technical detail")
+        technical.add(Gtk.Label(label=detail, xalign=0, selectable=True, wrap=True))
+        area.pack_start(prompt, False, False, 0)
+        area.pack_start(code, False, False, 0)
+        area.pack_start(technical, False, False, 0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        submit = dialog.add_button("Verify", Gtk.ResponseType.OK)
+        submit.get_style_context().add_class("suggested-action")
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.show_all()
+        response = dialog.run()
+        value = code.get_text().strip()
+        dialog.destroy()
+        if response != Gtk.ResponseType.OK:
+            self._set_error("Proton Drive connection is waiting for two-factor authentication.")
+            return
+        if not re.fullmatch(r"[0-9]{6,12}", value):
+            self._set_error("Enter the current numeric Proton two-factor authentication code.")
+            return
+        self._busy("Submitting Proton two-factor authentication…")
+        credentials = dict(self._initial_credentials)
+        credentials["2fa"] = value
+        _run_thread(
+            self.client.begin_oauth,
+            self._step_ready,
+            self.remote,
+            self.provider,
+            "",
+            "",
+            self.session_id,
+            credentials,
+        )
 
     def _answer(self) -> str:
         if isinstance(self.answer_widget, Gtk.ComboBoxText):
@@ -763,6 +830,359 @@ class SyncJobDialog(Gtk.Dialog):
         return location.name if location else "Cloud drive"
 
 
+class PeerSharingDialog(Gtk.Dialog):
+    """Manage direct encrypted folders and connections without an intermediary."""
+
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication") -> None:
+        super().__init__(title="Peer-to-peer shared folders", transient_for=parent, modal=True)
+        self.set_icon_name("tuxdrive")
+        self.set_default_size(760, 680)
+        self.controller = controller
+        area = self.get_content_area()
+        area.set_border_width(20)
+        area.set_spacing(12)
+        explanation = Gtk.Label(
+            label=(
+                "TuxDrive connects the two computers directly over encrypted SFTP. "
+                "Files are never uploaded to an intermediary server. The sharing computer "
+                "must be reachable at the configured IP and TCP port."
+            ),
+            xalign=0,
+        )
+        explanation.set_line_wrap(True)
+        area.pack_start(explanation, False, False, 0)
+        try:
+            identity_key = controller.peers.identity_public_key()
+        except Exception as exc:
+            identity_key = f"Key generation failed: {exc}"
+        identity = Gtk.Expander(label="This computer’s public identity key")
+        identity_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        identity_value = Gtk.Entry()
+        identity_value.set_text(identity_key)
+        identity_value.set_editable(False)
+        copy_identity = Gtk.Button(label="Copy public key")
+        copy_identity.connect(
+            "clicked",
+            lambda _button: Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(identity_key, -1),
+        )
+        identity_box.pack_start(identity_value, False, False, 0)
+        identity_box.pack_start(copy_identity, False, False, 0)
+        identity.add(identity_box)
+        area.pack_start(identity, False, False, 0)
+
+        notebook = Gtk.Notebook()
+        notebook.append_page(self._host_page(), Gtk.Label(label="Share a folder"))
+        notebook.append_page(self._client_page(), Gtk.Label(label="Connect to a peer"))
+        area.pack_start(notebook, True, True, 0)
+        self.status = Gtk.Label(xalign=0)
+        self.status.set_line_wrap(True)
+        area.pack_start(self.status, False, False, 0)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.connect("response", lambda dialog, _response: dialog.destroy())
+        self.show_all()
+        self._reload_share_choices()
+        self._reload_connection_choices()
+
+    @staticmethod
+    def _folder_button(title: str) -> Gtk.FileChooserButton:
+        chooser = Gtk.FileChooserButton(title=title, action=Gtk.FileChooserAction.SELECT_FOLDER)
+        chooser.set_create_folders(True)
+        return chooser
+
+    @staticmethod
+    def _row(grid: Gtk.Grid, row: int, label: str, widget: Gtk.Widget) -> None:
+        grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+        grid.attach(widget, 1, row, 1, 1)
+
+    def _host_page(self) -> Gtk.Widget:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        page.set_border_width(12)
+        self.share_choice = Gtk.ComboBoxText()
+        self.share_choice.connect("changed", self._load_share)
+        self.share_name = Gtk.Entry()
+        self.share_folder = self._folder_button("Folder to share directly")
+        self.share_host = Gtk.Entry()
+        self.share_host.set_placeholder_text("Public/LAN IP or DNS name")
+        self.share_port = Gtk.SpinButton.new_with_range(1024, 65535, 1)
+        self.share_port.set_value(2022)
+        self.share_peer_key = Gtk.Entry()
+        self.share_peer_key.set_placeholder_text("Peer’s ssh-ed25519 public key")
+        grid = Gtk.Grid(column_spacing=12, row_spacing=9)
+        self._row(grid, 0, "Saved share", self.share_choice)
+        self._row(grid, 1, "Display name", self.share_name)
+        self._row(grid, 2, "Local folder", self.share_folder)
+        self._row(grid, 3, "Address peers use", self.share_host)
+        self._row(grid, 4, "TCP port", self.share_port)
+        self._row(grid, 5, "Allowed peer public key", self.share_peer_key)
+        page.pack_start(grid, False, False, 0)
+        note = Gtk.Label(
+            label=(
+                "Exchange identity keys through a trusted channel. If this address is behind a router, "
+                "forward the selected TCP port to this computer and permit it in the firewall."
+            ),
+            xalign=0,
+        )
+        note.set_line_wrap(True)
+        page.pack_start(note, False, False, 0)
+        buttons = Gtk.Box(spacing=8)
+        save = Gtk.Button(label="Save and start")
+        save.connect("clicked", self._save_share)
+        stop = Gtk.Button(label="Stop")
+        stop.connect("clicked", self._stop_share)
+        invitation = Gtk.Button(label="Copy invitation")
+        invitation.connect("clicked", self._copy_invitation)
+        delete = Gtk.Button(label="Delete")
+        delete.connect("clicked", self._delete_share)
+        for button in (save, stop, invitation, delete):
+            buttons.pack_start(button, False, False, 0)
+        page.pack_start(buttons, False, False, 0)
+        return page
+
+    def _client_page(self) -> Gtk.Widget:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        page.set_border_width(12)
+        self.connection_choice = Gtk.ComboBoxText()
+        self.connection_choice.connect("changed", self._load_connection)
+        self.connection_name = Gtk.Entry()
+        self.connection_host = Gtk.Entry()
+        self.connection_port = Gtk.SpinButton.new_with_range(1024, 65535, 1)
+        self.connection_port.set_value(2022)
+        self.connection_host_key = Gtk.Entry()
+        self.connection_host_key.set_placeholder_text("Host key from the invitation")
+        self.connection_folder = self._folder_button("Local synchronized folder")
+        grid = Gtk.Grid(column_spacing=12, row_spacing=9)
+        self._row(grid, 0, "Saved connection", self.connection_choice)
+        self._row(grid, 1, "Display name", self.connection_name)
+        self._row(grid, 2, "Peer IP / DNS", self.connection_host)
+        self._row(grid, 3, "Peer TCP port", self.connection_port)
+        self._row(grid, 4, "Peer host public key", self.connection_host_key)
+        self._row(grid, 5, "My local folder", self.connection_folder)
+        page.pack_start(grid, False, False, 0)
+        invitation_label = Gtk.Label(label="Paste invitation from the sharing computer", xalign=0)
+        page.pack_start(invitation_label, False, False, 0)
+        self.invitation_text = Gtk.TextView()
+        self.invitation_text.set_monospace(True)
+        invitation_scroll = Gtk.ScrolledWindow()
+        invitation_scroll.set_min_content_height(100)
+        invitation_scroll.add(self.invitation_text)
+        page.pack_start(invitation_scroll, True, True, 0)
+        buttons = Gtk.Box(spacing=8)
+        load = Gtk.Button(label="Load invitation")
+        load.connect("clicked", self._load_invitation)
+        connect = Gtk.Button(label="Save and connect")
+        connect.connect("clicked", self._save_connection)
+        delete = Gtk.Button(label="Remove connection")
+        delete.connect("clicked", self._delete_connection)
+        for button in (load, connect, delete):
+            buttons.pack_start(button, False, False, 0)
+        page.pack_start(buttons, False, False, 0)
+        return page
+
+    def _reload_share_choices(self, selected: str = "new") -> None:
+        self.share_choice.remove_all()
+        self.share_choice.append("new", "New shared folder")
+        for share in self.controller.config.peer_shares:
+            state = "running" if share.id in self.controller.peers.running_shares else "stopped"
+            self.share_choice.append(share.id, f"{share.name} · {state}")
+        self.share_choice.set_active_id(selected)
+
+    def _selected_share(self) -> PeerShare | None:
+        share_id = self.share_choice.get_active_id()
+        return next((item for item in self.controller.config.peer_shares if item.id == share_id), None)
+
+    def _load_share(self, _combo: Gtk.ComboBoxText) -> None:
+        share = self._selected_share()
+        self.share_name.set_text(share.name if share else "Peer shared folder")
+        self.share_host.set_text(share.advertised_host if share else "")
+        self.share_port.set_value(share.port if share else 2022)
+        self.share_peer_key.set_text(share.allowed_peer_key if share else "")
+        if share and Path(share.local_path).is_dir():
+            self.share_folder.set_filename(str(Path(share.local_path).expanduser()))
+
+    def _save_share(self, _button: Gtk.Button) -> None:
+        try:
+            folder = self.share_folder.get_filename()
+            if not folder:
+                raise PeerError("Select the local folder to share")
+            share = self._selected_share()
+            name = self.share_name.get_text().strip() or "Peer shared folder"
+            advertised_host = validate_host(self.share_host.get_text())
+            port = validate_port(self.share_port.get_value_as_int())
+            allowed_peer_key = normalize_public_key(self.share_peer_key.get_text())
+            if share is None:
+                share = PeerShare("", folder, "")
+                self.controller.config.peer_shares.append(share)
+            else:
+                self.controller.peers.stop(share.id)
+            share.name = name
+            share.local_path = folder
+            share.advertised_host = advertised_host
+            share.port = port
+            share.allowed_peer_key = allowed_peer_key
+            share.enabled = True
+            self.controller.peers.start(share)
+            share.last_status = f"Listening on TCP {share.port}"
+            self.controller.save()
+            self._reload_share_choices(share.id)
+            self._set_status("Direct encrypted share is running.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _stop_share(self, _button: Gtk.Button) -> None:
+        share = self._selected_share()
+        if not share:
+            return
+        self.controller.peers.stop(share.id)
+        share.enabled = False
+        share.last_status = "Stopped"
+        self.controller.save()
+        self._reload_share_choices(share.id)
+        self._set_status("Share stopped.", False)
+
+    def _copy_invitation(self, _button: Gtk.Button) -> None:
+        share = self._selected_share()
+        if not share:
+            self._set_status("Save the shared folder first.", True)
+            return
+        try:
+            value = self.controller.peers.invitation(share)
+            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(value, -1)
+            self._set_status("Invitation copied. Send it through a trusted channel.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _delete_share(self, _button: Gtk.Button) -> None:
+        share = self._selected_share()
+        if not share:
+            return
+        self.controller.peers.stop(share.id)
+        self.controller.config.peer_shares.remove(share)
+        self.controller.save()
+        self._reload_share_choices()
+        self._set_status("Share definition removed; files were not deleted.", False)
+
+    def _peer_accounts(self) -> list[Account]:
+        return [item for item in self.controller.config.accounts if item.provider is Provider.PEER]
+
+    def _reload_connection_choices(self, selected: str = "new") -> None:
+        self.connection_choice.remove_all()
+        self.connection_choice.append("new", "New peer connection")
+        for account in self._peer_accounts():
+            self.connection_choice.append(account.remote, account.display_name)
+        self.connection_choice.set_active_id(selected)
+
+    def _selected_connection(self) -> Account | None:
+        remote = self.connection_choice.get_active_id()
+        return next((item for item in self._peer_accounts() if item.remote == remote), None)
+
+    def _load_connection(self, _combo: Gtk.ComboBoxText) -> None:
+        account = self._selected_connection()
+        self.connection_name.set_text(account.display_name if account else "Peer folder")
+        self.connection_host.set_text(account.peer_host if account else "")
+        self.connection_port.set_value(account.peer_port if account else 2022)
+        self.connection_host_key.set_text(account.peer_host_key if account else "")
+        if account:
+            job = next((item for item in self.controller.config.jobs if item.account_remote == account.remote), None)
+            if job and job.local.is_dir():
+                self.connection_folder.set_filename(str(job.local))
+
+    def _load_invitation(self, _button: Gtk.Button) -> None:
+        buffer = self.invitation_text.get_buffer()
+        value = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)
+        try:
+            invitation = PeerInvitation.decode(value)
+            self.connection_name.set_text(invitation.name)
+            self.connection_host.set_text(invitation.host)
+            self.connection_port.set_value(invitation.port)
+            self.connection_host_key.set_text(invitation.host_key)
+            self._set_status("Invitation loaded. Select your local folder and connect.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _save_connection(self, _button: Gtk.Button) -> None:
+        try:
+            folder = self.connection_folder.get_filename()
+            if not folder:
+                raise PeerError("Select a local folder for the synchronized copy")
+            invitation = PeerInvitation(
+                self.connection_name.get_text().strip() or "Peer folder",
+                validate_host(self.connection_host.get_text()),
+                validate_port(self.connection_port.get_value_as_int()),
+                normalize_public_key(self.connection_host_key.get_text()),
+            )
+            account = self._selected_connection()
+            remote = account.remote if account else "peer-" + datetime.now().strftime("%H%M%S")
+            candidate = remote + "-verify"
+            try:
+                self.controller.rclone.delete_remote(candidate)
+            except Exception:
+                pass
+            self.controller.peers.configure_connection(candidate, invitation)
+            try:
+                self.controller.rclone.validate_remote(candidate)
+            finally:
+                try:
+                    self.controller.rclone.delete_remote(candidate)
+                except Exception:
+                    pass
+            self.controller.peers.configure_connection(remote, invitation)
+            if account is None:
+                account = Account(remote, Provider.PEER, invitation.name)
+                self.controller.config.accounts.append(account)
+                job = SyncJob(
+                    account_remote=remote,
+                    local_path=folder,
+                    name=invitation.name,
+                    cloud_location_name="Direct encrypted peer",
+                    mode=SyncMode.TWO_WAY,
+                )
+                self.controller.config.jobs.append(job)
+            else:
+                job = next((item for item in self.controller.config.jobs if item.account_remote == remote), None)
+                if job:
+                    job.local_path = folder
+                    job.name = invitation.name
+                    job.initialized = False
+            account.display_name = invitation.name
+            account.peer_host = invitation.host
+            account.peer_port = invitation.port
+            account.peer_host_key = invitation.host_key
+            self.controller.save()
+            self.controller.reconfigure_callbacks()
+            if self.controller.window:
+                self.controller.window.refresh()
+            if job:
+                self.controller.run_job(job)
+            self._reload_connection_choices(remote)
+            self._set_status("Peer verified and synchronization started.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _delete_connection(self, _button: Gtk.Button) -> None:
+        account = self._selected_connection()
+        if not account:
+            return
+        for job in [item for item in self.controller.config.jobs if item.account_remote == account.remote]:
+            self.controller.stop_job(job)
+            self.controller.config.jobs.remove(job)
+        try:
+            self.controller.rclone.delete_remote(account.remote)
+        except Exception:
+            pass
+        self.controller.config.accounts.remove(account)
+        self.controller.save()
+        self._reload_connection_choices()
+        if self.controller.window:
+            self.controller.window.refresh()
+        self._set_status("Peer connection removed; local and remote files were not deleted.", False)
+
+    def _set_status(self, message: str, error: bool) -> None:
+        color = "#c01c28" if error else "#2ec27e"
+        self.status.set_markup(
+            f"<span foreground='{color}'>{GLib.markup_escape_text(message)}</span>"
+        )
+
+
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, application: "TuxDriveApplication") -> None:
         super().__init__(application=application, title="TuxDrive")
@@ -771,7 +1191,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_icon_name("tuxdrive")
         self.connect("delete-event", self._hide_instead_of_close)
 
-        header = Gtk.HeaderBar(title="TuxDrive", subtitle="Eight cloud services · sync and streaming")
+        header = Gtk.HeaderBar(title="TuxDrive", subtitle="Cloud sync, streaming, and encrypted peer sharing")
         header.set_show_close_button(True)
         self.set_titlebar(header)
         brand = Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.LARGE_TOOLBAR)
@@ -781,6 +1201,10 @@ class MainWindow(Gtk.ApplicationWindow):
         add_account.set_tooltip_text("Connect cloud account")
         add_account.connect("clicked", self._choose_provider)
         header.pack_start(add_account)
+        peers = Gtk.Button.new_from_icon_name("network-workgroup-symbolic", Gtk.IconSize.BUTTON)
+        peers.set_tooltip_text("Peer-to-peer shared folders")
+        peers.connect("clicked", self._show_peer_sharing)
+        header.pack_start(peers)
         settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.BUTTON)
         settings.set_tooltip_text("Settings")
         settings.connect("clicked", self._show_settings)
@@ -881,7 +1305,7 @@ class MainWindow(Gtk.ApplicationWindow):
             menu = Gtk.MenuButton()
             menu.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON))
             popup = Gtk.Menu()
-            online = Gtk.MenuItem(label="Open online")
+            online = Gtk.MenuItem(label="Peer settings" if account.provider is Provider.PEER else "Open online")
             online.connect("activate", self._open_online, account)
             reconnect = Gtk.MenuItem(label="Reconnect / refresh credentials")
             reconnect.connect("activate", self._reconnect, account)
@@ -1004,7 +1428,7 @@ class MainWindow(Gtk.ApplicationWindow):
         prompt.set_markup("<span size='large' weight='bold'>Choose a storage provider</span>\n<small>All providers support selective folder sync and files-on-demand mounting.</small>")
         area.pack_start(prompt, False, False, 8)
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
-        providers = list(Provider)
+        providers = [provider for provider in Provider if provider is not Provider.PEER]
         for index, provider in enumerate(providers, start=1):
             button = Gtk.Button(label=provider.label)
             button.set_image(Gtk.Image.new_from_icon_name(provider.icon_name, Gtk.IconSize.DND))
@@ -1162,12 +1586,18 @@ class MainWindow(Gtk.ApplicationWindow):
         self.refresh()
 
     def _open_online(self, _item: Gtk.MenuItem, account: Account) -> None:
+        if account.provider is Provider.PEER:
+            self._show_peer_sharing(_item)
+            return
         if account.provider.home_url:
             webbrowser.open(account.provider.home_url)
         else:
             self.message("This Nextcloud account uses its configured server URL.")
 
     def _reconnect(self, _item: Gtk.MenuItem, account: Account) -> None:
+        if account.provider is Provider.PEER:
+            self._show_peer_sharing(_item)
+            return
         if not account.provider.browser_oauth:
             OAuthWizard(
                 self, self.controller.rclone, account.provider,
@@ -1199,6 +1629,7 @@ class MainWindow(Gtk.ApplicationWindow):
         minimized.set_active(self.controller.config.settings.start_minimized)
         for widget in (launch, notifications, minimized):
             dialog.get_content_area().pack_start(widget, False, False, 6)
+        dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("Check for updates", 2)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Save", Gtk.ResponseType.OK)
@@ -1213,6 +1644,11 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         if response == 2:
             self._check_for_updates()
+        elif response == 3:
+            self._show_peer_sharing(_button)
+
+    def _show_peer_sharing(self, _button: Gtk.Widget) -> None:
+        PeerSharingDialog(self, self.controller)
 
     def _check_for_updates(self) -> None:
         if self.update_dialog:
@@ -1463,6 +1899,7 @@ class TuxDriveApplication(Gtk.Application):
             self.config = AppConfig()
         self.rclone = RcloneClient(self.config.settings.rclone_path)
         self.engine = SyncEngine(self.config.settings.rclone_path)
+        self.peers = PeerManager(self.config.settings.rclone_path)
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False
@@ -1746,6 +2183,15 @@ class TuxDriveApplication(Gtk.Application):
         self._set_tray_state("ready", "Loaded")
         if not self._runtime_ready_once:
             self._runtime_ready_once = True
+            for share in self.config.peer_shares:
+                if share.enabled:
+                    try:
+                        self.peers.start(share)
+                        share.last_status = f"Listening on TCP {share.port}"
+                    except Exception as exc:
+                        share.last_status = f"Could not start: {exc}"
+                        LOGGER.error("Peer share %s failed: %s", share.id, exc)
+            self.save()
             for job in self.config.jobs:
                 if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:
                     self.run_job(job, quiet=True)
@@ -1768,6 +2214,7 @@ class TuxDriveApplication(Gtk.Application):
 
     def do_shutdown(self) -> None:
         LOGGER.info("TuxDrive shutting down")
+        self.peers.shutdown()
         self.engine.shutdown()
         self.release()
         Gtk.Application.do_shutdown(self)

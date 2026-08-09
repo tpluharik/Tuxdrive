@@ -83,14 +83,15 @@ class RcloneClientTests(unittest.TestCase):
         self.assertIn("root_folder_id=root", google_scoped_remote("work", "my_drive"))
         self.assertIn("shared_with_me=true", google_scoped_remote("work", "shared_with_me"))
 
-    def test_all_eight_provider_backends_are_available(self):
-        self.assertEqual(len(Provider), 8)
+    def test_eight_cloud_backends_and_direct_peer_backend_are_available(self):
+        self.assertEqual(len(Provider), 9)
         self.assertEqual(Provider.DROPBOX.rclone_type, "dropbox")
         self.assertEqual(Provider.BOX.rclone_type, "box")
         self.assertEqual(Provider.PCLOUD.rclone_type, "pcloud")
         self.assertEqual(Provider.MEGA.rclone_type, "mega")
         self.assertEqual(Provider.PROTON_DRIVE.rclone_type, "protondrive")
         self.assertEqual(Provider.NEXTCLOUD.rclone_type, "webdav")
+        self.assertEqual(Provider.PEER.rclone_type, "sftp")
 
     def test_nextcloud_configuration_sets_webdav_vendor(self):
         client = RcloneClient()
@@ -127,9 +128,9 @@ class RcloneClientTests(unittest.TestCase):
         self.assertIn("username", args)
         self.assertIn("user@proton.me", args)
         self.assertIn("obscured:raw-password", args)
-        self.assertIn("obscured:123456", args)
+        self.assertIn("123456", args)
         self.assertNotIn("raw-password", args)
-        self.assertEqual(obscure.call_count, 2)
+        self.assertEqual(obscure.call_count, 1)
         self.assertEqual(args[-1], "--non-interactive")
 
     def test_remote_is_listed_before_account_is_accepted(self):
@@ -144,6 +145,25 @@ class RcloneClientTests(unittest.TestCase):
             run.call_args.args[0],
             ["lsf", "proton:", "--dirs-only", "--max-depth", "1"],
         )
+
+    def test_proton_two_factor_requirement_is_detected(self):
+        self.assertTrue(RcloneClient.requires_proton_2fa("2FA enabled, but no code provided"))
+        self.assertTrue(RcloneClient.requires_proton_2fa("invalid two-factor authentication code"))
+        self.assertFalse(RcloneClient.requires_proton_2fa("username and password are required"))
+
+    def test_proton_two_factor_code_is_updated_without_password_obscuring(self):
+        client = RcloneClient()
+        with patch.object(
+            client,
+            "_run",
+            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        ) as run, patch.object(client, "_obscure") as obscure:
+            client.update_credentials("proton", Provider.PROTON_DRIVE, {"2fa": "123456"})
+        self.assertEqual(
+            run.call_args.args[0],
+            ["config", "update", "proton", "2fa", "123456", "--non-interactive"],
+        )
+        obscure.assert_not_called()
 
     def test_account_discovery_recognizes_added_backends(self):
         configured = {

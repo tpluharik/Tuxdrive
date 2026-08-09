@@ -91,7 +91,7 @@ class RcloneClient:
         backend_map = {
             provider.rclone_type: provider
             for provider in Provider
-            if provider is not Provider.NEXTCLOUD
+            if provider not in {Provider.NEXTCLOUD, Provider.PEER}
         }
         for name, values in raw.items():
             backend = values.get("type") if isinstance(values, dict) else None
@@ -130,6 +130,36 @@ class RcloneClient:
     def validate_remote(self, remote: str) -> None:
         self._validate_remote_name(remote)
         self._run(["lsf", f"{remote}:", "--dirs-only", "--max-depth", "1"])
+
+    def update_credentials(
+        self, remote: str, provider: Provider, credentials: dict[str, str]
+    ) -> None:
+        self._validate_remote_name(remote)
+        secret_keys = {
+            key for key, _label, secret, _required in provider.credential_fields if secret
+        }
+        # A current Proton 2FA code is sensitive but rclone expects it as a
+        # plain config value rather than an obscured password.
+        args = ["config", "update", remote]
+        for key, value in credentials.items():
+            if value:
+                args.extend([key, self._obscure(value) if key in secret_keys else value])
+        args.append("--non-interactive")
+        self._run(args)
+
+    @staticmethod
+    def requires_proton_2fa(error: Exception | str) -> bool:
+        detail = str(error).lower()
+        return any(
+            marker in detail
+            for marker in (
+                "2fa enabled",
+                "2fa code",
+                "two-factor",
+                "two factor",
+                "totp",
+            )
+        )
 
     def _obscure(self, value: str) -> str:
         if not self.available():

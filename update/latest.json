@@ -1,6 +1,6 @@
 {
-  "version": "0.6.2",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.2_all.deb",
-  "sha256": "8731ec1fdbdbbf7ed07a42137146d79d36fe859ec478fc7ed658b50be521798e",
-  "notes": "Completes Proton Drive setup with explicit credential and 2FA fields, protected secret storage, remote validation before Connected status, and an in-place reconnect path for previously incomplete Proton remotes."
+  "version": "0.7.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.7.0_all.deb",
+  "sha256": "92b30d1d14f7c5c2dc5791f65888db87988d5105c027c90a9428180e643d1282",
+  "notes": "Adds on-demand Proton 2FA dialogs and direct encrypted peer-to-peer collaborative folders with generated Ed25519 identities, exchanged public keys, pinned host verification, editable IP/port settings, per-side folder selection, and no intermediary file storage."
 }

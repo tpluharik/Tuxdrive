@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from tuxdrive.config import ConfigStore
-from tuxdrive.models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
+from tuxdrive.models import Account, AppConfig, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode
 
 
 class ConfigStoreTests(unittest.TestCase):
@@ -27,6 +27,7 @@ class ConfigStoreTests(unittest.TestCase):
                         conflict_policy=ConflictPolicy.KEEP_BOTH,
                     )
                 ],
+                peer_shares=[PeerShare("Direct", "/tmp/direct", "192.0.2.4", 22022, "ssh-ed25519 AAAA")],
             )
             store.save(value)
             loaded = store.load()
@@ -37,6 +38,7 @@ class ConfigStoreTests(unittest.TestCase):
             )
             self.assertEqual(loaded.jobs[0].cloud_location_name, "Shared Drive · Projects")
             self.assertTrue(loaded.jobs[0].acknowledge_google_abuse)
+            self.assertEqual(loaded.peer_shares[0].advertised_host, "192.0.2.4")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
     def test_invalid_config_is_quarantined(self):

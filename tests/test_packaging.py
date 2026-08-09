@@ -40,6 +40,17 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('"Downloading… {fraction:.0%}"', app)
         self.assertIn("Verifying cloud access…", app)
         self.assertIn("Reconnect / refresh credentials", app)
+        self.assertIn("class PeerSharingDialog", app)
+        self.assertIn("Proton Drive two-factor authentication", app)
+        self.assertIn("Save and connect", app)
+
+    def test_peer_runtime_and_key_generator_are_installed(self):
+        control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
+        build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
+        self.assertIn("openssh-client", control)
+        self.assertIn('find_spec("tuxdrive.peer")', build_script)
+        self.assertIn('docs/TESTING.md', build_script)
+        self.assertIn('docs/ROADMAP.md', build_script)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

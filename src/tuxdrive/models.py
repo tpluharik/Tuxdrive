@@ -33,6 +33,7 @@ class Provider(str, Enum):
     MEGA = "mega"
     PROTON_DRIVE = "proton_drive"
     NEXTCLOUD = "nextcloud"
+    PEER = "peer"
 
     @property
     def label(self) -> str:
@@ -45,6 +46,7 @@ class Provider(str, Enum):
             self.MEGA: "MEGA",
             self.PROTON_DRIVE: "Proton Drive",
             self.NEXTCLOUD: "Nextcloud",
+            self.PEER: "Peer-to-peer",
         }[self]
 
     @property
@@ -58,10 +60,13 @@ class Provider(str, Enum):
             self.MEGA: "mega",
             self.PROTON_DRIVE: "protondrive",
             self.NEXTCLOUD: "webdav",
+            self.PEER: "sftp",
         }[self]
 
     @property
     def icon_name(self) -> str:
+        if self is self.PEER:
+            return "network-workgroup-symbolic"
         return f"tuxdrive-{self.value.replace('_', '-')}"
 
     @property
@@ -75,6 +80,7 @@ class Provider(str, Enum):
             self.MEGA: "mega",
             self.PROTON_DRIVE: "proton",
             self.NEXTCLOUD: "nextcloud",
+            self.PEER: "peer",
         }[self]
 
     @property
@@ -104,7 +110,6 @@ class Provider(str, Enum):
             self.PROTON_DRIVE: (
                 ("username", "Proton account email", False, True),
                 ("password", "Proton password", True, True),
-                ("2fa", "Current 2FA code (optional)", True, False),
                 ("otp_secret_key", "OTP secret key (optional)", True, False),
                 ("mailbox_password", "Mailbox password (two-password accounts)", True, False),
             ),
@@ -126,6 +131,7 @@ class Provider(str, Enum):
             self.MEGA: "https://mega.nz/fm",
             self.PROTON_DRIVE: "https://drive.proton.me/",
             self.NEXTCLOUD: "",
+            self.PEER: "",
         }[self]
 
 
@@ -158,6 +164,9 @@ class Account:
     provider: Provider
     display_name: str
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    peer_host: str = ""
+    peer_port: int = 2022
+    peer_host_key: str = ""
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Account":
@@ -166,7 +175,27 @@ class Account:
             provider=Provider(value["provider"]),
             display_name=value.get("display_name", value["remote"]),
             created_at=value.get("created_at", datetime.now(timezone.utc).isoformat()),
+            peer_host=value.get("peer_host", ""),
+            peer_port=int(value.get("peer_port", 2022)),
+            peer_host_key=value.get("peer_host_key", ""),
         )
+
+
+@dataclass(slots=True)
+class PeerShare:
+    name: str
+    local_path: str
+    advertised_host: str
+    port: int = 2022
+    allowed_peer_key: str = ""
+    id: str = field(default_factory=lambda: uuid4().hex)
+    enabled: bool = True
+    last_status: str = "Not started"
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "PeerShare":
+        allowed = set(cls.__dataclass_fields__)
+        return cls(**{key: item for key, item in value.items() if key in allowed})
 
 
 @dataclass(slots=True)
@@ -231,6 +260,7 @@ class AppSettings:
 class AppConfig:
     accounts: list[Account] = field(default_factory=list)
     jobs: list[SyncJob] = field(default_factory=list)
+    peer_shares: list[PeerShare] = field(default_factory=list)
     settings: AppSettings = field(default_factory=AppSettings)
 
     def to_dict(self) -> dict[str, Any]:
@@ -241,5 +271,6 @@ class AppConfig:
         return cls(
             accounts=[Account.from_dict(item) for item in value.get("accounts", [])],
             jobs=[SyncJob.from_dict(item) for item in value.get("jobs", [])],
+            peer_shares=[PeerShare.from_dict(item) for item in value.get("peer_shares", [])],
             settings=AppSettings.from_dict(value.get("settings", {})),
         )

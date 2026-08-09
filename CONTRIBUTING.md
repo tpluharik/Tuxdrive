@@ -9,6 +9,7 @@ Thank you for helping improve TuxDrive. The repository is publicly readable, whi
 - Comment on an existing issue to add evidence, logs, testing results, or design feedback.
 - Fork the repository and open a pull request with an implementation.
 - Improve user documentation, packaging, accessibility, or translations.
+- Review or refine the [top-20 feature roadmap](docs/ROADMAP.md).
 
 ## Before reporting a bug
 
@@ -42,6 +43,8 @@ PYTHONPATH=src python3 -m compileall -q src
 6. Update documentation when controls, configuration, packaging, or user-visible behaviour changes.
 7. Open a pull request and complete the checklist.
 
+The [testing guide](docs/TESTING.md) describes the current 53-test suite, release matrix, safety invariants and known coverage gaps.
+
 ## Pull-request expectations
 
 - Explain the user problem and the proposed behaviour.
@@ -57,4 +60,3 @@ Maintainers may request changes, close incomplete proposals, or decline features
 ## Community conduct
 
 Participation is governed by [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). Be specific, constructive, and respectful.
-

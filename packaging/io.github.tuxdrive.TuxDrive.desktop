@@ -1,6 +1,6 @@
 [Desktop Entry]
 Name=TuxDrive
-Comment=Synchronize and stream files from eight cloud storage providers
+Comment=Synchronize cloud files and share folders directly with encrypted peers
 Exec=tuxdrive
 Icon=tuxdrive
 Terminal=false
