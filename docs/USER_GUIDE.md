@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.5.0 on Ubuntu 26.04: installation, browser OAuth, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.5.1 on Ubuntu 26.04: installation, browser OAuth, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.5.0 on Ubuntu 26.04: installation, browser OAuth, c
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.5.0_all.deb
+sudo apt install ./tuxdrive_0.5.1_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -251,7 +251,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.5.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.5.1_all.deb`.
 
 ## 11. Data safety
 

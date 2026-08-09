@@ -15,7 +15,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.5.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.5.1 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
@@ -54,7 +54,7 @@ Version 0.5.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.5.0_all.deb
+sudo apt install ./tuxdrive_0.5.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select Google Drive or Microsoft OneDrive, and complete authorization in your browser. Then add a local synchronized folder or virtual drive.
@@ -70,7 +70,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.5.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.5.1_all.deb`.
 
 ## Update from the app
 

@@ -19,8 +19,8 @@ jobs:
       - name: Build Debian package
         run: sh scripts/build-deb.sh
       - name: Inspect Debian package
-        run: dpkg-deb --info dist/tuxdrive_0.5.0_all.deb && dpkg-deb --contents dist/tuxdrive_0.5.0_all.deb
+        run: dpkg-deb --info dist/tuxdrive_0.5.1_all.deb && dpkg-deb --contents dist/tuxdrive_0.5.1_all.deb
       - uses: actions/upload-artifact@v4
         with:
           name: tuxdrive-deb
-          path: dist/tuxdrive_0.5.0_all.deb
+          path: dist/tuxdrive_0.5.1_all.deb
