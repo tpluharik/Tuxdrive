@@ -25,6 +25,14 @@ class PackagingTests(unittest.TestCase):
         self.assertLess(app.index(gdk_requirement), app.index(repository_import))
         self.assertLess(app.index(gtk_requirement), app.index(repository_import))
 
+    def test_visual_folder_tree_live_log_and_activity_icons_are_present(self):
+        app = Path("src/tuxdrive/app.py").read_text(encoding="utf-8")
+        self.assertIn("class CloudFolderTree", app)
+        self.assertIn("Gtk.TreeStore(bool, str, str, bool)", app)
+        self.assertIn('Gtk.Expander(label="Live activity log")', app)
+        self.assertIn('icon_name = "tuxdrive-sync"', app)
+        self.assertIn('icon_name = "tuxdrive-error"', app)
+
 
 if __name__ == "__main__":
     unittest.main()

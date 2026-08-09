@@ -271,10 +271,167 @@ class OAuthWizard(Gtk.Dialog):
         self.status.set_markup(f"<span foreground='#c01c28'>{GLib.markup_escape_text(message)}</span>")
 
 
+class CloudFolderTree(Gtk.Box):
+    """Lazy-loading, multi-select cloud directory tree."""
+
+    def __init__(self, client: RcloneClient, remote: str, selected: list[str] | None = None) -> None:
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.client = client
+        self.remote = remote
+        self.pending = {path.strip("/") for path in (selected or [])}
+        self.store = Gtk.TreeStore(bool, str, str, bool)
+        self.view = Gtk.TreeView(model=self.store)
+        self.view.set_headers_visible(False)
+        toggle = Gtk.CellRendererToggle()
+        toggle.connect("toggled", self._toggle)
+        self.view.append_column(Gtk.TreeViewColumn("Sync", toggle, active=0))
+        folder = Gtk.CellRendererPixbuf(icon_name="folder-symbolic")
+        label = Gtk.CellRendererText()
+        column = Gtk.TreeViewColumn("Cloud folder")
+        column.pack_start(folder, False)
+        column.pack_start(label, True)
+        column.add_attribute(label, "text", 1)
+        self.view.append_column(column)
+        self.view.connect("row-expanded", self._expanded)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(250)
+        scroll.add(self.view)
+        self.pack_start(scroll, True, True, 0)
+        self.status = Gtk.Label(label="Expand folders to browse the cloud drive.", xalign=0)
+        self.status.set_line_wrap(True)
+        self.pack_start(self.status, False, False, 0)
+        self.reset(remote, selected)
+
+    def reset(self, remote: str, selected: list[str] | None = None) -> None:
+        self.remote = remote
+        self.pending = {path.strip("/") for path in (selected or [])}
+        self.store.clear()
+        root_selected = "" in self.pending or not self.pending
+        root = self.store.append(None, [root_selected, "Entire cloud drive", "", False])
+        self.store.append(root, [False, "Loading…", "", True])
+        self.view.expand_row(self.store.get_path(root), False)
+        self._load(root)
+
+    def selections(self) -> list[str]:
+        values: list[str] = []
+
+        def collect(model, _path, tree_iter, _data) -> bool:
+            if model.get_value(tree_iter, 0) and model.get_value(tree_iter, 1) != "Loading…":
+                values.append(model.get_value(tree_iter, 2))
+            return False
+
+        self.store.foreach(collect, None)
+        return values
+
+    def _toggle(self, _renderer, path: str) -> None:
+        tree_iter = self.store.get_iter(path)
+        selected = not self.store.get_value(tree_iter, 0)
+        self.store.set_value(tree_iter, 0, selected)
+        if selected:
+            parent = self.store.iter_parent(tree_iter)
+            while parent:
+                self.store.set_value(parent, 0, False)
+                parent = self.store.iter_parent(parent)
+            self._clear_descendants(tree_iter)
+        self.status.set_text(
+            f"{len(self.selections())} cloud location(s) selected"
+            if self.selections()
+            else "Select at least one cloud folder or the entire drive."
+        )
+
+    def _clear_descendants(self, tree_iter) -> None:
+        child = self.store.iter_children(tree_iter)
+        while child:
+            self.store.set_value(child, 0, False)
+            self._clear_descendants(child)
+            child = self.store.iter_next(child)
+
+    def _expanded(self, _view, tree_iter, _path) -> None:
+        self._load(tree_iter)
+
+    def _load(self, tree_iter) -> None:
+        if self.store.get_value(tree_iter, 3):
+            return
+        self.store.set_value(tree_iter, 3, True)
+        cloud_path = self.store.get_value(tree_iter, 2)
+        self.status.set_text(f"Loading {cloud_path or 'cloud drive'}…")
+        _run_thread(
+            self.client.list_directories,
+            lambda folders, error, remote=self.remote, path=cloud_path: self._loaded(
+                remote, path, folders, error
+            ),
+            self.remote,
+            cloud_path,
+        )
+
+    def _loaded(
+        self,
+        remote: str,
+        cloud_path: str,
+        folders: list[str] | None,
+        error: Exception | None,
+    ) -> bool:
+        if remote != self.remote:
+            return False
+        target = self._find_path(self.store.get_iter_first(), cloud_path)
+        if target is None:
+            return False
+        child = self.store.iter_children(target)
+        while child:
+            self.store.remove(child)
+            child = self.store.iter_children(target)
+        if error:
+            self.store.set_value(target, 3, False)
+            self.status.set_markup(
+                f"<span foreground='#c01c28'>{GLib.markup_escape_text(str(error))}</span>"
+            )
+            return False
+        parent_path = self.store.get_value(target, 2)
+        for name in folders or []:
+            full_path = f"{parent_path}/{name}".strip("/")
+            row = self.store.append(target, [full_path in self.pending, name, full_path, False])
+            self.store.append(row, [False, "Loading…", full_path, True])
+        self.status.set_text(f"{len(self.selections())} cloud location(s) selected")
+        self._expand_pending(target)
+        return False
+
+    def _find_path(self, tree_iter, cloud_path: str):
+        while tree_iter:
+            if (
+                self.store.get_value(tree_iter, 2) == cloud_path
+                and self.store.get_value(tree_iter, 1) != "Loading…"
+            ):
+                return tree_iter
+            nested = self._find_path(self.store.iter_children(tree_iter), cloud_path)
+            if nested is not None:
+                return nested
+            tree_iter = self.store.iter_next(tree_iter)
+        return None
+
+    def _expand_pending(self, parent) -> None:
+        parent_path = self.store.get_value(parent, 2)
+        for wanted in self.pending:
+            if not wanted or not wanted.startswith(f"{parent_path}/" if parent_path else ""):
+                continue
+            child = self.store.iter_children(parent)
+            while child:
+                child_path = self.store.get_value(child, 2)
+                if wanted == child_path:
+                    self.store.set_value(child, 0, True)
+                    break
+                if wanted.startswith(child_path + "/"):
+                    self.view.expand_row(self.store.get_path(child), False)
+                    self._load(child)
+                    break
+                child = self.store.iter_next(child)
+
+
 class SyncJobDialog(Gtk.Dialog):
     def __init__(
         self,
         parent: Gtk.Window,
+        client: RcloneClient,
         accounts: list[Account],
         existing: SyncJob | None = None,
     ) -> None:
@@ -283,7 +440,8 @@ class SyncJobDialog(Gtk.Dialog):
             transient_for=parent,
             modal=True,
         )
-        self.set_default_size(620, 580)
+        self.set_default_size(760, 760)
+        self.client = client
         self.accounts = accounts
         self.existing = existing
         content = self.get_content_area()
@@ -299,9 +457,12 @@ class SyncJobDialog(Gtk.Dialog):
         self.local = Gtk.FileChooserButton(title="Choose local folder", action=Gtk.FileChooserAction.SELECT_FOLDER)
         default = Path.home() / ("TuxDrive" if len(accounts) > 1 else accounts[0].provider.label.replace(" ", ""))
         self.local.set_filename(existing.local_path if existing else str(default))
-        self.remote_path = Gtk.Entry()
-        self.remote_path.set_placeholder_text("Leave empty for the entire drive")
-        self.remote_path.set_text(existing.remote_path if existing else "")
+        self.folder_tree = CloudFolderTree(
+            client,
+            self.account.get_active_id(),
+            [existing.remote_path] if existing else [""],
+        )
+        self.account.connect("changed", self._account_changed)
         self.mode = Gtk.ComboBoxText()
         for mode in SyncMode:
             self.mode.append(mode.value, mode.label)
@@ -337,7 +498,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Name", self.name),
             ("Cloud account", self.account),
             ("Local folder / mount point", self.local),
-            ("Cloud subfolder", self.remote_path),
+            ("Cloud folders to synchronize", self.folder_tree),
             ("Mode", self.mode),
             ("Sync interval (minutes)", self.interval),
             ("Conflict handling", self.conflict),
@@ -353,6 +514,9 @@ class SyncJobDialog(Gtk.Dialog):
         self.show_all()
 
     def job(self) -> SyncJob:
+        return self.jobs()[0]
+
+    def jobs(self) -> list[SyncJob]:
         filename = self.local.get_filename() or str(Path.home() / "TuxDrive")
         start, end = self.excludes.get_buffer().get_bounds()
         excluded = [
@@ -360,26 +524,40 @@ class SyncJobDialog(Gtk.Dialog):
             for line in self.excludes.get_buffer().get_text(start, end, True).splitlines()
             if line.strip()
         ]
-        value = SyncJob(
-            name=self.name.get_text().strip() or "Cloud files",
-            account_remote=self.account.get_active_id(),
-            local_path=filename,
-            remote_path=self.remote_path.get_text().strip("/ "),
-            mode=SyncMode(self.mode.get_active_id()),
-            interval_minutes=self.interval.get_value_as_int(),
-            conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
-            max_delete=self.max_delete.get_value_as_int(),
-            bandwidth_limit=self.bandwidth.get_text().strip(),
-            exclude_patterns=excluded,
-        )
-        if self.existing:
+        selections = self.folder_tree.selections()
+        values: list[SyncJob] = []
+        base_name = self.name.get_text().strip() or "Cloud files"
+        for remote_path in selections:
+            leaf = Path(remote_path).name if remote_path else "Cloud files"
+            multi = len(selections) > 1
+            value = SyncJob(
+                name=f"{base_name} · {leaf}" if multi else base_name,
+                account_remote=self.account.get_active_id(),
+                local_path=str(Path(filename) / leaf) if multi else filename,
+                remote_path=remote_path,
+                mode=SyncMode(self.mode.get_active_id()),
+                interval_minutes=self.interval.get_value_as_int(),
+                conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
+                max_delete=self.max_delete.get_value_as_int(),
+                bandwidth_limit=self.bandwidth.get_text().strip(),
+                exclude_patterns=excluded,
+            )
+            values.append(value)
+        if self.existing and values:
+            value = values[0]
             value.id = self.existing.id
             value.initialized = self.existing.initialized
             value.enabled = self.existing.enabled
             value.last_run = self.existing.last_run
             value.last_status = self.existing.last_status
             value.last_error = self.existing.last_error
-        return value
+            return [value]
+        return values
+
+    def _account_changed(self, combo: Gtk.ComboBoxText) -> None:
+        remote = combo.get_active_id()
+        if remote:
+            self.folder_tree.reset(remote, [""])
 
 
 class MainWindow(Gtk.ApplicationWindow):
@@ -438,6 +616,20 @@ class MainWindow(Gtk.ApplicationWindow):
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         scroll.add(self.job_list)
         main.pack_start(scroll, True, True, 0)
+
+        activity = Gtk.Expander(label="Live activity log")
+        activity.set_expanded(True)
+        self.activity_view = Gtk.TextView()
+        self.activity_view.set_editable(False)
+        self.activity_view.set_cursor_visible(False)
+        self.activity_view.set_monospace(True)
+        self.activity_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        activity_scroll = Gtk.ScrolledWindow()
+        activity_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        activity_scroll.set_size_request(-1, 190)
+        activity_scroll.add(self.activity_view)
+        activity.add(activity_scroll)
+        main.pack_start(activity, False, True, 0)
         content.pack_start(main, True, True, 0)
 
         self.infobar = Gtk.InfoBar()
@@ -446,6 +638,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self.infobar.get_content_area().add(self.info_label)
         self.infobar.connect("response", lambda bar, _response: bar.hide())
         root.pack_end(self.infobar, False, False, 0)
+        self._activity_content = ""
+        GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self.refresh()
 
     def refresh(self) -> None:
@@ -455,16 +649,20 @@ class MainWindow(Gtk.ApplicationWindow):
             row = Gtk.ListBoxRow()
             box = Gtk.Box(spacing=10)
             box.set_border_width(8)
-            icon = Gtk.Image.new_from_icon_name(
-                "folder-google-drive-symbolic"
-                if account.provider is Provider.GOOGLE_DRIVE
-                else "folder-remote-symbolic",
-                Gtk.IconSize.DND,
-            )
+            account_jobs = [
+                job for job in self.controller.config.jobs if job.account_remote == account.remote
+            ]
+            if any(job.id in self.controller.engine.running_jobs for job in account_jobs):
+                account_state, account_icon = "Synchronizing", "tuxdrive-sync"
+            elif any(job.last_error for job in account_jobs):
+                account_state, account_icon = "Needs attention", "tuxdrive-error"
+            else:
+                account_state, account_icon = "Connected", "tuxdrive"
+            icon = Gtk.Image.new_from_icon_name(account_icon, Gtk.IconSize.DND)
             text = Gtk.Label(xalign=0)
             text.set_markup(
                 f"<b>{GLib.markup_escape_text(account.display_name)}</b>\n"
-                f"<small>{account.provider.label}</small>"
+                f"<small>{account.provider.label} · {account_state}</small>"
             )
             menu = Gtk.MenuButton()
             menu.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON))
@@ -505,7 +703,16 @@ class MainWindow(Gtk.ApplicationWindow):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_border_width(14)
         top = Gtk.Box(spacing=12)
-        icon_name = "drive-harddisk-symbolic" if job.mode is SyncMode.VIRTUAL_DRIVE else "folder-sync-symbolic"
+        if job.id in self.controller.engine.running_jobs:
+            icon_name = "tuxdrive-sync"
+        elif job.last_error:
+            icon_name = "tuxdrive-error"
+        elif not job.enabled:
+            icon_name = "media-playback-pause-symbolic"
+        elif job.initialized or job.mode is SyncMode.VIRTUAL_DRIVE:
+            icon_name = "tuxdrive"
+        else:
+            icon_name = "folder-remote-symbolic"
         top.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND), False, False, 0)
         labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(xalign=0)
@@ -570,16 +777,20 @@ class MainWindow(Gtk.ApplicationWindow):
         if not self.controller.config.accounts:
             self.message("Connect a cloud account first.", Gtk.MessageType.WARNING)
             return
-        dialog = SyncJobDialog(self, self.controller.config.accounts)
+        dialog = SyncJobDialog(self, self.controller.rclone, self.controller.config.accounts)
         if dialog.run() == Gtk.ResponseType.OK:
-            job = dialog.job()
-            if any(Path(item.local_path) == Path(job.local_path) for item in self.controller.config.jobs):
+            jobs = dialog.jobs()
+            existing_paths = {Path(item.local_path) for item in self.controller.config.jobs}
+            if not jobs:
+                self.message("Select at least one cloud folder.", Gtk.MessageType.ERROR)
+            elif any(Path(job.local_path) in existing_paths for job in jobs):
                 self.message("That local folder is already managed by TuxDrive.", Gtk.MessageType.ERROR)
             else:
-                self.controller.config.jobs.append(job)
+                self.controller.config.jobs.extend(jobs)
                 self.controller.save()
                 self.refresh()
-                self.controller.run_job(job)
+                for job in jobs:
+                    self.controller.run_job(job)
         dialog.destroy()
 
     def _toggle_job(self, switch: Gtk.Switch, _property, job: SyncJob) -> None:
@@ -589,9 +800,16 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.stop_job(job)
 
     def _edit_job(self, _button: Gtk.Button, job: SyncJob) -> None:
-        dialog = SyncJobDialog(self, self.controller.config.accounts, existing=job)
+        dialog = SyncJobDialog(
+            self, self.controller.rclone, self.controller.config.accounts, existing=job
+        )
         if dialog.run() == Gtk.ResponseType.OK:
-            updated = dialog.job()
+            values = dialog.jobs()
+            if not values:
+                self.message("Select one cloud folder.", Gtk.MessageType.ERROR)
+                dialog.destroy()
+                return
+            updated = values[0]
             duplicate = any(
                 item.id != job.id and Path(item.local_path) == Path(updated.local_path)
                 for item in self.controller.config.jobs
@@ -689,6 +907,40 @@ class MainWindow(Gtk.ApplicationWindow):
         self.info_label.set_text(text)
         self.infobar.show_all()
 
+    def _refresh_activity_log(self) -> bool:
+        sources = [application_log_path()]
+        sync_directory = cache_home() / "tuxdrive" / "logs"
+        if sync_directory.exists():
+            sources.extend(
+                sorted(sync_directory.glob("*.log"), key=lambda item: item.stat().st_mtime)[-3:]
+            )
+        sections: list[str] = []
+        for source in sources:
+            content = self._tail_file(source)
+            if content:
+                sections.append(f"── {source.name} ──\n{content.strip()}")
+        combined = "\n\n".join(sections) or "No activity recorded yet."
+        if combined != self._activity_content:
+            self._activity_content = combined
+            buffer = self.activity_view.get_buffer()
+            buffer.set_text(combined)
+            self.activity_view.scroll_to_iter(buffer.get_end_iter(), 0.0, False, 0.0, 1.0)
+        return True
+
+    @staticmethod
+    def _tail_file(path: Path, limit: int = 32 * 1024) -> str:
+        try:
+            with path.open("rb") as handle:
+                handle.seek(0, os.SEEK_END)
+                size = handle.tell()
+                handle.seek(max(0, size - limit))
+                data = handle.read()
+            if size > limit:
+                data = data.split(b"\n", 1)[-1]
+            return data.decode("utf-8", errors="replace")
+        except OSError:
+            return ""
+
     def _confirm(self, text: str) -> bool:
         dialog = Gtk.MessageDialog(
             transient_for=self,
@@ -765,6 +1017,13 @@ class TuxDriveApplication(Gtk.Application):
                 self.window.message(f"{job.name} is already synchronizing.")
             return
         job.last_status = "Mounting…" if job.mode is SyncMode.VIRTUAL_DRIVE else "Synchronizing…"
+        LOGGER.info(
+            "Starting job %s (%s): %s -> %s",
+            job.id,
+            job.name,
+            job.remote_spec,
+            job.local_path,
+        )
         self._set_tray_state("syncing", job.name)
         self._last_started[job.id] = datetime.now(timezone.utc)
         if self.window:

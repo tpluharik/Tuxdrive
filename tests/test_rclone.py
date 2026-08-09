@@ -53,6 +53,16 @@ class RcloneClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             RcloneClient._validate_remote_name("bad:name")
 
+    def test_nested_cloud_folders_are_listed_for_tree_browser(self):
+        client = RcloneClient()
+        completed = subprocess.CompletedProcess(
+            [], 0, stdout="Reports/\nProjects/\n", stderr=""
+        )
+        with patch.object(client, "_run", return_value=completed) as run:
+            folders = client.list_directories("work", "Shared")
+        self.assertEqual(folders, ["Projects", "Reports"])
+        self.assertEqual(run.call_args.args[0][1], "work:Shared")
+
 
 if __name__ == "__main__":
     unittest.main()
