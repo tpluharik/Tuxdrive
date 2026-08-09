@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tuxdrive.engine import SyncEngine
+from tuxdrive.callbacks import FileChange, FileState, changes_between
 from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode
 
 
@@ -122,6 +123,42 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertEqual(self.engine.rclone_path, "/private/rclone")
         self.assertEqual(popen.call_args.args[0][0], "/private/rclone")
         self.assertTrue(completed[0].success)
+
+    def test_incremental_commands_transfer_only_the_changed_path(self):
+        job = SyncJob(account_remote="google", local_path="/data/Drive", remote_path="Docs")
+        upload = self.engine._incremental_command(
+            job, FileChange("Reports/result.pdf", "local")
+        )
+        download = self.engine._incremental_command(
+            job, FileChange("Notes/today.txt", "remote")
+        )
+        deletion = self.engine._incremental_command(
+            job, FileChange("old.txt", "local", deleted=True)
+        )
+        self.assertEqual(
+            upload,
+            ["/usr/bin/rclone", "copyto", "/data/Drive/Reports/result.pdf", "google:Docs/Reports/result.pdf"],
+        )
+        self.assertEqual(download[1], "copyto")
+        self.assertEqual(download[-1], "/data/Drive/Notes/today.txt")
+        self.assertEqual(deletion[1], "deletefile")
+
+    def test_callback_delta_contains_only_created_changed_and_deleted_paths(self):
+        previous = {
+            "same.txt": FileState(1, "1"),
+            "changed.txt": FileState(1, "1"),
+            "deleted.txt": FileState(1, "1"),
+        }
+        current = {
+            "same.txt": FileState(1, "1"),
+            "changed.txt": FileState(2, "2"),
+            "created.txt": FileState(3, "3"),
+        }
+        changes = changes_between(previous, current, "local")
+        self.assertEqual(
+            [(item.path, item.deleted) for item in changes],
+            [("changed.txt", False), ("created.txt", False), ("deleted.txt", True)],
+        )
 
 
 if __name__ == "__main__":

@@ -1,13 +1,13 @@
 Package: tuxdrive
-Version: 0.3.3
+Version: 0.4.0
 Section: net
 Priority: optional
 Architecture: all
 Maintainer: TuxDrive contributors <tpluharik@users.noreply.github.com>
 Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, fuse3, xdg-utils, ca-certificates
 Recommends: libnotify-bin
-Breaks: tuxdrive (<< 0.3.3)
-Replaces: tuxdrive (<< 0.3.3)
+Breaks: tuxdrive (<< 0.4.0)
+Replaces: tuxdrive (<< 0.4.0)
 Homepage: https://github.com/tpluharik/Tuxdrive
 Description: Google Drive and Microsoft OneDrive client for Ubuntu
  TuxDrive provides browser-based OAuth, automatic transfer-engine bootstrap,

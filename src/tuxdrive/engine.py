@@ -13,6 +13,7 @@ from typing import Callable
 
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
+from .callbacks import ChangeMonitor, FileChange
 from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
 
@@ -26,6 +27,7 @@ class JobResult:
     cancelled: bool = False
     requires_resync: bool = False
     blocked_path: str = ""
+    incremental: bool = False
 
 
 class SyncEngine:
@@ -33,6 +35,7 @@ class SyncEngine:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._mounts: dict[str, subprocess.Popen[str]] = {}
+        self._monitors: dict[str, ChangeMonitor] = {}
         self._lock = threading.RLock()
 
     @property
@@ -196,12 +199,104 @@ class SyncEngine:
             mounted = list(self._mounts.items())
         for job_id in job_ids:
             self.cancel(job_id)
+        for monitor in list(self._monitors.values()):
+            monitor.stop()
         for _, process in mounted:
             if process.poll() is None:
                 try:
                     os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+
+    def start_callbacks(
+        self,
+        job: SyncJob,
+        callback: Callable[[JobResult], None],
+        reconcile: Callable[[SyncJob], None],
+    ) -> None:
+        if job.mode is SyncMode.VIRTUAL_DRIVE or not job.realtime_sync or not job.initialized:
+            return
+        self.stop_callbacks(job.id)
+        monitor = ChangeMonitor(
+            job,
+            lambda: self.rclone_path,
+            lambda item, changes: self._apply_incremental(item, changes, callback),
+            reconcile,
+        )
+        self._monitors[job.id] = monitor
+        monitor.start()
+
+    def stop_callbacks(self, job_id: str) -> None:
+        monitor = self._monitors.pop(job_id, None)
+        if monitor:
+            monitor.stop()
+
+    def _incremental_command(self, job: SyncJob, change: FileChange) -> list[str] | None:
+        relative = change.path.strip("/")
+        if not relative or ".." in Path(relative).parts:
+            raise RuntimeError(f"unsafe incremental path: {change.path}")
+        local = str(job.local / relative)
+        remote = f"{job.remote_spec.rstrip('/')}/{relative}"
+        if change.side == "local":
+            if change.deleted:
+                return [self.rclone_path, "deletefile", remote]
+            return [self.rclone_path, "copyto", local, remote]
+        if change.deleted:
+            return None
+        return [self.rclone_path, "copyto", remote, local]
+
+    def _apply_incremental(
+        self,
+        job: SyncJob,
+        changes: list[FileChange],
+        callback: Callable[[JobResult], None],
+    ) -> bool:
+        with self._lock:
+            if job.id in self._processes:
+                return False
+        log_path = self._log_path(job)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        completed = 0
+        try:
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(f"\n[{datetime.now(timezone.utc).isoformat()}] Incremental callback: {len(changes)} path(s)\n")
+                for change in changes:
+                    if ".." in Path(change.path).parts:
+                        raise RuntimeError(f"unsafe incremental path: {change.path}")
+                    local_path = job.local / change.path
+                    if change.side == "remote" and change.deleted:
+                        try:
+                            local_path.unlink(missing_ok=True)
+                            completed += 1
+                        except OSError as exc:
+                            raise RuntimeError(str(exc)) from exc
+                        continue
+                    if change.side == "remote":
+                        local_path.parent.mkdir(parents=True, exist_ok=True)
+                    command = self._incremental_command(job, change)
+                    if command is None:
+                        continue
+                    process = subprocess.Popen(
+                        command,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        text=True,
+                        start_new_session=True,
+                    )
+                    with self._lock:
+                        self._processes[job.id] = process
+                    code = process.wait()
+                    if code:
+                        raise RuntimeError(f"incremental transfer failed for {change.path} (rclone exit {code})")
+                    completed += 1
+            callback(JobResult(job.id, True, f"Incremental sync complete: {completed} changed path(s)", log_path, incremental=True))
+            return True
+        except (OSError, RuntimeError) as exc:
+            callback(JobResult(job.id, False, f"Incremental sync failed: {exc}", log_path, incremental=True))
+            return False
+        finally:
+            with self._lock:
+                self._processes.pop(job.id, None)
 
     def _run_worker(
         self,

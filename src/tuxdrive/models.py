@@ -77,6 +77,7 @@ class SyncJob:
     max_delete: int = 100
     bandwidth_limit: str = ""
     acknowledge_google_abuse: bool = False
+    realtime_sync: bool = True
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None

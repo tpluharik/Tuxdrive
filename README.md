@@ -2,7 +2,7 @@
 
 TuxDrive is a native Ubuntu desktop client for **Google Drive** and **Microsoft OneDrive**. It combines a GTK desktop interface with rclone's mature cloud backends, browser-based OAuth, and transfer engine.
 
-Version 0.3.3 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.4.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
@@ -16,6 +16,8 @@ Version 0.3.3 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 - separate Google location browsing for My Drive, Shared with me, and every Shared Drive
 - a FUSE virtual-drive mode with full VFS caching for files-on-demand behavior
 - automatic background synchronization at a configurable interval
+- real-time incremental synchronization: local save callbacks and cloud delta polling transfer only changed paths
+- debounced change handling, move/delete propagation, and full-sync fallback for simultaneous conflicts
 - pause/resume, sync now, cancellation, and tray controls
 - launch at login, desktop notifications, daily diagnostic logs
 - clickable per-job exception rules with add/remove controls, deletion safety ceiling, bandwidth limits, and conflict policy
@@ -32,7 +34,7 @@ Version 0.3.3 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.3.3_all.deb
+sudo apt install ./tuxdrive_0.4.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select Google Drive or Microsoft OneDrive, and complete authorization in your browser. Then add a local synchronized folder or virtual drive.
@@ -46,7 +48,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.3.3_all.deb`.
+The installer is written to `dist/tuxdrive_0.4.0_all.deb`.
 
 ## Crash and startup diagnostics
 
@@ -91,7 +93,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.3.3 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Virtual-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.4.0 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Virtual-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

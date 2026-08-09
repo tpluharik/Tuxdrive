@@ -525,6 +525,13 @@ class SyncJobDialog(Gtk.Dialog):
         self.mode.set_active_id((existing.mode if existing else SyncMode.TWO_WAY).value)
         self.interval = Gtk.SpinButton.new_with_range(1, 1440, 1)
         self.interval.set_value(existing.interval_minutes if existing else 5)
+        self.realtime_sync = Gtk.CheckButton(
+            label="Sync saved file changes immediately (incremental)"
+        )
+        self.realtime_sync.set_active(existing.realtime_sync if existing else True)
+        self.realtime_sync.set_tooltip_text(
+            "Watches local saves and polls provider changes; transfers only changed paths."
+        )
         self.conflict = Gtk.ComboBoxText()
         for policy, label in (
             (ConflictPolicy.KEEP_BOTH, "Keep both copies"),
@@ -563,6 +570,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Cloud folders to synchronize", self.folder_tree),
             ("Mode", self.mode),
             ("Sync interval (minutes)", self.interval),
+            ("Real-time callbacks", self.realtime_sync),
             ("Conflict handling", self.conflict),
             ("Maximum deletions per run", self.max_delete),
             ("Bandwidth limit", self.bandwidth),
@@ -597,6 +605,7 @@ class SyncJobDialog(Gtk.Dialog):
                 remote_path=remote_path,
                 mode=SyncMode(self.mode.get_active_id()),
                 interval_minutes=self.interval.get_value_as_int(),
+                realtime_sync=self.realtime_sync.get_active(),
                 conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
                 max_delete=self.max_delete.get_value_as_int(),
                 bandwidth_limit=self.bandwidth.get_text().strip(),
@@ -945,6 +954,8 @@ class MainWindow(Gtk.ApplicationWindow):
         self.controller.save()
         if not job.enabled:
             self.controller.stop_job(job)
+        elif job.initialized:
+            self.controller.start_callbacks(job)
 
     def _edit_job(self, _button: Gtk.Button, job: SyncJob) -> None:
         dialog = SyncJobDialog(
@@ -1199,6 +1210,7 @@ class TuxDriveApplication(Gtk.Application):
             if self.window and not quiet:
                 self.window.message(f"{job.name} is already synchronizing.")
             return
+        self.engine.stop_callbacks(job.id)
         job.last_status = "Mounting…" if job.mode is SyncMode.VIRTUAL_DRIVE else "Synchronizing…"
         LOGGER.info(
             "Starting job %s (%s): %s -> %s",
@@ -1216,6 +1228,7 @@ class TuxDriveApplication(Gtk.Application):
             self.window.message("The job could not be started.", Gtk.MessageType.WARNING)
 
     def stop_job(self, job: SyncJob) -> None:
+        self.engine.stop_callbacks(job.id)
         stopped = self.engine.stop_mount(job) if job.mode is SyncMode.VIRTUAL_DRIVE else self.engine.cancel(job.id)
         if stopped:
             job.last_status = "Stopped"
@@ -1244,6 +1257,8 @@ class TuxDriveApplication(Gtk.Application):
         self._set_tray_state("ready" if result.success else "error", result.message)
         LOGGER.info("Job %s finished: success=%s message=%s", job.id, result.success, result.message)
         self.save()
+        if result.success and not result.incremental:
+            self.start_callbacks(job)
         if self.window:
             self.window.refresh()
             if not result.success:
@@ -1251,8 +1266,16 @@ class TuxDriveApplication(Gtk.Application):
                     self.window.prompt_blocked_google_file(job, result.blocked_path)
                 else:
                     self.window.message(f"{job.name}: {job.last_status}", Gtk.MessageType.ERROR)
-        self.notify(job.name, result.message)
+        if not result.incremental or not result.success:
+            self.notify(job.name, result.message)
         return False
+
+    def start_callbacks(self, job: SyncJob) -> None:
+        self.engine.start_callbacks(
+            job,
+            self._job_finished,
+            lambda item: GLib.idle_add(self.run_job, item, True),
+        )
 
     def _scheduler_tick(self) -> bool:
         now = datetime.now(timezone.utc)
@@ -1392,6 +1415,8 @@ class TuxDriveApplication(Gtk.Application):
             for job in self.config.jobs:
                 if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:
                     self.run_job(job, quiet=True)
+                elif job.enabled and job.initialized and job.realtime_sync:
+                    self.start_callbacks(job)
         return False
 
     @staticmethod
