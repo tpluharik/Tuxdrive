@@ -805,6 +805,13 @@ class MainWindow(Gtk.ApplicationWindow):
         self.infobar.connect("response", lambda bar, _response: bar.hide())
         root.pack_end(self.infobar, False, False, 0)
         self._activity_content = ""
+        self.update_dialog: Gtk.Dialog | None = None
+        self.update_status: Gtk.Label | None = None
+        self.update_progress: Gtk.ProgressBar | None = None
+        self.update_close_button: Gtk.Button | None = None
+        self.update_install_button: Gtk.Button | None = None
+        self._pending_update: UpdateRelease | None = None
+        self._update_pulsing = False
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self.refresh()
 
@@ -933,12 +940,15 @@ class MainWindow(Gtk.ApplicationWindow):
         log_button.connect("clicked", lambda _button: self._open_path(cache_home() / "tuxdrive" / "logs"))
         edit_button = Gtk.Button(label="Edit")
         edit_button.connect("clicked", self._edit_job, job)
+        rename_button = Gtk.Button(label="Rename")
+        rename_button.set_tooltip_text("Change only the name displayed in TuxDrive")
+        rename_button.connect("clicked", self._rename_job, job)
         share_button = Gtk.Button(label="Share link")
         share_button.connect("clicked", self._share_job, job)
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
         remove.set_tooltip_text("Remove synchronization")
         remove.connect("clicked", self._remove_job, job)
-        for widget in (sync, cancel, open_button, share_button, edit_button, log_button):
+        for widget in (sync, cancel, open_button, share_button, rename_button, edit_button, log_button):
             actions.pack_start(widget, False, False, 0)
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
@@ -1057,6 +1067,36 @@ class MainWindow(Gtk.ApplicationWindow):
         self.message("Share link copied to the clipboard.")
         return False
 
+    def _rename_job(self, _button: Gtk.Button, job: SyncJob) -> None:
+        dialog = Gtk.Dialog(title="Rename synchronized folder", transient_for=self, modal=True)
+        area = dialog.get_content_area()
+        area.set_border_width(20)
+        area.set_spacing(10)
+        label = Gtk.Label(
+            label="This changes only the name shown in TuxDrive. Cloud and local folder names stay unchanged.",
+            xalign=0,
+        )
+        label.set_line_wrap(True)
+        entry = Gtk.Entry()
+        entry.set_text(job.name)
+        entry.set_activates_default(True)
+        area.pack_start(label, False, False, 0)
+        area.pack_start(entry, False, False, 0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        save = dialog.add_button("Rename", Gtk.ResponseType.OK)
+        save.get_style_context().add_class("suggested-action")
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.show_all()
+        if dialog.run() == Gtk.ResponseType.OK:
+            name = entry.get_text().strip()
+            if name:
+                job.name = name
+                self.controller.save()
+                self.refresh()
+            else:
+                self.message("The displayed name cannot be empty.", Gtk.MessageType.WARNING)
+        dialog.destroy()
+
     def _remove_job(self, _button: Gtk.Button, job: SyncJob) -> None:
         if not self._confirm(f"Stop and remove ‘{job.name}’? Local and cloud files will not be deleted."):
             return
@@ -1129,46 +1169,142 @@ class MainWindow(Gtk.ApplicationWindow):
             self._check_for_updates()
 
     def _check_for_updates(self) -> None:
-        self.message("Checking the TuxDrive repository for updates…")
+        if self.update_dialog:
+            self.update_dialog.present()
+            return
+        dialog = Gtk.Dialog(title="TuxDrive update", transient_for=self, modal=True)
+        dialog.set_icon_name("tuxdrive")
+        dialog.set_default_size(520, 210)
+        area = dialog.get_content_area()
+        area.set_border_width(24)
+        area.set_spacing(14)
+        title = Gtk.Label(xalign=0)
+        title.set_markup(f"<span size='large' weight='bold'>Checking for updates</span>\n<small>Installed version: {GLib.markup_escape_text(__version__)}</small>")
+        status = Gtk.Label(label="Contacting the TuxDrive release repository…", xalign=0)
+        status.set_line_wrap(True)
+        progress = Gtk.ProgressBar()
+        progress.set_show_text(True)
+        progress.set_text("Checking…")
+        area.pack_start(title, False, False, 0)
+        area.pack_start(status, False, False, 0)
+        area.pack_start(progress, False, False, 0)
+        self.update_install_button = dialog.add_button("Download and install", Gtk.ResponseType.OK)
+        self.update_install_button.set_sensitive(False)
+        self.update_close_button = dialog.add_button("Close", Gtk.ResponseType.CANCEL)
+        self.update_close_button.set_sensitive(False)
+        dialog.connect("response", self._update_dialog_response)
+        self.update_dialog = dialog
+        self.update_status = status
+        self.update_progress = progress
+        self._pending_update = None
+        self._update_pulsing = True
+        GLib.timeout_add(120, self._pulse_update_progress)
+        dialog.show_all()
         _run_thread(self.controller.updater.check, self._update_checked)
+
+    def _pulse_update_progress(self) -> bool:
+        if not self.update_dialog or not self._update_pulsing or not self.update_progress:
+            return False
+        self.update_progress.pulse()
+        return True
+
+    def _update_dialog_response(self, dialog: Gtk.Dialog, response: int) -> None:
+        if response == Gtk.ResponseType.OK and self._pending_update:
+            release = self._pending_update
+            self._pending_update = None
+            self.update_install_button.set_sensitive(False)
+            self.update_close_button.set_sensitive(False)
+            self._update_pulsing = False
+            self.update_progress.set_fraction(0)
+            self.update_progress.set_text("Downloading…")
+            self.update_status.set_text(f"Downloading TuxDrive {release.version} from the repository…")
+            _run_thread(
+                self.controller.updater.download,
+                self._update_downloaded,
+                release,
+                self._report_update_download,
+            )
+            return
+        self._destroy_update_dialog()
+
+    def _destroy_update_dialog(self) -> None:
+        self._update_pulsing = False
+        if self.update_dialog:
+            self.update_dialog.destroy()
+        self.update_dialog = None
+        self.update_status = None
+        self.update_progress = None
+        self.update_close_button = None
+        self.update_install_button = None
+        self._pending_update = None
+
+    def _report_update_download(self, received: int, total: int) -> None:
+        GLib.idle_add(self._apply_update_download_progress, received, total)
+
+    def _apply_update_download_progress(self, received: int, total: int) -> bool:
+        if not self.update_progress:
+            return False
+        if total > 0:
+            fraction = min(1.0, received / total)
+            self.update_progress.set_fraction(fraction)
+            self.update_progress.set_text(f"Downloading… {fraction:.0%}")
+        else:
+            self.update_progress.pulse()
+            self.update_progress.set_text(f"Downloaded {received / 1024:.0f} KiB")
+        return False
 
     def _update_checked(self, release: UpdateRelease | None, error: Exception | None) -> bool:
         if error:
-            self.message(f"Update check failed: {error}", Gtk.MessageType.ERROR)
+            self._update_pulsing = False
+            self.update_progress.set_fraction(0)
+            self.update_progress.set_text("Check failed")
+            self.update_status.set_text(f"Update check failed: {error}")
+            self.update_close_button.set_sensitive(True)
             return False
         if release is None:
-            self.message(f"TuxDrive {__version__} is up to date.")
+            self._update_pulsing = False
+            self.update_progress.set_fraction(1)
+            self.update_progress.set_text("Up to date")
+            self.update_status.set_text(f"TuxDrive {__version__} is the newest available version.")
+            self.update_close_button.set_sensitive(True)
             return False
-        dialog = Gtk.MessageDialog(
-            transient_for=self, modal=True, message_type=Gtk.MessageType.INFO,
-            buttons=Gtk.ButtonsType.NONE, text=f"TuxDrive {release.version} is available",
+        self._update_pulsing = False
+        self._pending_update = release
+        self.update_progress.set_fraction(1)
+        self.update_progress.set_text(f"Version {release.version} available")
+        self.update_status.set_text(
+            f"{release.notes or 'A newer TuxDrive release is available.'}\n\n"
+            "Select Download and install to verify and install it."
         )
-        dialog.format_secondary_text(
-            (release.notes + "\n\n" if release.notes else "")
-            + "The package will be downloaded, verified with SHA-256, and installed after system authorization."
-        )
-        dialog.add_button("Later", Gtk.ResponseType.CANCEL)
-        dialog.add_button("Download and install", Gtk.ResponseType.OK)
-        accepted = dialog.run() == Gtk.ResponseType.OK
-        dialog.destroy()
-        if accepted:
-            self.message(f"Downloading and verifying TuxDrive {release.version}…")
-            _run_thread(self.controller.updater.download, self._update_downloaded, release)
+        self.update_install_button.set_sensitive(True)
+        self.update_close_button.set_sensitive(True)
         return False
 
     def _update_downloaded(self, package: Path | None, error: Exception | None) -> bool:
         if error or package is None:
-            self.message(f"Update download failed: {error}", Gtk.MessageType.ERROR)
+            self.update_progress.set_fraction(0)
+            self.update_progress.set_text("Download failed")
+            self.update_status.set_text(f"Update download or verification failed: {error}")
+            self.update_close_button.set_sensitive(True)
             return False
-        self.message("Installing update; approve the system authorization prompt…")
+        self._update_pulsing = True
+        GLib.timeout_add(120, self._pulse_update_progress)
+        self.update_progress.set_text("Installing…")
+        self.update_status.set_text("Package verified. Approve Ubuntu's system authorization prompt to install it…")
         _run_thread(self.controller.updater.install, self._update_installed, package)
         return False
 
     def _update_installed(self, _result, error: Exception | None) -> bool:
         if error:
-            self.message(f"Update installation failed: {error}", Gtk.MessageType.ERROR)
+            self.update_progress.set_fraction(0)
+            self.update_progress.set_text("Installation failed")
+            self.update_status.set_text(f"Update installation failed: {error}")
         else:
-            self.message("TuxDrive was updated successfully. Restart the app to use the new version.")
+            self.update_progress.set_fraction(1)
+            self.update_progress.set_text("Update installed")
+            self.update_status.set_text("TuxDrive was updated successfully. Restart the app to use the new version.")
+        self._update_pulsing = False
+        self.update_close_button.set_sensitive(True)
         return False
 
     def message(self, text: str, kind: Gtk.MessageType = Gtk.MessageType.INFO) -> None:

@@ -1,6 +1,6 @@
 {
-  "version": "0.6.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.0_all.deb",
-  "sha256": "89fd0392911a4de4a9f4e43343a14c62447032c9e9b48089d9a3b622a0be0adc",
-  "notes": "Adds Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud alongside Google Drive and OneDrive. All eight providers support visual folder selection, synchronization modes, and files-on-demand streaming."
+  "version": "0.6.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.1_all.deb",
+  "sha256": "bdb3a31de32fd0cf4867a3884bec093ccd4b5499445584595b288a5746ba9ccd",
+  "notes": "Adds visible update progress and results, display-only job renaming, and hardened streaming startup with preflight diagnostics, orphaned FUSE mount cleanup, detailed logs, and a longer connection window."
 }

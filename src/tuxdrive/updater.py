@@ -7,6 +7,7 @@ import subprocess
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 
 MANIFEST_URL = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/update/latest.json"
@@ -55,20 +56,31 @@ class UpdateManager:
             release = self.parse_manifest(response.read(128 * 1024))
         return release if version_key(release.version) > version_key(self.current_version) else None
 
-    def download(self, release: UpdateRelease) -> Path:
+    def download(
+        self,
+        release: UpdateRelease,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> Path:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         target = self.cache_dir / f"tuxdrive_{release.version}_all.deb"
         temporary = target.with_suffix(".deb.part")
         request = urllib.request.Request(release.url, headers={"User-Agent": "TuxDrive-Updater"})
         digest = hashlib.sha256()
         with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+            total = int(response.headers.get("Content-Length", 0)) if hasattr(response, "headers") else 0
+            received = 0
             while chunk := response.read(1024 * 1024):
                 digest.update(chunk)
                 output.write(chunk)
+                received += len(chunk)
+                if progress:
+                    progress(received, total)
         if digest.hexdigest() != release.sha256:
             temporary.unlink(missing_ok=True)
             raise ValueError("Downloaded package failed SHA-256 verification")
         temporary.replace(target)
+        if progress:
+            progress(target.stat().st_size, target.stat().st_size)
         return target
 
     def install(self, package: Path) -> None:

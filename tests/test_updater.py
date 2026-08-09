@@ -60,6 +60,17 @@ class UpdateManagerTests(unittest.TestCase):
                 target = manager.download(release)
             self.assertEqual(target.read_bytes(), body)
 
+    def test_download_reports_progress(self):
+        body = b"progress-data"
+        release = UpdateManager.parse_manifest(self.release_payload(body=body))
+        updates = []
+        with tempfile.TemporaryDirectory() as directory:
+            manager = UpdateManager("0.6.0", Path(directory))
+            with patch("urllib.request.urlopen", return_value=FakeResponse(body)):
+                manager.download(release, lambda received, total: updates.append((received, total)))
+        self.assertTrue(updates)
+        self.assertEqual(updates[-1], (len(body), len(body)))
+
     def test_download_removes_bad_partial(self):
         release = UpdateManager.parse_manifest(self.release_payload(body=b"expected"))
         with tempfile.TemporaryDirectory() as directory:

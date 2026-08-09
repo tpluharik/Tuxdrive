@@ -35,6 +35,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("class ExceptionRulesEditor", app)
         self.assertIn('"Exclude file and retry"', app)
         self.assertIn('"Allow unsafe download and retry"', app)
+        self.assertIn('label="Rename"', app)
+        self.assertIn("Gtk.ProgressBar()", app)
+        self.assertIn('"Downloading… {fraction:.0%}"', app)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

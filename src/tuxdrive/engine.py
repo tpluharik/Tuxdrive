@@ -159,6 +159,11 @@ class SyncEngine:
             "5m",
             "--poll-interval",
             "30s",
+            "--log-level",
+            "INFO",
+            "--stats",
+            "10s",
+            "--stats-one-line",
             "--umask",
             "022",
         ]
@@ -215,22 +220,56 @@ class SyncEngine:
             if existing and existing.poll() is None:
                 return JobResult(job.id, True, "Virtual drive is already mounted", log_path)
         job.local.mkdir(parents=True, exist_ok=True)
-        try:
-            contents = list(job.local.iterdir())
-        except OSError as exc:
-            return JobResult(job.id, False, f"Cannot access streaming mount point: {exc}", log_path)
-        if contents and not os.path.ismount(job.local):
+        if not os.path.ismount(job.local):
+            try:
+                contents = list(job.local.iterdir())
+            except OSError as exc:
+                return JobResult(job.id, False, f"Cannot access streaming mount point: {exc}", log_path)
+            if contents:
+                return JobResult(
+                    job.id,
+                    False,
+                    "Streaming drive needs an empty local folder as its mount point. Edit the job and choose "
+                    "an empty folder; it may be an excluded child of a synchronized folder.",
+                    log_path,
+                )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as diagnostic:
+            diagnostic.write(
+                f"\n[{datetime.now(timezone.utc).isoformat()}] Streaming preflight\n"
+                f"TuxDrive={__version__}\nRemote={job.remote_spec}\nMountPoint={job.local}\n"
+                f"Rclone={self.rclone_path}\nFuseDevice={Path('/dev/fuse').exists()}\n"
+                f"Fusermount={shutil.which('fusermount3') or shutil.which('fusermount') or 'missing'}\n"
+            )
+        if not Path("/dev/fuse").exists():
             return JobResult(
-                job.id,
-                False,
-                "Streaming drive needs its own empty local folder. Edit the job and choose "
-                "an empty folder that is not inside another synchronized folder.",
+                job.id, False,
+                "Streaming requires /dev/fuse, but the FUSE device is unavailable. See the job log.",
                 log_path,
             )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        if not (shutil.which("fusermount3") or shutil.which("fusermount")):
+            return JobResult(
+                job.id, False,
+                "Streaming requires fusermount3, but it is unavailable. Reinstall the TuxDrive package.",
+                log_path,
+            )
+        if os.path.ismount(job.local):
+            # A crash can leave an orphaned FUSE mount that blocks the next
+            # connection. Detach it before starting the tracked mount.
+            self._unmount_path(job.local)
+            deadline = time.monotonic() + 5
+            while os.path.ismount(job.local) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if os.path.ismount(job.local):
+                return JobResult(
+                    job.id, False,
+                    "An existing streaming mount could not be detached. Log out and back in, then retry.",
+                    log_path,
+                )
         log_handle = log_path.open("a", encoding="utf-8")
         log_handle.write(
-            f"\n[{datetime.now(timezone.utc).isoformat()}] Starting files-on-demand mount\n"
+            f"[{datetime.now(timezone.utc).isoformat()}] Starting files-on-demand mount\n"
+            f"Command={' '.join(self.mount_command(job))}\n"
         )
         log_handle.flush()
         try:
@@ -245,7 +284,7 @@ class SyncEngine:
             log_handle.close()
             return JobResult(job.id, False, str(exc), log_path)
         log_handle.close()
-        deadline = time.monotonic() + 12
+        deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 return JobResult(job.id, False, self._mount_failure_summary(log_path), log_path)
@@ -266,7 +305,7 @@ class SyncEngine:
         return JobResult(
             job.id,
             False,
-            "Streaming drive did not become available within 12 seconds; see the job log",
+            f"Streaming drive did not become available within 45 seconds: {self._mount_failure_summary(log_path)}",
             log_path,
         )
 
@@ -278,8 +317,22 @@ class SyncEngine:
             ).splitlines() if line.strip()]
         except OSError:
             lines = []
-        detail = lines[-1] if lines else "rclone exited before mounting the folder"
+        errors = [
+            line for line in lines
+            if any(marker in line.lower() for marker in ("error", "fatal", "failed", "fuse", "mount"))
+        ]
+        detail = (errors or lines or ["rclone exited before mounting the folder"])[-1]
         return f"Streaming drive could not start: {detail[:350]}"
+
+    @staticmethod
+    def _unmount_path(path: Path) -> bool:
+        unmount = shutil.which("fusermount3") or shutil.which("fusermount")
+        if not unmount:
+            return False
+        result = subprocess.run(
+            [unmount, "-uz", str(path)], check=False, capture_output=True, text=True
+        )
+        return result.returncode == 0
 
     def stop_mount(self, job: SyncJob) -> bool:
         with self._lock:
@@ -293,11 +346,7 @@ class SyncEngine:
                 return True
             except (ProcessLookupError, subprocess.TimeoutExpired):
                 process.kill()
-        unmount = shutil.which("fusermount3") or shutil.which("fusermount")
-        if unmount:
-            subprocess.run([unmount, "-u", str(job.local)], check=False, capture_output=True)
-            return True
-        return False
+        return self._unmount_path(job.local)
 
     def _watch_mount(
         self,

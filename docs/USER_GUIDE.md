@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.6.0 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.6.1 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.6.0 on Ubuntu 26.04: installation, provider authori
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.0_all.deb
+sudo apt install ./tuxdrive_0.6.1_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -34,7 +34,11 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 ### Update TuxDrive
 
-Open **Settings** and select **Check for updates**. If a newer version is listed in this repository, choose **Download and install**. TuxDrive verifies the package checksum before Ubuntu displays its system authorization prompt. When installation completes, restart TuxDrive. If the check fails, the existing installation remains unchanged and the error is shown in the app.
+Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. TuxDrive verifies the package checksum before Ubuntu displays its system authorization prompt. When installation completes, restart TuxDrive. If any stage fails, the existing installation remains unchanged and the result stays visible until you close it.
+
+### Rename an item in TuxDrive
+
+Select **Rename** on a synchronized or streaming job and enter the preferred display title. This changes only the label shown inside TuxDrive; it does not rename or move the local folder or its cloud folder.
 
 ## 2. Connect a cloud account
 
@@ -232,6 +236,8 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
+Version 0.6.1 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+
 ### Job reports recovery sync required
 
 TuxDrive pauses automatic operation after a critical bisync abort to avoid repeated destructive resyncs. Review the log, resolve the cause, enable the job, and select **Sync now**.
@@ -254,7 +260,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.6.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.6.1_all.deb`.
 
 ## 11. Data safety
 

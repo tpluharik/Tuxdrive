@@ -15,7 +15,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.6.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.6.1 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
@@ -49,6 +49,9 @@ Version 0.6.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 - original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
 - provider-specific icons for all eight services in account selection and connected-account views
 - in-app repository update checks with HTTPS download, SHA-256 verification, and PolicyKit-authorized installation
+- update window with visible checking, download percentage, verification, installation, success, and failure states
+- one-click display-name editing that does not rename local or cloud folders
+- streaming preflight diagnostics, stale FUSE mount recovery, detailed mount logs, and a 45-second connection window
 - startup, application, thread-exception, and native crash logging
 
 ## Install on Ubuntu
@@ -56,7 +59,7 @@ Version 0.6.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.6.0_all.deb
+sudo apt install ./tuxdrive_0.6.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -72,7 +75,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.6.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.6.1_all.deb`.
 
 ## Update from the app
 

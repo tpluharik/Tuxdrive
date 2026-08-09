@@ -76,6 +76,8 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertEqual(command[command.index("--vfs-cache-mode") + 1], "full")
             self.assertEqual(command[command.index("--vfs-read-chunk-size") + 1], "8M")
             self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "10G")
+            self.assertIn("--log-level", command)
+            self.assertIn("--stats", command)
 
     def test_overlapping_sync_and_streaming_paths_are_detected(self):
         self.assertTrue(paths_overlap("/data/TuxDrive", "/data/TuxDrive/CEVRO"))
