@@ -32,6 +32,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('Gtk.Expander(label="Live activity log")', app)
         self.assertIn('icon_name = "tuxdrive-sync"', app)
         self.assertIn('icon_name = "tuxdrive-error"', app)
+        self.assertIn("class ExceptionRulesEditor", app)
+        self.assertIn('"Exclude file and retry"', app)
+        self.assertIn('"Allow unsafe download and retry"', app)
 
 
 if __name__ == "__main__":

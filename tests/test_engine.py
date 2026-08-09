@@ -90,9 +90,11 @@ class SyncEngineCommandTests(unittest.TestCase):
             )
             message = self.engine._failure_summary(log, 7)
             recovery = self.engine._requires_resync(log)
+            blocked = self.engine._blocked_google_path(log)
         self.assertIn("myweb/handy_switch.zip", message)
         self.assertIn("suspected malware", message)
         self.assertTrue(recovery)
+        self.assertEqual(blocked, "myweb/handy_switch.zip")
 
     def test_google_abuse_acknowledgement_is_opt_in(self):
         safe = SyncJob(account_remote="google", local_path="/data/Drive")

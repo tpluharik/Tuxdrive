@@ -25,6 +25,7 @@ class JobResult:
     log_path: Path
     cancelled: bool = False
     requires_resync: bool = False
+    blocked_path: str = ""
 
 
 class SyncEngine:
@@ -240,12 +241,14 @@ class SyncEngine:
                 result = JobResult(job.id, False, "Synchronization cancelled", log_path, True)
             else:
                 requires_resync = self._requires_resync(log_path)
+                blocked_path = self._blocked_google_path(log_path)
                 result = JobResult(
                     job.id,
                     False,
                     self._failure_summary(log_path, return_code),
                     log_path,
                     requires_resync=requires_resync,
+                    blocked_path=blocked_path,
                 )
         except (OSError, RuntimeError) as exc:
             result = JobResult(job.id, False, f"Synchronization could not start: {exc}", log_path)
@@ -289,6 +292,22 @@ class SyncEngine:
                 detail = cleaned.split(":", 1)[1].strip()
                 return f"Synchronization failed: {detail[:300]}"
         return f"Synchronization failed (rclone exit {return_code}); see log"
+
+    @staticmethod
+    def _blocked_google_path(log_path: Path) -> str:
+        try:
+            lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return ""
+        ansi = re.compile(r"\x1b\[[0-9;]*m")
+        for line in reversed(lines[-2000:]):
+            cleaned = ansi.sub("", line).strip()
+            if "cannotDownloadAbusiveFile" not in cleaned:
+                continue
+            match = re.search(r"(?:ERROR\s+:\s+)?(.+?): Failed to copy", cleaned)
+            if match:
+                return match.group(1).strip()
+        return ""
 
     @staticmethod
     def _requires_resync(log_path: Path) -> bool:

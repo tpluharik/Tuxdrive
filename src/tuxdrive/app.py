@@ -427,6 +427,55 @@ class CloudFolderTree(Gtk.Box):
                 child = self.store.iter_next(child)
 
 
+class ExceptionRulesEditor(Gtk.Box):
+    def __init__(self, rules: list[str]) -> None:
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        self.rule_list = Gtk.ListBox()
+        self.rule_list.set_selection_mode(Gtk.SelectionMode.NONE)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_height(110)
+        scroll.add(self.rule_list)
+        self.pack_start(scroll, True, True, 0)
+        add_row = Gtk.Box(spacing=6)
+        self.entry = Gtk.Entry()
+        self.entry.set_placeholder_text("Example: /folder/file.zip or *.tmp")
+        self.entry.connect("activate", lambda _entry: self._add_clicked(None))
+        add_button = Gtk.Button(label="Add exception")
+        add_button.connect("clicked", self._add_clicked)
+        add_row.pack_start(self.entry, True, True, 0)
+        add_row.pack_start(add_button, False, False, 0)
+        self.pack_start(add_row, False, False, 0)
+        for rule in rules:
+            self.add_rule(rule)
+
+    def rules(self) -> list[str]:
+        return [row.rule for row in self.rule_list.get_children()]
+
+    def add_rule(self, rule: str) -> None:
+        cleaned = rule.strip()
+        if not cleaned or cleaned in self.rules():
+            return
+        row = Gtk.ListBoxRow()
+        row.rule = cleaned
+        box = Gtk.Box(spacing=8)
+        box.set_border_width(4)
+        label = Gtk.Label(label=cleaned, xalign=0)
+        label.set_selectable(True)
+        remove = Gtk.Button.new_from_icon_name("list-remove-symbolic", Gtk.IconSize.BUTTON)
+        remove.set_tooltip_text("Remove this synchronization exception")
+        remove.connect("clicked", lambda _button: self.rule_list.remove(row))
+        box.pack_start(label, True, True, 0)
+        box.pack_end(remove, False, False, 0)
+        row.add(box)
+        self.rule_list.add(row)
+        row.show_all()
+
+    def _add_clicked(self, _button) -> None:
+        self.add_rule(self.entry.get_text())
+        self.entry.set_text("")
+
+
 class SyncJobDialog(Gtk.Dialog):
     def __init__(
         self,
@@ -501,15 +550,11 @@ class SyncJobDialog(Gtk.Dialog):
         self.acknowledge_abuse.set_tooltip_text(
             "Only enable this if you trust the flagged files. They may contain malware."
         )
-        self.excludes = Gtk.TextView()
-        self.excludes.set_wrap_mode(Gtk.WrapMode.NONE)
-        self.excludes.set_monospace(True)
-        self.excludes.get_buffer().set_text(
-            "\n".join(existing.exclude_patterns if existing else [".Trash-*/**", "*.part", "~$*"])
+        self.excludes = ExceptionRulesEditor(
+            existing.exclude_patterns
+            if existing
+            else [".Trash-*/**", "*.part", "~$*"]
         )
-        exclude_scroll = Gtk.ScrolledWindow()
-        exclude_scroll.set_size_request(-1, 90)
-        exclude_scroll.add(self.excludes)
         rows = [
             ("Name", self.name),
             ("Cloud account", self.account),
@@ -522,7 +567,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Maximum deletions per run", self.max_delete),
             ("Bandwidth limit", self.bandwidth),
             ("Google security warning", self.acknowledge_abuse),
-            ("Excluded patterns (one per line)", exclude_scroll),
+            ("Synchronization exceptions", self.excludes),
         ]
         for row, (label, widget) in enumerate(rows):
             grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
@@ -536,12 +581,7 @@ class SyncJobDialog(Gtk.Dialog):
 
     def jobs(self) -> list[SyncJob]:
         filename = self.local.get_filename() or str(Path.home() / "TuxDrive")
-        start, end = self.excludes.get_buffer().get_bounds()
-        excluded = [
-            line.strip()
-            for line in self.excludes.get_buffer().get_text(start, end, True).splitlines()
-            if line.strip()
-        ]
+        excluded = self.excludes.rules()
         selections = self.folder_tree.selections()
         values: list[SyncJob] = []
         base_name = self.name.get_text().strip() or "Cloud files"
@@ -1014,6 +1054,42 @@ class MainWindow(Gtk.ApplicationWindow):
         self.info_label.set_text(text)
         self.infobar.show_all()
 
+    def prompt_blocked_google_file(self, job: SyncJob, blocked_path: str) -> None:
+        dialog = Gtk.MessageDialog(
+            transient_for=self,
+            modal=True,
+            message_type=Gtk.MessageType.WARNING,
+            buttons=Gtk.ButtonsType.NONE,
+            text="Google blocked a file as suspected malware or spam",
+        )
+        dialog.format_secondary_text(
+            f"{blocked_path}\n\n"
+            "The recommended action is to exclude this file. Only allow the download "
+            "if you trust its origin and accept the malware risk."
+        )
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Allow unsafe download and retry", 2)
+        recommended = dialog.add_button("Exclude file and retry", 1)
+        recommended.get_style_context().add_class("suggested-action")
+        response = dialog.run()
+        dialog.destroy()
+        if response == 1:
+            rule = f"/{blocked_path.lstrip('/')}"
+            if rule not in job.exclude_patterns:
+                job.exclude_patterns.append(rule)
+            job.acknowledge_google_abuse = False
+        elif response == 2:
+            job.acknowledge_google_abuse = True
+        else:
+            return
+        job.initialized = False
+        job.enabled = True
+        job.last_error = ""
+        job.last_status = "Recovery synchronization queued…"
+        self.controller.save()
+        self.refresh()
+        self.controller.run_job(job)
+
     def _refresh_activity_log(self) -> bool:
         sources = [application_log_path()]
         sync_directory = cache_home() / "tuxdrive" / "logs"
@@ -1171,7 +1247,10 @@ class TuxDriveApplication(Gtk.Application):
         if self.window:
             self.window.refresh()
             if not result.success:
-                self.window.message(f"{job.name}: {job.last_status}", Gtk.MessageType.ERROR)
+                if result.blocked_path:
+                    self.window.prompt_blocked_google_file(job, result.blocked_path)
+                else:
+                    self.window.message(f"{job.name}: {job.last_status}", Gtk.MessageType.ERROR)
         self.notify(job.name, result.message)
         return False
 
