@@ -14,6 +14,16 @@ def paths_overlap(first: str | Path, second: str | Path) -> bool:
     return left == right or left in right.parents or right in left.parents
 
 
+def safe_streaming_overlap(first: "SyncJob", second: "SyncJob") -> bool:
+    if not paths_overlap(first.local, second.local) or first.local == second.local:
+        return False
+    if first.mode is SyncMode.VIRTUAL_DRIVE and second.mode is not SyncMode.VIRTUAL_DRIVE:
+        return second.local in first.local.parents
+    if second.mode is SyncMode.VIRTUAL_DRIVE and first.mode is not SyncMode.VIRTUAL_DRIVE:
+        return first.local in second.local.parents
+    return False
+
+
 class Provider(str, Enum):
     GOOGLE_DRIVE = "google_drive"
     ONEDRIVE = "onedrive"

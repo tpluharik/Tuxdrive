@@ -6,7 +6,9 @@ from unittest.mock import MagicMock, patch
 
 from tuxdrive.engine import SyncEngine
 from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
-from tuxdrive.models import ConflictPolicy, SyncJob, SyncMode, paths_overlap
+from tuxdrive.models import (
+    ConflictPolicy, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
+)
 
 
 class SyncEngineCommandTests(unittest.TestCase):
@@ -79,6 +81,22 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertTrue(paths_overlap("/data/TuxDrive", "/data/TuxDrive/CEVRO"))
         self.assertTrue(paths_overlap("/data/TuxDrive/CEVRO", "/data/TuxDrive"))
         self.assertFalse(paths_overlap("/data/TuxDrive", "/data/StreamingDrive"))
+
+    def test_streaming_child_is_safe_and_automatically_excluded_from_parent(self):
+        parent = SyncJob(account_remote="google", local_path="/data/TuxDrive")
+        streamed = SyncJob(
+            account_remote="google",
+            local_path="/data/TuxDrive/Online",
+            mode=SyncMode.VIRTUAL_DRIVE,
+        )
+        self.assertTrue(safe_streaming_overlap(parent, streamed))
+        self.assertFalse(safe_streaming_overlap(streamed, SyncJob(
+            account_remote="google",
+            local_path="/data/TuxDrive/Online/Downloaded",
+        )))
+        self.engine.configure_jobs([parent, streamed])
+        command = self.engine.command_for_job(parent)
+        self.assertIn("/Online/**", command)
 
     def test_streaming_mount_rejects_a_nonempty_directory(self):
         with tempfile.TemporaryDirectory() as temporary:

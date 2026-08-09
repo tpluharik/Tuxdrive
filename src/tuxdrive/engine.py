@@ -39,6 +39,7 @@ class SyncEngine:
         self._mounts: dict[str, subprocess.Popen[str]] = {}
         self._monitors: dict[str, ChangeMonitor] = {}
         self._intentional_unmounts: set[str] = set()
+        self._protected_patterns: dict[str, tuple[str, ...]] = {}
         self._lock = threading.RLock()
 
     @property
@@ -52,6 +53,29 @@ class SyncEngine:
             return {
                 job_id for job_id, process in self._mounts.items() if process.poll() is None
             }
+
+    def configure_jobs(self, jobs: list[SyncJob]) -> None:
+        protected: dict[str, list[str]] = {}
+        for parent in jobs:
+            if parent.mode is SyncMode.VIRTUAL_DRIVE:
+                continue
+            for streamed in jobs:
+                if streamed.mode is not SyncMode.VIRTUAL_DRIVE:
+                    continue
+                try:
+                    relative = streamed.local.resolve(strict=False).relative_to(
+                        parent.local.resolve(strict=False)
+                    ).as_posix()
+                except ValueError:
+                    continue
+                if relative and relative != ".":
+                    protected.setdefault(parent.id, []).extend(
+                        [f"/{relative}", f"/{relative}/**"]
+                    )
+        self._protected_patterns = {
+            job_id: tuple(dict.fromkeys(patterns))
+            for job_id, patterns in protected.items()
+        }
 
     def command_for_job(self, job: SyncJob, dry_run: bool = False) -> list[str]:
         local = str(job.local)
@@ -74,7 +98,11 @@ class SyncEngine:
         ]
         if job.acknowledge_google_abuse:
             common.append("--drive-acknowledge-abuse")
-        for pattern in dict.fromkeys([*job.exclude_patterns, *TRANSIENT_PATTERNS]):
+        for pattern in dict.fromkeys([
+            *job.exclude_patterns,
+            *self._protected_patterns.get(job.id, ()),
+            *TRANSIENT_PATTERNS,
+        ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
         if job.bandwidth_limit.strip():
@@ -327,6 +355,7 @@ class SyncEngine:
             lambda: self.rclone_path,
             lambda item, changes: self._apply_incremental(item, changes, callback),
             reconcile,
+            self._protected_patterns.get(job.id, ()),
         )
         self._monitors[job.id] = monitor
         monitor.start()

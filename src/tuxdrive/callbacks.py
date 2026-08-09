@@ -68,6 +68,7 @@ class ChangeMonitor:
         rclone_path: Callable[[], str],
         apply: Callable[[SyncJob, list[FileChange]], bool],
         reconcile: Callable[[SyncJob], None],
+        protected_patterns: tuple[str, ...] = (),
         local_poll_seconds: float = 2.0,
         remote_poll_seconds: float = 30.0,
     ) -> None:
@@ -75,6 +76,7 @@ class ChangeMonitor:
         self.rclone_path = rclone_path
         self.apply = apply
         self.reconcile = reconcile
+        self.protected_patterns = protected_patterns
         self.local_poll_seconds = local_poll_seconds
         self.remote_poll_seconds = remote_poll_seconds
         self.stop_event = threading.Event()
@@ -93,7 +95,7 @@ class ChangeMonitor:
         return is_transient_path(candidate) or any(
             fnmatch.fnmatch(candidate, pattern.lstrip("/"))
             or fnmatch.fnmatch("/" + candidate, pattern)
-            for pattern in self.job.exclude_patterns
+            for pattern in (*self.job.exclude_patterns, *self.protected_patterns)
             if pattern.strip()
         )
 
@@ -101,7 +103,15 @@ class ChangeMonitor:
         result: dict[str, FileState] = {}
         if not self.job.local.exists():
             return result
-        for root, _dirs, files in os.walk(self.job.local):
+        for root, directories, files in os.walk(self.job.local):
+            root_path = Path(root)
+            directories[:] = [
+                directory
+                for directory in directories
+                if not self._excluded(
+                    (root_path / directory).relative_to(self.job.local).as_posix()
+                )
+            ]
             for filename in files:
                 path = Path(root) / filename
                 relative = path.relative_to(self.job.local).as_posix()

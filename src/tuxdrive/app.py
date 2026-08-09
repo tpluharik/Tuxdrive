@@ -48,7 +48,10 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
-from .models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode, paths_overlap
+from .models import (
+    Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode,
+    paths_overlap, safe_streaming_overlap,
+)
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
@@ -959,16 +962,18 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.message("Select at least one cloud folder.", Gtk.MessageType.ERROR)
             elif any(
                 paths_overlap(job.local_path, item.local_path)
+                and not safe_streaming_overlap(job, item)
                 for job in jobs
                 for item in existing_jobs
             ):
                 self.message(
-                    "That folder overlaps another TuxDrive job. Streaming drives need a separate empty folder.",
+                    "That folder overlaps another job in an unsafe direction. A streaming drive may be an empty child folder of a normal sync job.",
                     Gtk.MessageType.ERROR,
                 )
             else:
                 self.controller.config.jobs.extend(jobs)
                 self.controller.save()
+                self.controller.reconfigure_callbacks()
                 self.refresh()
                 for job in jobs:
                     self.controller.run_job(job)
@@ -994,12 +999,14 @@ class MainWindow(Gtk.ApplicationWindow):
                 return
             updated = values[0]
             duplicate = any(
-                item.id != job.id and paths_overlap(item.local_path, updated.local_path)
+                item.id != job.id
+                and paths_overlap(item.local_path, updated.local_path)
+                and not safe_streaming_overlap(updated, item)
                 for item in self.controller.config.jobs
             )
             if duplicate:
                 self.message(
-                    "That folder overlaps another TuxDrive job. Choose a separate empty folder.",
+                    "Unsafe overlap. A streaming drive may be an empty child folder of a normal sync job, but not its parent.",
                     Gtk.MessageType.ERROR,
                 )
             else:
@@ -1013,6 +1020,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.controller.stop_job(job)
                 self.controller.config.jobs[index] = updated
                 self.controller.save()
+                self.controller.reconfigure_callbacks()
                 self.refresh()
         dialog.destroy()
 
@@ -1034,6 +1042,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.controller.stop_job(job)
         self.controller.config.jobs.remove(job)
         self.controller.save()
+        self.controller.reconfigure_callbacks()
         self.refresh()
 
     def _remove_account(self, _item: Gtk.MenuItem, account: Account) -> None:
@@ -1233,6 +1242,7 @@ class TuxDriveApplication(Gtk.Application):
             self.window.message(f"{account.display_name} connected successfully.")
 
     def run_job(self, job: SyncJob, quiet: bool = False) -> None:
+        self.engine.configure_jobs(self.config.jobs)
         if not job.enabled and not quiet:
             job.enabled = True
         if job.id in self.engine.running_jobs:
@@ -1320,11 +1330,29 @@ class TuxDriveApplication(Gtk.Application):
         return False
 
     def start_callbacks(self, job: SyncJob) -> None:
+        self.engine.configure_jobs(self.config.jobs)
         self.engine.start_callbacks(
             job,
             self._job_finished,
             lambda item: GLib.idle_add(self.run_job, item, True),
         )
+
+    def reconfigure_callbacks(self) -> None:
+        self.engine.configure_jobs(self.config.jobs)
+        for item in self.config.jobs:
+            self.engine.stop_callbacks(item.id)
+        for item in self.config.jobs:
+            if (
+                item.enabled
+                and item.initialized
+                and item.realtime_sync
+                and item.mode is not SyncMode.VIRTUAL_DRIVE
+            ):
+                self.engine.start_callbacks(
+                    item,
+                    self._job_finished,
+                    lambda changed: GLib.idle_add(self.run_job, changed, True),
+                )
 
     def _scheduler_tick(self) -> bool:
         now = datetime.now(timezone.utc)
