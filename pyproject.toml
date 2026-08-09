@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuxdrive"
-version = "0.3.1"
+version = "0.3.2"
 description = "Native Google Drive and Microsoft OneDrive desktop client for Ubuntu"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -23,6 +24,7 @@ class JobResult:
     message: str
     log_path: Path
     cancelled: bool = False
+    requires_resync: bool = False
 
 
 class SyncEngine:
@@ -52,7 +54,12 @@ class SyncEngine:
             "INFO",
             "--max-delete",
             str(max(0, job.max_delete)),
+            "--track-renames",
+            "--track-renames-strategy",
+            "modtime,leaf",
         ]
+        if job.acknowledge_google_abuse:
+            common.append("--drive-acknowledge-abuse")
         for pattern in job.exclude_patterns:
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
@@ -232,11 +239,13 @@ class SyncEngine:
             elif cancelled:
                 result = JobResult(job.id, False, "Synchronization cancelled", log_path, True)
             else:
+                requires_resync = self._requires_resync(log_path)
                 result = JobResult(
                     job.id,
                     False,
                     self._failure_summary(log_path, return_code),
                     log_path,
+                    requires_resync=requires_resync,
                 )
         except (OSError, RuntimeError) as exc:
             result = JobResult(job.id, False, f"Synchronization could not start: {exc}", log_path)
@@ -261,13 +270,33 @@ class SyncEngine:
             lines = log_path.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             lines = []
-        for line in reversed(lines[-200:]):
-            cleaned = line.strip()
+        ansi = re.compile(r"\x1b\[[0-9;]*m")
+        cleaned_lines = [ansi.sub("", line).strip() for line in lines[-2000:]]
+        abusive = next(
+            (line for line in reversed(cleaned_lines) if "cannotDownloadAbusiveFile" in line),
+            None,
+        )
+        if abusive:
+            match = re.search(r"(?:ERROR\s+:\s+)?(.+?): Failed to copy", abusive)
+            blocked = match.group(1) if match else "a file"
+            return (
+                f"Google blocked {blocked} as suspected malware or spam. "
+                "Exclude it, or edit this job and explicitly allow flagged downloads."
+            )[:500]
+        for cleaned in reversed(cleaned_lines):
             lowered = cleaned.lower()
-            if lowered.startswith("fatal error:"):
+            if lowered.startswith(("fatal error:", "bisync critical error:")):
                 detail = cleaned.split(":", 1)[1].strip()
                 return f"Synchronization failed: {detail[:300]}"
         return f"Synchronization failed (rclone exit {return_code}); see log"
+
+    @staticmethod
+    def _requires_resync(log_path: Path) -> bool:
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-64 * 1024 :]
+        except OSError:
+            return False
+        return "Must run --resync to recover" in tail
 
     @staticmethod
     def _log_path(job: SyncJob) -> Path:

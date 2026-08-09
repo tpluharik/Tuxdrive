@@ -492,6 +492,15 @@ class SyncJobDialog(Gtk.Dialog):
         self.bandwidth = Gtk.Entry()
         self.bandwidth.set_placeholder_text("Optional, e.g. 10M")
         self.bandwidth.set_text(existing.bandwidth_limit if existing else "")
+        self.acknowledge_abuse = Gtk.CheckButton(
+            label="Allow downloading files Google flags as malware or spam (unsafe)"
+        )
+        self.acknowledge_abuse.set_active(
+            existing.acknowledge_google_abuse if existing else False
+        )
+        self.acknowledge_abuse.set_tooltip_text(
+            "Only enable this if you trust the flagged files. They may contain malware."
+        )
         self.excludes = Gtk.TextView()
         self.excludes.set_wrap_mode(Gtk.WrapMode.NONE)
         self.excludes.set_monospace(True)
@@ -512,6 +521,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Conflict handling", self.conflict),
             ("Maximum deletions per run", self.max_delete),
             ("Bandwidth limit", self.bandwidth),
+            ("Google security warning", self.acknowledge_abuse),
             ("Excluded patterns (one per line)", exclude_scroll),
         ]
         for row, (label, widget) in enumerate(rows):
@@ -550,6 +560,7 @@ class SyncJobDialog(Gtk.Dialog):
                 conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
                 max_delete=self.max_delete.get_value_as_int(),
                 bandwidth_limit=self.bandwidth.get_text().strip(),
+                acknowledge_google_abuse=self.acknowledge_abuse.get_active(),
                 exclude_patterns=excluded,
             )
             values.append(value)
@@ -1147,6 +1158,11 @@ class TuxDriveApplication(Gtk.Application):
         job.last_run = now.isoformat()
         job.last_status = result.message
         job.last_error = "" if result.success else result.message
+        if result.requires_resync:
+            job.initialized = False
+            job.enabled = False
+            job.last_status = f"{result.message} Automatic sync paused; recovery sync required."
+            job.last_error = job.last_status
         if result.success and job.mode is not SyncMode.VIRTUAL_DRIVE:
             job.initialized = True
         self._set_tray_state("ready" if result.success else "error", result.message)
@@ -1155,7 +1171,7 @@ class TuxDriveApplication(Gtk.Application):
         if self.window:
             self.window.refresh()
             if not result.success:
-                self.window.message(f"{job.name}: {result.message}", Gtk.MessageType.ERROR)
+                self.window.message(f"{job.name}: {job.last_status}", Gtk.MessageType.ERROR)
         self.notify(job.name, result.message)
         return False
 

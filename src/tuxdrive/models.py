@@ -76,6 +76,7 @@ class SyncJob:
     exclude_patterns: list[str] = field(default_factory=lambda: [".Trash-*/**", "*.part", "~$*"])
     max_delete: int = 100
     bandwidth_limit: str = ""
+    acknowledge_google_abuse: bool = False
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None

@@ -25,6 +25,8 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertEqual(command[:4], ["/usr/bin/rclone", "bisync", "/data/Drive", "google:Team"])
         self.assertIn("--resync", command)
         self.assertIn("pathname", command)
+        self.assertIn("--track-renames", command)
+        self.assertEqual(command[command.index("--track-renames-strategy") + 1], "modtime,leaf")
         self.assertEqual(command[command.index("--max-delete") + 1], "25")
 
     def test_later_run_does_not_resync(self):
@@ -77,6 +79,30 @@ class SyncEngineCommandTests(unittest.TestCase):
                 handle.write("Usage:\nFatal error: unknown flag: --resilient\n")
             message = self.engine._failure_summary(Path(log), 1)
         self.assertEqual(message, "Synchronization failed: unknown flag: --resilient")
+
+    def test_google_abuse_failure_is_actionable_and_requires_recovery(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "sync.log"
+            log.write_text(
+                "ERROR : myweb/handy_switch.zip: Failed to copy: cannotDownloadAbusiveFile\n"
+                "ERROR : Bisync aborted. Must run --resync to recover.\n",
+                encoding="utf-8",
+            )
+            message = self.engine._failure_summary(log, 7)
+            recovery = self.engine._requires_resync(log)
+        self.assertIn("myweb/handy_switch.zip", message)
+        self.assertIn("suspected malware", message)
+        self.assertTrue(recovery)
+
+    def test_google_abuse_acknowledgement_is_opt_in(self):
+        safe = SyncJob(account_remote="google", local_path="/data/Drive")
+        allowed = SyncJob(
+            account_remote="google",
+            local_path="/data/Drive",
+            acknowledge_google_abuse=True,
+        )
+        self.assertNotIn("--drive-acknowledge-abuse", self.engine.command_for_job(safe))
+        self.assertIn("--drive-acknowledge-abuse", self.engine.command_for_job(allowed))
 
     def test_worker_replaces_incompatible_rclone_before_launch(self):
         job = SyncJob(account_remote="google", local_path="/data/Drive")
