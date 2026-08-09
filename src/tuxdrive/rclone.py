@@ -88,12 +88,17 @@ class RcloneClient:
         except json.JSONDecodeError as exc:
             raise RcloneError("rclone returned an invalid configuration") from exc
         accounts: dict[str, Provider] = {}
+        backend_map = {
+            provider.rclone_type: provider
+            for provider in Provider
+            if provider is not Provider.NEXTCLOUD
+        }
         for name, values in raw.items():
             backend = values.get("type") if isinstance(values, dict) else None
-            if backend == "drive":
-                accounts[name] = Provider.GOOGLE_DRIVE
-            elif backend == "onedrive":
-                accounts[name] = Provider.ONEDRIVE
+            if backend in backend_map:
+                accounts[name] = backend_map[backend]
+            elif backend == "webdav" and isinstance(values, dict) and values.get("vendor") == "nextcloud":
+                accounts[name] = Provider.NEXTCLOUD
         return accounts
 
     def begin_oauth(
@@ -106,6 +111,7 @@ class RcloneClient:
     ) -> ConfigResult:
         self._validate_remote_name(remote)
         args = ["config", "create", remote, provider.rclone_type]
+        args.extend(provider.initial_options)
         if client_id:
             args.extend(["client_id", client_id])
         if client_secret:

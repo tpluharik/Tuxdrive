@@ -1,6 +1,6 @@
 {
-  "version": "0.5.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.5.1_all.deb",
-  "sha256": "1d1ebdd596c901e94155b71a8f997a3a6d03b00a5768d8479434de0db05ff991",
-  "notes": "Ubuntu 26.04 installer compatibility fix: remove the obsolete policykit-1 package dependency. Includes the TuxDrive penguin identity, provider icons, and verified in-app updates."
+  "version": "0.6.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.6.0_all.deb",
+  "sha256": "4c0bdb595b0d60d6394031a2f40638819cabd393bc1468ecca5b4d4981ade123",
+  "notes": "Adds Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud alongside Google Drive and OneDrive. All eight providers support visual folder selection, synchronization modes, and files-on-demand streaming."
 }

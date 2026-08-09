@@ -83,6 +83,44 @@ class RcloneClientTests(unittest.TestCase):
         self.assertIn("root_folder_id=root", google_scoped_remote("work", "my_drive"))
         self.assertIn("shared_with_me=true", google_scoped_remote("work", "shared_with_me"))
 
+    def test_all_eight_provider_backends_are_available(self):
+        self.assertEqual(len(Provider), 8)
+        self.assertEqual(Provider.DROPBOX.rclone_type, "dropbox")
+        self.assertEqual(Provider.BOX.rclone_type, "box")
+        self.assertEqual(Provider.PCLOUD.rclone_type, "pcloud")
+        self.assertEqual(Provider.MEGA.rclone_type, "mega")
+        self.assertEqual(Provider.PROTON_DRIVE.rclone_type, "protondrive")
+        self.assertEqual(Provider.NEXTCLOUD.rclone_type, "webdav")
+
+    def test_nextcloud_configuration_sets_webdav_vendor(self):
+        client = RcloneClient()
+        with patch.object(
+            client,
+            "_run_oauth",
+            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+        ) as run:
+            self.assertTrue(client.begin_oauth("cloud", Provider.NEXTCLOUD).complete)
+        self.assertEqual(
+            run.call_args.args[0][:6],
+            ["config", "create", "cloud", "webdav", "vendor", "nextcloud"],
+        )
+
+    def test_account_discovery_recognizes_added_backends(self):
+        configured = {
+            "drop": {"type": "dropbox"},
+            "mega": {"type": "mega"},
+            "next": {"type": "webdav", "vendor": "nextcloud"},
+        }
+        client = RcloneClient()
+        with patch.object(
+            client, "_run",
+            return_value=subprocess.CompletedProcess([], 0, stdout=json.dumps(configured), stderr=""),
+        ):
+            accounts = client.discover_accounts()
+        self.assertEqual(accounts["drop"], Provider.DROPBOX)
+        self.assertEqual(accounts["mega"], Provider.MEGA)
+        self.assertEqual(accounts["next"], Provider.NEXTCLOUD)
+
 
 if __name__ == "__main__":
     unittest.main()

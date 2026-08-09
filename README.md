@@ -2,7 +2,7 @@
 
 <p align="center"><img src="branding/tuxdrive-logo.png" width="180" alt="TuxDrive black-and-white penguin head logo"></p>
 
-TuxDrive is a native Ubuntu desktop client for **Google Drive** and **Microsoft OneDrive**. It combines a GTK desktop interface with rclone's mature cloud backends, browser-based OAuth, and transfer engine.
+TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud**. It combines a GTK desktop interface with rclone's mature cloud backends, browser-based OAuth or provider authentication, and transfer engine.
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
@@ -15,11 +15,12 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.5.1 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.6.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ## What works
 
-- Google Drive and Microsoft OneDrive Personal, Business, and supported SharePoint libraries
+- eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
+- provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
@@ -45,7 +46,7 @@ Version 0.5.1 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 - live in-app activity and synchronization logs
 - account, folder, and tray icons with connected, synchronizing, paused, and error states
 - original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
-- provider-specific Google Drive and OneDrive icons in account selection and connected-account views
+- provider-specific icons for all eight services in account selection and connected-account views
 - in-app repository update checks with HTTPS download, SHA-256 verification, and PolicyKit-authorized installation
 - startup, application, thread-exception, and native crash logging
 
@@ -54,10 +55,10 @@ Version 0.5.1 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.5.1_all.deb
+sudo apt install ./tuxdrive_0.6.0_all.deb
 ```
 
-Open **TuxDrive** from the application menu. Choose **Connect account**, select Google Drive or Microsoft OneDrive, and complete authorization in your browser. Then add a local synchronized folder or virtual drive.
+Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
 
 For a streaming drive, choose an empty mount folder. It may be a child of a normal synchronized tree, for example `~/Tuxdrive/tpluarikgdrive/Online`, and TuxDrive automatically excludes that subtree from the parent sync. A streaming drive must not be the parent of another sync job. Once connected, opening the mount folder loads the remote directory tree while file bodies remain online until opened.
 
@@ -70,7 +71,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.5.1_all.deb`.
+The installer is written to `dist/tuxdrive_0.6.0_all.deb`.
 
 ## Update from the app
 

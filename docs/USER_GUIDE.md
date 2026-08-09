@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.5.1 on Ubuntu 26.04: installation, browser OAuth, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.6.0 on Ubuntu 26.04: installation, provider authorization, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.5.1 on Ubuntu 26.04: installation, browser OAuth, c
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.5.1_all.deb
+sudo apt install ./tuxdrive_0.6.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -30,22 +30,24 @@ The main window contains:
 8. **Live activity log** — current application and transfer activity.
 9. **Settings** — startup, notification, and minimized-start preferences.
 
-The black-and-white penguin identifies TuxDrive itself. Google Drive and OneDrive use their provider icons while connected and in the account chooser; blue sync and red error badges show changing activity.
+The black-and-white penguin identifies TuxDrive itself. Each cloud service uses its provider icon while connected and in the account chooser; blue sync and red error badges show changing activity.
 
 ### Update TuxDrive
 
 Open **Settings** and select **Check for updates**. If a newer version is listed in this repository, choose **Download and install**. TuxDrive verifies the package checksum before Ubuntu displays its system authorization prompt. When installation completes, restart TuxDrive. If the check fails, the existing installation remains unchanged and the error is shown in the app.
 
-## 2. Connect an account with OAuth
+## 2. Connect a cloud account
 
-Select `+` or **Connect account**, then choose Google Drive or Microsoft OneDrive.
+Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, or Nextcloud.
 
 ![OAuth account connection](assets/02-oauth.svg)
 
 - **Account key** is TuxDrive's local identifier. Use letters, numbers, dot, dash, or underscore.
 - **Display name** is the friendly name shown in the sidebar.
 - **OAuth client ID/secret** are optional for personal testing. A dedicated provider application is recommended for regular or organizational use.
-- Select **Open browser and connect**. Sign in on the provider's page and approve access. TuxDrive never receives the cloud password.
+- Google Drive, OneDrive, Dropbox, Box, and pCloud normally open browser OAuth. Sign in on the provider's page and approve access; TuxDrive does not receive the cloud password.
+- MEGA and Proton Drive use guided provider credential questions. Nextcloud asks for the server URL, username, and preferably an app password. These values are handled by rclone and retained in its private configuration, not TuxDrive's account JSON.
+- Every provider exposes the same lazy-loading folder tree, multi-folder selection, two-way/one-way modes, and streaming-drive option after connection.
 - If the browser callback port is busy, cancel the old authorization window and retry. TuxDrive stops stale OAuth callback processes before opening a new session.
 
 The account menu provides:
@@ -251,7 +253,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.5.1_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.6.0_all.deb`.
 
 ## 11. Data safety
 

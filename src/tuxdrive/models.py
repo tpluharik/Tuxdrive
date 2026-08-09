@@ -27,14 +27,78 @@ def safe_streaming_overlap(first: "SyncJob", second: "SyncJob") -> bool:
 class Provider(str, Enum):
     GOOGLE_DRIVE = "google_drive"
     ONEDRIVE = "onedrive"
+    DROPBOX = "dropbox"
+    BOX = "box"
+    PCLOUD = "pcloud"
+    MEGA = "mega"
+    PROTON_DRIVE = "proton_drive"
+    NEXTCLOUD = "nextcloud"
 
     @property
     def label(self) -> str:
-        return "Google Drive" if self is Provider.GOOGLE_DRIVE else "Microsoft OneDrive"
+        return {
+            self.GOOGLE_DRIVE: "Google Drive",
+            self.ONEDRIVE: "Microsoft OneDrive",
+            self.DROPBOX: "Dropbox",
+            self.BOX: "Box",
+            self.PCLOUD: "pCloud",
+            self.MEGA: "MEGA",
+            self.PROTON_DRIVE: "Proton Drive",
+            self.NEXTCLOUD: "Nextcloud",
+        }[self]
 
     @property
     def rclone_type(self) -> str:
-        return "drive" if self is Provider.GOOGLE_DRIVE else "onedrive"
+        return {
+            self.GOOGLE_DRIVE: "drive",
+            self.ONEDRIVE: "onedrive",
+            self.DROPBOX: "dropbox",
+            self.BOX: "box",
+            self.PCLOUD: "pcloud",
+            self.MEGA: "mega",
+            self.PROTON_DRIVE: "protondrive",
+            self.NEXTCLOUD: "webdav",
+        }[self]
+
+    @property
+    def icon_name(self) -> str:
+        return f"tuxdrive-{self.value.replace('_', '-')}"
+
+    @property
+    def key_prefix(self) -> str:
+        return {
+            self.GOOGLE_DRIVE: "google",
+            self.ONEDRIVE: "onedrive",
+            self.DROPBOX: "dropbox",
+            self.BOX: "box",
+            self.PCLOUD: "pcloud",
+            self.MEGA: "mega",
+            self.PROTON_DRIVE: "proton",
+            self.NEXTCLOUD: "nextcloud",
+        }[self]
+
+    @property
+    def browser_oauth(self) -> bool:
+        return self in {
+            self.GOOGLE_DRIVE, self.ONEDRIVE, self.DROPBOX, self.BOX, self.PCLOUD,
+        }
+
+    @property
+    def initial_options(self) -> tuple[str, ...]:
+        return ("vendor", "nextcloud") if self is self.NEXTCLOUD else ()
+
+    @property
+    def home_url(self) -> str:
+        return {
+            self.GOOGLE_DRIVE: "https://drive.google.com/drive/my-drive",
+            self.ONEDRIVE: "https://onedrive.live.com/",
+            self.DROPBOX: "https://www.dropbox.com/home",
+            self.BOX: "https://app.box.com/folder/0",
+            self.PCLOUD: "https://my.pcloud.com/",
+            self.MEGA: "https://mega.nz/fm",
+            self.PROTON_DRIVE: "https://drive.proton.me/",
+            self.NEXTCLOUD: "",
+        }[self]
 
 
 class SyncMode(str, Enum):

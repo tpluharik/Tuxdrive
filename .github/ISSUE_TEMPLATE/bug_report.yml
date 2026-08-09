@@ -12,7 +12,7 @@ body:
     attributes:
       label: TuxDrive version
       description: Run `tuxdrive --version` or provide the installed package version.
-      placeholder: "0.5.1"
+      placeholder: "0.6.0"
     validations:
       required: true
   - type: input
@@ -29,7 +29,13 @@ body:
       options:
         - Google Drive
         - Microsoft OneDrive
-        - Both
+        - Dropbox
+        - Box
+        - pCloud
+        - MEGA
+        - Proton Drive
+        - Nextcloud
+        - Multiple providers
         - Not provider-specific
     validations:
       required: true

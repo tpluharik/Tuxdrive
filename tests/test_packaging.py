@@ -36,6 +36,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('"Exclude file and retry"', app)
         self.assertIn('"Allow unsafe download and retry"', app)
 
+    def test_all_provider_icons_are_packaged(self):
+        build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
+        for provider in ("dropbox", "box", "pcloud", "mega", "proton-drive", "nextcloud"):
+            self.assertTrue(Path(f"packaging/tuxdrive-{provider}.svg").exists())
+        self.assertIn("dropbox box pcloud mega proton-drive nextcloud", build_script)
+
 
 if __name__ == "__main__":
     unittest.main()

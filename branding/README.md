@@ -5,6 +5,6 @@ The TuxDrive mark is an original black-and-white penguin head with a geometric a
 - `tuxdrive-logo.png` is the high-resolution transparent master.
 - `packaging/tuxdrive.svg` is the scalable application and repository icon.
 - Sync and error variants add blue activity and red attention badges.
-- Google Drive and Microsoft OneDrive retain their provider-specific colors in account-selection screens.
+- All eight supported services retain provider-specific colors in account-selection screens.
 
-The TuxDrive artwork is distributed under the repository's MIT license. Google Drive and Microsoft OneDrive names and visual identifiers belong to their respective owners; their appearance only identifies interoperability.
+The TuxDrive artwork is distributed under the repository's MIT license. Cloud-service names and visual identifiers belong to their respective owners; their appearance only identifies interoperability.

@@ -1,11 +1,11 @@
 [Desktop Entry]
 Name=TuxDrive
-Comment=Synchronize Google Drive and Microsoft OneDrive
+Comment=Synchronize and stream files from eight cloud storage providers
 Exec=tuxdrive
 Icon=tuxdrive
 Terminal=false
 Type=Application
 Categories=Network;FileTransfer;Utility;
-Keywords=OneDrive;Google Drive;cloud;sync;files;
+Keywords=OneDrive;Google Drive;Dropbox;Box;pCloud;MEGA;Proton Drive;Nextcloud;cloud;sync;streaming;files;
 StartupNotify=true
 StartupWMClass=io.github.tuxdrive.TuxDrive

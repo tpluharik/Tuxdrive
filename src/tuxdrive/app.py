@@ -85,7 +85,7 @@ class OAuthWizard(Gtk.Dialog):
         complete_callback: Callable[[Account], None],
     ) -> None:
         super().__init__(title=f"Connect {provider.label}", transient_for=parent, modal=True)
-        self.set_icon_name("tuxdrive-google-drive" if provider is Provider.GOOGLE_DRIVE else "tuxdrive-onedrive")
+        self.set_icon_name(provider.icon_name)
         self.set_default_size(580, 460)
         self.client = client
         self.provider = provider
@@ -102,9 +102,11 @@ class OAuthWizard(Gtk.Dialog):
         title.set_markup(f"<span size='x-large' weight='bold'>Connect {provider.label}</span>")
         title.set_xalign(0)
         content.pack_start(title, False, False, 0)
-        description = Gtk.Label(
-            label="Authorization opens in your default web browser. TuxDrive never sees your password."
-        )
+        description = Gtk.Label(label=(
+            "Authorization opens in your default web browser. TuxDrive never sees your password."
+            if provider.browser_oauth else
+            "Follow the connection questions below. Use an app password where your provider supports one; credentials remain in rclone's private configuration."
+        ))
         description.set_xalign(0)
         description.set_line_wrap(True)
         content.pack_start(description, False, False, 0)
@@ -112,7 +114,7 @@ class OAuthWizard(Gtk.Dialog):
         grid = Gtk.Grid(column_spacing=12, row_spacing=10)
         self.name_entry = Gtk.Entry()
         self.name_entry.set_text(
-            ("google" if provider is Provider.GOOGLE_DRIVE else "onedrive")
+            provider.key_prefix
             + "-"
             + datetime.now().strftime("%H%M")
         )
@@ -125,10 +127,11 @@ class OAuthWizard(Gtk.Dialog):
         grid.attach(self.name_entry, 1, 0, 1, 1)
         grid.attach(Gtk.Label(label="Display name", xalign=0), 0, 1, 1, 1)
         grid.attach(self.display_entry, 1, 1, 1, 1)
-        grid.attach(Gtk.Label(label="OAuth client ID (optional)", xalign=0), 0, 2, 1, 1)
-        grid.attach(self.client_id, 1, 2, 1, 1)
-        grid.attach(Gtk.Label(label="OAuth client secret (optional)", xalign=0), 0, 3, 1, 1)
-        grid.attach(self.client_secret, 1, 3, 1, 1)
+        if provider.browser_oauth:
+            grid.attach(Gtk.Label(label="OAuth client ID (optional)", xalign=0), 0, 2, 1, 1)
+            grid.attach(self.client_id, 1, 2, 1, 1)
+            grid.attach(Gtk.Label(label="OAuth client secret (optional)", xalign=0), 0, 3, 1, 1)
+            grid.attach(self.client_secret, 1, 3, 1, 1)
         content.pack_start(grid, False, False, 0)
 
         self.question_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
@@ -147,7 +150,10 @@ class OAuthWizard(Gtk.Dialog):
         content.pack_start(status_row, False, False, 0)
 
         self.cancel_button = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        self.next_button = self.add_button("Open browser and connect", Gtk.ResponseType.OK)
+        self.next_button = self.add_button(
+            "Open browser and connect" if provider.browser_oauth else "Configure connection",
+            Gtk.ResponseType.OK,
+        )
         self.connect("response", self._on_response)
         self.connect("delete-event", self._on_delete)
         self.show_all()
@@ -642,7 +648,7 @@ class SyncJobDialog(Gtk.Dialog):
         self.location.remove_all()
         self.locations = {}
         if account.provider is not Provider.GOOGLE_DRIVE:
-            value = DriveLocation("default", "OneDrive", remote)
+            value = DriveLocation("default", account.provider.label, remote)
             self.locations[value.key] = value
             self.location.append(value.key, value.name)
             self.location.set_active_id(value.key)
@@ -725,7 +731,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_icon_name("tuxdrive")
         self.connect("delete-event", self._hide_instead_of_close)
 
-        header = Gtk.HeaderBar(title="TuxDrive", subtitle="OneDrive + Google Drive for Ubuntu")
+        header = Gtk.HeaderBar(title="TuxDrive", subtitle="Eight cloud services · sync and streaming")
         header.set_show_close_button(True)
         self.set_titlebar(header)
         brand = Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.LARGE_TOOLBAR)
@@ -818,11 +824,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 account_state, account_icon = "Needs attention", "tuxdrive-error"
             else:
                 account_state = "Connected"
-                account_icon = (
-                    "tuxdrive-google-drive"
-                    if account.provider is Provider.GOOGLE_DRIVE
-                    else "tuxdrive-onedrive"
-                )
+                account_icon = account.provider.icon_name
             icon = Gtk.Image.new_from_icon_name(account_icon, Gtk.IconSize.DND)
             text = Gtk.Label(xalign=0)
             text.set_markup(
@@ -834,7 +836,7 @@ class MainWindow(Gtk.ApplicationWindow):
             popup = Gtk.Menu()
             online = Gtk.MenuItem(label="Open online")
             online.connect("activate", self._open_online, account)
-            reconnect = Gtk.MenuItem(label="Reconnect OAuth")
+            reconnect = Gtk.MenuItem(label="Reconnect / refresh credentials")
             reconnect.connect("activate", self._reconnect, account)
             remove = Gtk.MenuItem(label="Remove account")
             remove.connect("activate", self._remove_account, account)
@@ -944,24 +946,29 @@ class MainWindow(Gtk.ApplicationWindow):
         return row
 
     def _choose_provider(self, _button: Gtk.Widget) -> None:
-        dialog = Gtk.MessageDialog(
-            transient_for=self,
-            modal=True,
-            message_type=Gtk.MessageType.QUESTION,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Which cloud account do you want to connect?",
-        )
-        google = dialog.add_button("Google Drive", 1)
-        google.set_image(Gtk.Image.new_from_icon_name("tuxdrive-google-drive", Gtk.IconSize.BUTTON))
-        google.set_always_show_image(True)
-        onedrive = dialog.add_button("Microsoft OneDrive", 2)
-        onedrive.set_image(Gtk.Image.new_from_icon_name("tuxdrive-onedrive", Gtk.IconSize.BUTTON))
-        onedrive.set_always_show_image(True)
+        dialog = Gtk.Dialog(title="Connect cloud storage", transient_for=self, modal=True)
+        dialog.set_default_size(560, 360)
+        area = dialog.get_content_area()
+        area.set_border_width(24)
+        prompt = Gtk.Label(xalign=0)
+        prompt.set_markup("<span size='large' weight='bold'>Choose a storage provider</span>\n<small>All providers support selective folder sync and files-on-demand mounting.</small>")
+        area.pack_start(prompt, False, False, 8)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
+        providers = list(Provider)
+        for index, provider in enumerate(providers, start=1):
+            button = Gtk.Button(label=provider.label)
+            button.set_image(Gtk.Image.new_from_icon_name(provider.icon_name, Gtk.IconSize.DND))
+            button.set_always_show_image(True)
+            button.set_hexpand(True)
+            button.connect("clicked", lambda _button, response=index: dialog.response(response))
+            grid.attach(button, (index - 1) % 2, (index - 1) // 2, 1, 1)
+        area.pack_start(grid, True, True, 8)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.show_all()
         response = dialog.run()
         dialog.destroy()
-        if response in (1, 2):
-            provider = Provider.GOOGLE_DRIVE if response == 1 else Provider.ONEDRIVE
+        if 1 <= response <= len(providers):
+            provider = providers[response - 1]
             OAuthWizard(self, self.controller.rclone, provider, self.controller.add_account)
 
     def _add_job(self, _button: Gtk.Widget) -> None:
@@ -1063,7 +1070,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if any(job.account_remote == account.remote for job in self.controller.config.jobs):
             self.message("Remove synchronized folders using this account first.", Gtk.MessageType.WARNING)
             return
-        if not self._confirm(f"Remove {account.display_name} and its local OAuth authorization?"):
+        if not self._confirm(f"Remove {account.display_name} and its local authorization?"):
             return
         try:
             self.controller.rclone.delete_remote(account.remote)
@@ -1075,11 +1082,10 @@ class MainWindow(Gtk.ApplicationWindow):
         self.refresh()
 
     def _open_online(self, _item: Gtk.MenuItem, account: Account) -> None:
-        webbrowser.open(
-            "https://drive.google.com/drive/my-drive"
-            if account.provider is Provider.GOOGLE_DRIVE
-            else "https://onedrive.live.com/"
-        )
+        if account.provider.home_url:
+            webbrowser.open(account.provider.home_url)
+        else:
+            self.message("This Nextcloud account uses its configured server URL.")
 
     def _reconnect(self, _item: Gtk.MenuItem, account: Account) -> None:
         self.message("Authorization is opening in your browser…", Gtk.MessageType.INFO)
