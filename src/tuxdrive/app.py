@@ -58,6 +58,7 @@ from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fi
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .updater import UpdateManager, UpdateRelease
+from .policies import TransferPolicy
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -653,6 +654,9 @@ class SyncJobDialog(Gtk.Dialog):
         self.realtime_sync.set_tooltip_text(
             "Watches local saves and polls provider changes; transfers only changed paths."
         )
+        self.block_delta = Gtk.CheckButton(label="Use block-level delta planning for changed files")
+        self.block_delta.set_active(existing.block_delta_transfer if existing else True)
+        self.block_delta.set_tooltip_text("Direct peer jobs exchange content-addressed changed blocks; cloud backends use their native transfer capabilities.")
         self.conflict = Gtk.ComboBoxText()
         for policy, label in (
             (ConflictPolicy.KEEP_BOTH, "Keep both copies"),
@@ -702,6 +706,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Mode", self.mode),
             ("Sync interval (minutes)", self.interval),
             ("Real-time callbacks", self.realtime_sync),
+            ("Block-level delta transfer", self.block_delta),
             ("Conflict handling", self.conflict),
             ("Maximum deletions per run", self.max_delete),
             ("Local version history", self.version_history),
@@ -732,6 +737,7 @@ class SyncJobDialog(Gtk.Dialog):
         for remote_path in selections:
             leaf = Path(remote_path).name if remote_path else "Cloud files"
             multi = len(selections) > 1
+            selected_account = next(item for item in self.accounts if item.remote == self.account.get_active_id())
             value = SyncJob(
                 name=f"{base_name} · {leaf}" if multi else base_name,
                 account_remote=self.account.get_active_id(),
@@ -742,6 +748,8 @@ class SyncJobDialog(Gtk.Dialog):
                 mode=SyncMode(self.mode.get_active_id()),
                 interval_minutes=self.interval.get_value_as_int(),
                 realtime_sync=self.realtime_sync.get_active(),
+                block_delta_transfer=self.block_delta.get_active(),
+                peer_delta=selected_account.provider is Provider.PEER,
                 conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
                 max_delete=self.max_delete.get_value_as_int(),
                 version_history=self.version_history.get_active(),
@@ -762,6 +770,7 @@ class SyncJobDialog(Gtk.Dialog):
             value.last_run = self.existing.last_run
             value.last_status = self.existing.last_status
             value.last_error = self.existing.last_error
+            value.offline_paths = list(self.existing.offline_paths)
             return [value]
         return values
 
@@ -1018,14 +1027,15 @@ class PeerSharingDialog(Gtk.Dialog):
         self.set_icon_name("tuxdrive")
         self.set_default_size(760, 680)
         self.controller = controller
+        self.loaded_invitation: PeerInvitation | None = None
         area = self.get_content_area()
         area.set_border_width(20)
         area.set_spacing(12)
         explanation = Gtk.Label(
             label=(
-                "TuxDrive connects the two computers directly over encrypted SFTP. "
-                "Files are never uploaded to an intermediary server. The sharing computer "
-                "must be reachable at the configured IP and TCP port."
+                "TuxDrive connects computers over encrypted, host-key-pinned SFTP. "
+                "Files are never stored by an intermediary. Use direct addressing, automatic "
+                "router mapping, or the optional ciphertext-only reverse relay."
             ),
             xalign=0,
         )
@@ -1117,6 +1127,16 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_discovery.set_active(True)
         self.share_lease_minutes = Gtk.SpinButton.new_with_range(1, 1440, 1)
         self.share_lease_minutes.set_value(10)
+        self.share_nat = Gtk.CheckButton(label="Automatically request UPnP/NAT-PMP port mapping")
+        self.share_nat.set_active(True)
+        self.relay_host = Gtk.Entry()
+        self.relay_host.set_placeholder_text("Optional SSH relay host (forwards ciphertext only)")
+        self.relay_user = Gtk.Entry()
+        self.relay_user.set_placeholder_text("Relay SSH user")
+        self.relay_ssh_port = Gtk.SpinButton.new_with_range(1, 65535, 1)
+        self.relay_ssh_port.set_value(22)
+        self.relay_public_port = Gtk.SpinButton.new_with_range(0, 65535, 1)
+        self.relay_public_port.set_value(0)
         grid = Gtk.Grid(column_spacing=12, row_spacing=9)
         self._row(grid, 0, "Saved share", self.share_choice)
         self._row(grid, 1, "Display name", self.share_name)
@@ -1126,6 +1146,11 @@ class PeerSharingDialog(Gtk.Dialog):
         self._row(grid, 5, "Authorized peer devices", peer_box)
         self._row(grid, 6, "LAN discovery", self.share_discovery)
         self._row(grid, 7, "Edit lease duration (minutes)", self.share_lease_minutes)
+        self._row(grid, 8, "NAT traversal", self.share_nat)
+        self._row(grid, 9, "No-storage relay host", self.relay_host)
+        self._row(grid, 10, "Relay SSH user", self.relay_user)
+        self._row(grid, 11, "Relay SSH port", self.relay_ssh_port)
+        self._row(grid, 12, "Relay public forwarding port", self.relay_public_port)
         page.pack_start(grid, False, False, 0)
         note = Gtk.Label(
             label=(
@@ -1246,6 +1271,11 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_peer_key.set_text("")
         self.share_discovery.set_active(share.lan_discovery if share else True)
         self.share_lease_minutes.set_value(share.lease_minutes if share else 10)
+        self.share_nat.set_active(share.nat_traversal if share else True)
+        self.relay_host.set_text(share.relay_host if share else "")
+        self.relay_user.set_text(share.relay_user if share else "")
+        self.relay_ssh_port.set_value(share.relay_ssh_port if share else 22)
+        self.relay_public_port.set_value(share.relay_public_port if share else 0)
         if share and Path(share.local_path).is_dir():
             self.share_folder.set_filename(str(Path(share.local_path).expanduser()))
 
@@ -1274,6 +1304,11 @@ class PeerSharingDialog(Gtk.Dialog):
             share.authorized_peers = authorized_peers
             share.lan_discovery = self.share_discovery.get_active()
             share.lease_minutes = self.share_lease_minutes.get_value_as_int()
+            share.nat_traversal = self.share_nat.get_active()
+            share.relay_host = self.relay_host.get_text().strip()
+            share.relay_user = self.relay_user.get_text().strip()
+            share.relay_ssh_port = self.relay_ssh_port.get_value_as_int()
+            share.relay_public_port = self.relay_public_port.get_value_as_int()
             share.enabled = True
             self.controller.peers.start(share)
             share.last_status = f"Listening on TCP {share.port}"
@@ -1419,6 +1454,7 @@ class PeerSharingDialog(Gtk.Dialog):
         chooser.destroy()
 
     def _apply_invitation(self, invitation: PeerInvitation) -> None:
+        self.loaded_invitation = invitation
         self.connection_name.set_text(invitation.name)
         self.connection_host.set_text(invitation.host)
         self.connection_port.set_value(invitation.port)
@@ -1461,6 +1497,13 @@ class PeerSharingDialog(Gtk.Dialog):
                 normalize_public_key(self.connection_host_key.get_text()),
                 lease_minutes=self.connection_lease.get_value_as_int(),
             )
+            if (
+                self.loaded_invitation
+                and self.loaded_invitation.host == invitation.host
+                and self.loaded_invitation.host_key == invitation.host_key
+            ):
+                invitation.relay_host = self.loaded_invitation.relay_host
+                invitation.relay_port = self.loaded_invitation.relay_port
             account = self._selected_connection()
             remote = account.remote if account else "peer-" + datetime.now().strftime("%H%M%S")
             candidate = remote + "-verify"
@@ -1468,15 +1511,30 @@ class PeerSharingDialog(Gtk.Dialog):
                 self.controller.rclone.delete_remote(candidate)
             except Exception:
                 pass
-            self.controller.peers.configure_connection(candidate, invitation)
-            try:
-                self.controller.rclone.validate_remote(candidate)
-            finally:
+            endpoint_invitations = [invitation]
+            if invitation.relay_host and invitation.relay_port:
+                endpoint_invitations.append(PeerInvitation(
+                    invitation.name, invitation.relay_host, invitation.relay_port,
+                    invitation.host_key, invitation.share_id, invitation.lease_minutes,
+                ))
+            connected = None
+            last_error = None
+            for endpoint in endpoint_invitations:
                 try:
-                    self.controller.rclone.delete_remote(candidate)
-                except Exception:
-                    pass
-            self.controller.peers.configure_connection(remote, invitation)
+                    self.controller.peers.configure_connection(candidate, endpoint)
+                    self.controller.rclone.validate_remote(candidate)
+                    connected = endpoint
+                    break
+                except Exception as exc:
+                    last_error = exc
+                finally:
+                    try:
+                        self.controller.rclone.delete_remote(candidate)
+                    except Exception:
+                        pass
+            if connected is None:
+                raise PeerError(f"Direct and relay endpoints failed: {last_error}")
+            self.controller.peers.configure_connection(remote, connected)
             if account is None:
                 account = Account(remote, Provider.PEER, invitation.name)
                 self.controller.config.accounts.append(account)
@@ -1488,6 +1546,7 @@ class PeerSharingDialog(Gtk.Dialog):
                     mode=SyncMode.TWO_WAY,
                     peer_leases=True,
                     peer_lease_minutes=invitation.lease_minutes,
+                    peer_delta=True,
                 )
                 self.controller.config.jobs.append(job)
             else:
@@ -1498,6 +1557,7 @@ class PeerSharingDialog(Gtk.Dialog):
                     job.initialized = False
                     job.peer_leases = True
                     job.peer_lease_minutes = invitation.lease_minutes
+                    job.peer_delta = True
             account.display_name = invitation.name
             account.peer_host = invitation.host
             account.peer_port = invitation.port
@@ -2009,7 +2069,24 @@ class MainWindow(Gtk.ApplicationWindow):
         notifications.set_active(self.controller.config.settings.notifications)
         minimized = Gtk.CheckButton(label="Start minimized")
         minimized.set_active(self.controller.config.settings.start_minimized)
-        for widget in (launch, notifications, minimized):
+        nautilus = Gtk.CheckButton(label="Enable Nautilus integration (restart Files after changing)")
+        nautilus.set_active(self.controller.config.settings.nautilus_integration)
+        policy = Gtk.ComboBoxText()
+        policy.append("maximum", "Maximum usage (no policy limits)")
+        policy.append("controlled", "Apply network, battery and schedule policies")
+        policy.set_active_id(self.controller.config.settings.network_policy)
+        metered = Gtk.CheckButton(label="Allow synchronization on metered networks")
+        metered.set_active(self.controller.config.settings.allow_metered_networks)
+        battery = Gtk.SpinButton.new_with_range(0, 100, 5)
+        battery.set_value(self.controller.config.settings.pause_below_battery_percent)
+        battery.set_tooltip_text("0 disables battery pausing")
+        schedule_start = Gtk.Entry()
+        schedule_start.set_placeholder_text("Allowed from HH:MM (blank = anytime)")
+        schedule_start.set_text(self.controller.config.settings.schedule_start)
+        schedule_end = Gtk.Entry()
+        schedule_end.set_placeholder_text("Allowed until HH:MM")
+        schedule_end.set_text(self.controller.config.settings.schedule_end)
+        for widget in (launch, notifications, minimized, nautilus, policy, metered, battery, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("Check for updates", 2)
@@ -2018,9 +2095,27 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.show_all()
         response = dialog.run()
         if response == Gtk.ResponseType.OK:
+            start_value = schedule_start.get_text().strip()
+            end_value = schedule_end.get_text().strip()
+            clock = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+            if bool(start_value) != bool(end_value) or any(
+                value and not clock.fullmatch(value) for value in (start_value, end_value)
+            ):
+                dialog.destroy()
+                self.message(
+                    "Enter both schedule times as HH:MM (00:00–23:59), or leave both blank.",
+                    Gtk.MessageType.ERROR,
+                )
+                return
             self.controller.config.settings.launch_at_login = launch.get_active()
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
+            self.controller.config.settings.nautilus_integration = nautilus.get_active()
+            self.controller.config.settings.network_policy = policy.get_active_id() or "maximum"
+            self.controller.config.settings.allow_metered_networks = metered.get_active()
+            self.controller.config.settings.pause_below_battery_percent = battery.get_value_as_int()
+            self.controller.config.settings.schedule_start = start_value
+            self.controller.config.settings.schedule_end = end_value
             self.controller.save()
             self.controller.configure_autostart()
         dialog.destroy()
@@ -2276,6 +2371,11 @@ class TuxDriveApplication(Gtk.Application):
             "open-online", 0, GLib.OptionFlags.NONE, GLib.OptionArg.STRING,
             "Open the cloud location corresponding to a local TuxDrive path", "PATH",
         )
+        for name, description in (
+            ("offline-path", "Keep a streaming item available offline"),
+            ("online-only-path", "Release a streaming item's cached content"),
+        ):
+            self.add_main_option(name, 0, GLib.OptionFlags.NONE, GLib.OptionArg.STRING, description, "PATH")
         self.updater = UpdateManager(__version__)
         self.background = background
         self.store = ConfigStore()
@@ -2291,6 +2391,7 @@ class TuxDriveApplication(Gtk.Application):
         self._runtime_ready_once = False
         self._pending_nautilus_paths: list[str] = []
         self._pending_nautilus_online: list[str] = []
+        self._pending_offline_requests: list[tuple[str, bool]] = []
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
@@ -2336,7 +2437,21 @@ class TuxDriveApplication(Gtk.Application):
     def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
         """Receive Nautilus requests in the primary application instance."""
         arguments = list(command_line.get_arguments())[1:]
-        option = command_line.get_options_dict().lookup_value(
+        options = command_line.get_options_dict()
+        for name, available in (("offline-path", True), ("online-only-path", False)):
+            selected = options.lookup_value(name, GLib.VariantType.new("s"))
+            if selected is not None:
+                value = selected.get_string()
+                LOGGER.info("Received Nautilus offline-state request: %s available=%s", value, available)
+                if self.window is None:
+                    self.background = True
+                    self.activate()
+                if self._runtime_ready_once:
+                    self._set_offline_path(value, available)
+                else:
+                    self._pending_offline_requests.append((value, available))
+                return 0
+        option = options.lookup_value(
             "open-online", GLib.VariantType.new("s")
         )
         if option is not None or "--open-online" in arguments:
@@ -2359,6 +2474,27 @@ class TuxDriveApplication(Gtk.Application):
             return 0
         self.activate()
         return 0
+
+    def _set_offline_path(self, value: str, available: bool) -> None:
+        job = self._job_for_local_path(value)
+        if not job or job.mode is not SyncMode.VIRTUAL_DRIVE:
+            LOGGER.warning("Offline-state request is not inside a streaming drive: %s", value)
+            return
+        try:
+            relative = Path(value).expanduser().resolve(strict=False).relative_to(job.local.resolve(strict=False)).as_posix()
+        except (OSError, RuntimeError, ValueError):
+            return
+        _run_thread(self.engine.set_offline, self._offline_state_ready, job, relative, available)
+
+    def _offline_state_ready(self, result: str | None, error: Exception | None) -> bool:
+        if error:
+            LOGGER.error("Could not change offline availability: %s", error)
+        else:
+            LOGGER.info("Offline availability changed: %s", result)
+            self.save()
+        if self.window:
+            self.window.message(str(error) if error else str(result), Gtk.MessageType.ERROR if error else Gtk.MessageType.INFO)
+        return False
 
     def _job_for_local_path(self, value: str) -> SyncJob | None:
         try:
@@ -2534,6 +2670,14 @@ class TuxDriveApplication(Gtk.Application):
         if job.id in self.engine.running_jobs:
             if self.window and not quiet:
                 self.window.message(f"{job.name} is already synchronizing.")
+            return
+        decision = TransferPolicy(self.config.settings).evaluate()
+        if not decision.allowed:
+            job.last_status = decision.reason
+            LOGGER.info("Policy deferred job %s: %s", job.id, decision.reason)
+            self._publish_nautilus_state()
+            if self.window and not quiet:
+                self.window.message(decision.reason, Gtk.MessageType.INFO)
             return
         self.engine.stop_callbacks(job.id)
         job.last_status = (
@@ -2812,6 +2956,9 @@ class TuxDriveApplication(Gtk.Application):
             pending_online, self._pending_nautilus_online = self._pending_nautilus_online, []
             for value in pending_online:
                 self._open_online_path(value)
+            pending_offline, self._pending_offline_requests = self._pending_offline_requests, []
+            for value, available in pending_offline:
+                self._set_offline_path(value, available)
         return False
 
     @staticmethod

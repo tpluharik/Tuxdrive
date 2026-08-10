@@ -26,6 +26,8 @@ def _config_path() -> Path:
 def _jobs() -> list[dict]:
     try:
         value = json.loads(_config_path().read_text(encoding="utf-8"))
+        if not value.get("settings", {}).get("nautilus_integration", True):
+            return []
         return list(value.get("jobs", []))
     except (OSError, ValueError, TypeError):
         return []
@@ -89,12 +91,20 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
                 continue
 
     def _activate(self, action: str, path: Path | None = None) -> None:
-        if action == "open-online-path":
+        if action in {"open-online-path", "offline-path", "online-only-path"}:
             # GApplication forwards this request to the primary TuxDrive
             # process. This avoids org.gtk.Actions discovery differences in
             # Nautilus 4.1 while preserving one application instance.
             Gio.Subprocess.new(
-                ["tuxdrive", "--open-online", str(path or "")],
+                [
+                    "tuxdrive",
+                    {
+                        "open-online-path": "--open-online",
+                        "offline-path": "--offline-path",
+                        "online-only-path": "--online-only-path",
+                    }[action],
+                    str(path or ""),
+                ],
                 Gio.SubprocessFlags.NONE,
             )
             return
@@ -168,6 +178,23 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             )
             online.connect("activate", lambda _item: self._activate("open-online-path", paths[0]))
             submenu.append_item(online)
+            if jobs[0].get("mode") == "virtual_drive":
+                offline = Nautilus.MenuItem(
+                    name="TuxDrive::Offline",
+                    label="Always keep available offline",
+                    tip="Hydrate this item and retain it in TuxDrive's local VFS cache",
+                    icon="emblem-downloads-symbolic",
+                )
+                offline.connect("activate", lambda _item: self._activate("offline-path", paths[0]))
+                submenu.append_item(offline)
+                online_only = Nautilus.MenuItem(
+                    name="TuxDrive::OnlineOnly",
+                    label="Free local space (online only)",
+                    tip="Remove this item's persistent offline rule and matching cached content",
+                    icon="edit-clear-symbolic",
+                )
+                online_only.connect("activate", lambda _item: self._activate("online-only-path", paths[0]))
+                submenu.append_item(online_only)
 
         root = Nautilus.MenuItem(
             name="TuxDrive::Root",

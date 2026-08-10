@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.11.4 suite contains **69 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.12.0 suite contains **75 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -19,10 +19,12 @@ The TuxDrive 0.11.4 suite contains **69 automated tests**. Tests use temporary d
 |---|---:|---|
 | `test_bootstrap.py` | 4 | Transfer-engine selection, rejection of incompatible rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_config.py` | 2 | Round-trip persistence of accounts, jobs and peer shares; private `0600` permissions; invalid configuration quarantine. |
+| `test_delta.py` | 1 | Rolling BLAKE2 block signatures identify only modified ranges and calculate transferred bytes. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
 | `test_engine.py` | 19 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
 | `test_packaging.py` | 8 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, Nautilus extension dependency/layout/action routing, InfoProvider completion, and packaged state emblems. |
-| `test_peer.py` | 9 | Invitation v1/v2 parsing, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
+| `test_peer.py` | 11 | Invitation v1/v2/v3 and relay parsing, verified atomic delta application, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
+| `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_rclone.py` | 17 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, exact Google parent-listing fallback, safe Google/Dropbox online URLs without public-link creation, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
 | `test_updater.py` | 6 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation and removal of corrupt partial packages. |
@@ -47,14 +49,16 @@ The TuxDrive 0.11.4 suite contains **69 automated tests**. Tests use temporary d
 - A foreign unexpired edit lease blocks acquisition instead of allowing an overwrite.
 - LAN/QR invitations preserve the pinned host key and lease duration; protocol-v1 invitations remain importable.
 - Nautilus actions route through the single application instance, and startup-time sync requests wait for runtime readiness.
+- Peer delta blocks are individually BLAKE2-verified, the reconstructed file is SHA-256-verified, and replacement is atomic.
+- Transfer policy defaults remain unrestricted; controlled mode defers jobs on configured battery, metered-network, and schedule conditions.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.11.4_all.deb
-dpkg-deb --contents dist/tuxdrive_0.11.4_all.deb
-sha256sum dist/tuxdrive_0.11.4_all.deb
+dpkg-deb --info dist/tuxdrive_0.12.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.12.0_all.deb
+sha256sum dist/tuxdrive_0.12.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -70,11 +74,14 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Credential providers | MEGA, Nextcloud app password, Proton password plus conditional 2FA challenge. |
 | Selective sync | Nested folder selection, multiple selected roots, rename/move, deletion and conflict copy. |
 | Streaming | Empty mount, file hydration on open, write-back, disconnect, unexpected mount loss and restart. |
+| Offline availability | Pin individual streamed files/folders, disconnect networking, open pinned content, free local space, restart the mount, and confirm rules persist. |
+| Block delta | Change one block in a multi-gigabyte peer file, verify reduced transmitted bytes in logs, corrupt a queued block, and confirm the receiver rejects it without replacing the destination. |
 | Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
 | Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
 | LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
-| Nautilus integration | Restart Nautilus, confirm the submenu appears only within configured local jobs, invoke show/sync/log actions with TuxDrive both running and stopped, verify only one application engine runs, and confirm streaming jobs do not expose a full-sync action. |
-| Internet peer sharing | Routed/VPN connection or explicit port forwarding; verify that no intermediary storage is used. |
+| Nautilus integration | Test enabled and disabled settings after restarting Nautilus; confirm menus/badges disappear when disabled and streaming items expose pin/free-space actions when enabled. |
+| Internet peer sharing | Direct, UPnP, NAT-PMP and reverse-relay connections; verify host-key pinning, relay fallback, no retained relay content, tunnel recovery, and manual direct mode. |
+| Transfer policies | Maximum default, metered connection, AC/battery transition, overnight schedule, invalid/disconnected NetworkManager state, and queued retry after a policy becomes permissive. |
 | Update | No-update result, valid update, corrupted package rejection and cancelled PolicyKit prompt. |
 | Diagnostics | Startup log, application log, per-job log and crash-log paths contain useful information without secrets. |
 | Recovery | Replace and remotely delete test files, restore several versions, expire retention, and verify current-file archival before restore. |

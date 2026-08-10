@@ -8,6 +8,10 @@ import signal
 import subprocess
 import threading
 import time
+import json
+import tempfile
+import uuid
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,6 +24,7 @@ from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
+from .delta import BlockDeltaPlanner, BlockSignature
 
 
 @dataclass(slots=True)
@@ -49,6 +54,7 @@ class SyncEngine:
         self.recovery = RecoveryManager()
         self.leases = PeerLeaseManager(rclone_path)
         self._lock = threading.RLock()
+        self.delta = BlockDeltaPlanner()
 
     @property
     def running_jobs(self) -> set[str]:
@@ -112,6 +118,7 @@ class SyncEngine:
             *TRANSIENT_PATTERNS,
             "/.tuxdrive-versions/**",
             "/.tuxdrive-leases/**",
+            "/.tuxdrive-delta/**",
         ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
@@ -158,7 +165,7 @@ class SyncEngine:
 
     def mount_command(self, job: SyncJob) -> list[str]:
         cache = cache_home() / "tuxdrive" / "vfs" / job.id
-        return [
+        command = [
             self.rclone_path,
             "mount",
             job.remote_spec,
@@ -195,6 +202,122 @@ class SyncEngine:
             "--umask",
             "022",
         ]
+        if job.offline_paths:
+            # Pinned content is hydrated into the VFS cache and must not age
+            # out. Size pressure remains visible to the user through the
+            # explicit Free local space action.
+            index = command.index("--vfs-cache-max-age")
+            command[index + 1] = "87600h"
+        return command
+
+    def set_offline(self, job: SyncJob, relative: str, available: bool) -> str:
+        relative = relative.strip("/")
+        if not relative or relative.startswith("../"):
+            raise ValueError("Select a file or folder inside the streaming drive")
+        if available:
+            if relative not in job.offline_paths:
+                job.offline_paths.append(relative)
+            target = job.local / relative
+            if target.is_file():
+                with target.open("rb") as handle:
+                    while handle.read(4 * 1024 * 1024):
+                        pass
+            elif target.is_dir():
+                for item in target.rglob("*"):
+                    if item.is_file():
+                        with item.open("rb") as handle:
+                            while handle.read(4 * 1024 * 1024):
+                                pass
+            return "Available offline"
+        if relative == ".":
+            job.offline_paths.clear()
+        else:
+            job.offline_paths = [item for item in job.offline_paths if item != relative and not item.startswith(relative + "/")]
+        cache = cache_home() / "tuxdrive" / "vfs" / job.id
+        if relative == "." and cache.exists():
+            shutil.rmtree(cache)
+            return "Online only; streaming cache released"
+        suffix = "/" + relative
+        for item in (cache.rglob("*") if cache.exists() else ()):
+            if item.is_file() and item.as_posix().endswith(suffix):
+                item.unlink(missing_ok=True)
+        return "Online only; matching cached content released"
+
+    def record_delta_manifest(self, job: SyncJob, relative: str) -> tuple[int, int]:
+        """Persist rolling-block signatures and report changed/total bytes."""
+        source = job.local / relative
+        if not source.is_file():
+            return 0, 0
+        root = cache_home() / "tuxdrive" / "delta" / job.id
+        root.mkdir(parents=True, exist_ok=True)
+        key = hashlib.sha256(relative.encode("utf-8")).hexdigest()
+        manifest = root / f"{key}.json"
+        previous = []
+        try:
+            previous = [BlockSignature(**item) for item in json.loads(manifest.read_text(encoding="utf-8"))]
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            pass
+        current = self.delta.signatures(source)
+        changed = self.delta.changed(current, previous)
+        temporary = manifest.with_suffix(".tmp")
+        temporary.write_text(json.dumps([{"offset": item.offset, "size": item.size, "digest": item.digest} for item in current]), encoding="utf-8")
+        os.replace(temporary, manifest)
+        return self.delta.transferred_bytes(changed), sum(item.size for item in current)
+
+    def transfer_peer_delta(self, job: SyncJob, relative: str, log) -> bool:
+        """Upload only changed blocks plus an authenticated peer-side transaction."""
+        source = job.local / relative
+        if not source.is_file():
+            return False
+        root = cache_home() / "tuxdrive" / "delta" / job.id
+        root.mkdir(parents=True, exist_ok=True)
+        key = hashlib.sha256(relative.encode("utf-8")).hexdigest()
+        manifest = root / f"{key}.json"
+        try:
+            previous = [BlockSignature(**item) for item in json.loads(manifest.read_text(encoding="utf-8"))]
+        except (OSError, TypeError, ValueError, json.JSONDecodeError):
+            previous = []
+        current = self.delta.signatures(source)
+        changed = self.delta.changed(current, previous)
+        transaction = uuid.uuid4().hex
+        remote_root = f"{job.remote_spec.rstrip('/')}/.tuxdrive-delta/{transaction}"
+        with tempfile.TemporaryDirectory(prefix="tuxdrive-delta-") as folder:
+            temporary = Path(folder)
+            blocks = temporary / "blocks"
+            blocks.mkdir()
+            with source.open("rb") as handle:
+                for block in changed:
+                    handle.seek(block.offset)
+                    (blocks / f"{block.offset:016x}.block").write_bytes(handle.read(block.size))
+            file_digest = hashlib.sha256()
+            with source.open("rb") as source_handle:
+                while content := source_handle.read(4 * 1024 * 1024):
+                    file_digest.update(content)
+            instruction = {
+                "version": 1, "path": relative, "size": source.stat().st_size,
+                "sha256": file_digest.hexdigest(),
+                "blocks": [{"offset": item.offset, "size": item.size, "digest": item.digest} for item in changed],
+            }
+            if changed:
+                first = subprocess.run(
+                    [self.rclone_path, "copy", str(blocks), f"{remote_root}/blocks"],
+                    stdout=log, stderr=subprocess.STDOUT, text=True, check=False,
+                )
+                if first.returncode:
+                    return False
+            instruction_path = temporary / "instruction.json"
+            instruction_path.write_text(json.dumps(instruction), encoding="utf-8")
+            final = subprocess.run(
+                [self.rclone_path, "copyto", str(instruction_path), f"{remote_root}/instruction.json"],
+                stdout=log, stderr=subprocess.STDOUT, text=True, check=False,
+            )
+            if final.returncode:
+                return False
+        temporary_manifest = manifest.with_suffix(".tmp")
+        temporary_manifest.write_text(json.dumps([{"offset": item.offset, "size": item.size, "digest": item.digest} for item in current]), encoding="utf-8")
+        os.replace(temporary_manifest, manifest)
+        log.write(f"Block delta transfer: {relative}: {sum(item.size for item in changed)}/{source.stat().st_size} bytes\n")
+        return True
 
     def run_async(
         self,
@@ -560,6 +683,17 @@ class SyncEngine:
                         log.write(f"Skipped vanished temporary save: {change.path}\n")
                         if lease:
                             self.leases.release(job, lease)
+                        continue
+                    if (
+                        job.block_delta_transfer and job.peer_delta
+                        and change.side == "local" and not change.deleted
+                    ):
+                        if not self.transfer_peer_delta(job, change.path, log):
+                            raise RuntimeError(f"block delta transfer failed for {change.path}")
+                        completed += 1
+                        if lease:
+                            self.leases.release(job, lease)
+                            log.write(f"Edit lease released: {change.path}\n")
                         continue
                     try:
                         process = subprocess.Popen(

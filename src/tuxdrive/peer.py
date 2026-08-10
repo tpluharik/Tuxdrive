@@ -40,17 +40,21 @@ class PeerInvitation:
     host_key: str
     share_id: str = ""
     lease_minutes: int = 10
+    relay_host: str = ""
+    relay_port: int = 0
 
     def encode(self) -> str:
         return json.dumps(
             {
-                "tuxdrive_peer": 2,
+                "tuxdrive_peer": 3,
                 "name": self.name,
                 "host": self.host,
                 "port": self.port,
                 "host_key": self.host_key,
                 "share_id": self.share_id,
                 "lease_minutes": self.lease_minutes,
+                "relay_host": self.relay_host,
+                "relay_port": self.relay_port,
             },
             indent=2,
         )
@@ -59,7 +63,7 @@ class PeerInvitation:
     def decode(cls, value: str) -> "PeerInvitation":
         try:
             data = json.loads(value)
-            if data.get("tuxdrive_peer") not in (1, 2):
+            if data.get("tuxdrive_peer") not in (1, 2, 3):
                 raise ValueError
             invitation = cls(
                 name=str(data.get("name") or "Peer folder"),
@@ -68,6 +72,8 @@ class PeerInvitation:
                 host_key=normalize_public_key(str(data["host_key"])),
                 share_id=str(data.get("share_id") or ""),
                 lease_minutes=max(1, min(1440, int(data.get("lease_minutes", 10)))),
+                relay_host=validate_host(str(data["relay_host"])) if data.get("relay_host") else "",
+                relay_port=validate_port(int(data["relay_port"])) if data.get("relay_port") else 0,
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PeerError("The peer invitation is incomplete or invalid") from exc
@@ -305,6 +311,7 @@ class PeerManager:
         self._servers: dict[str, subprocess.Popen[str]] = {}
         self._shares: dict[str, PeerShare] = {}
         self._logs: dict[str, object] = {}
+        self._tunnels: dict[str, subprocess.Popen[str]] = {}
         self._lock = threading.RLock()
         self.discovery = LanDiscovery(self._discovery_invitations)
 
@@ -335,6 +342,8 @@ class PeerManager:
             self.host_public_key(share),
             share.id,
             share.lease_minutes,
+            share.relay_host,
+            share.relay_public_port,
         ).encode()
 
     def start(self, share: PeerShare) -> None:
@@ -383,8 +392,25 @@ class PeerManager:
             self._shares[share.id] = share
             self._logs[share.id] = log
         threading.Thread(target=self._watch, args=(share.id, process), daemon=True).start()
+        threading.Thread(target=self._delta_watch, args=(share, process), daemon=True, name=f"peer-delta-{share.id[:8]}").start()
+        if share.nat_traversal:
+            self._open_nat_mapping(port)
+        if share.relay_host and share.relay_user and share.relay_public_port:
+            try:
+                self._start_relay(share)
+            except Exception:
+                # Never leave a share looking healthy when its explicitly
+                # configured relay could not be established.
+                self.stop(share.id)
+                raise
 
     def stop(self, share_id: str) -> bool:
+        tunnel = self._tunnels.pop(share_id, None)
+        if tunnel and tunnel.poll() is None:
+            try:
+                os.killpg(tunnel.pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
         with self._lock:
             process = self._servers.get(share_id)
         if not process or process.poll() is not None:
@@ -400,6 +426,46 @@ class PeerManager:
             os.killpg(process.pid, signal.SIGKILL)
         self._close_log(share_id)
         return True
+
+    @staticmethod
+    def _open_nat_mapping(port: int) -> bool:
+        upnpc = shutil.which("upnpc")
+        if upnpc:
+            result = subprocess.run(
+                [upnpc, "-e", "TuxDrive peer", "-r", str(port), "TCP"],
+                capture_output=True, text=True, timeout=20, check=False,
+            )
+            if result.returncode == 0:
+                return True
+        natpmp = shutil.which("natpmpc")
+        if natpmp:
+            result = subprocess.run(
+                [natpmp, "-a", str(port), str(port), "tcp", "3600"],
+                capture_output=True, text=True, timeout=20, check=False,
+            )
+            return result.returncode == 0
+        return False
+
+    def _start_relay(self, share: PeerShare) -> None:
+        ssh = shutil.which("ssh")
+        if not ssh:
+            raise PeerError("OpenSSH is required for the encrypted no-storage relay")
+        identity, _public = self.ensure_identity()
+        command = [
+            ssh, "-N", "-T", "-o", "ExitOnForwardFailure=yes",
+            "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
+            "-p", str(validate_port(share.relay_ssh_port)), "-i", str(identity),
+            "-R", f"{validate_port(share.relay_public_port)}:127.0.0.1:{validate_port(share.port)}",
+            f"{share.relay_user}@{validate_host(share.relay_host)}",
+        ]
+        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        self._tunnels[share.id] = process
+        try:
+            process.wait(timeout=1.0)
+        except subprocess.TimeoutExpired:
+            return
+        self._tunnels.pop(share.id, None)
+        raise PeerError("The no-storage relay exited before its reverse tunnel became ready")
 
     def shutdown(self) -> None:
         self.discovery.stop()
@@ -433,11 +499,16 @@ class PeerManager:
         if not key_file.is_file():
             raise PeerError("The private identity key is missing")
         rclone = self._rclone()
-        result = subprocess.run(
-            [
+        endpoints = [(invitation.host, invitation.port)]
+        if invitation.relay_host and invitation.relay_port:
+            endpoints.append((invitation.relay_host, invitation.relay_port))
+        result = None
+        for host, port in endpoints:
+            result = subprocess.run(
+                [
                 rclone, "config", "create", remote, "sftp",
-                "host", invitation.host,
-                "port", str(invitation.port),
+                "host", host,
+                "port", str(port),
                 "user", "tuxdrive-peer",
                 "key_file", str(key_file),
                 "host_keys", invitation.host_key,
@@ -445,15 +516,15 @@ class PeerManager:
                 "md5sum_command", "none",
                 "sha1sum_command", "none",
                 "--non-interactive",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=30,
-            check=False,
-        )
-        if result.returncode:
-            raise PeerError((result.stderr or result.stdout).strip()[-600:])
+                ],
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                timeout=30, check=False,
+            )
+            if result.returncode == 0:
+                break
+        if result is None or result.returncode:
+            detail = "No peer endpoint was available" if result is None else (result.stderr or result.stdout).strip()[-600:]
+            raise PeerError(detail)
 
     def _rclone(self) -> str:
         resolved = resolve_rclone(self.rclone_path)
@@ -487,6 +558,53 @@ class PeerManager:
     def _watch(self, share_id: str, process: subprocess.Popen[str]) -> None:
         process.wait()
         self._close_log(share_id)
+
+    def _delta_watch(self, share: PeerShare, process: subprocess.Popen[str]) -> None:
+        queue = Path(share.local_path).expanduser() / ".tuxdrive-delta"
+        while process.poll() is None:
+            if queue.is_dir():
+                for transaction in queue.iterdir():
+                    instruction = transaction / "instruction.json"
+                    if instruction.is_file():
+                        try:
+                            self._apply_delta_transaction(Path(share.local_path).expanduser(), transaction)
+                        except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                            continue
+            time.sleep(1)
+
+    @staticmethod
+    def _apply_delta_transaction(root: Path, transaction: Path) -> None:
+        value = json.loads((transaction / "instruction.json").read_text(encoding="utf-8"))
+        relative = Path(str(value["path"]))
+        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
+            raise ValueError("unsafe delta path")
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        temporary = target.with_name(f".{target.name}.tuxdrive-delta")
+        if target.is_file():
+            shutil.copy2(target, temporary)
+        else:
+            temporary.touch()
+        try:
+            with temporary.open("r+b") as handle:
+                for block in value.get("blocks", []):
+                    offset, size = int(block["offset"]), int(block["size"])
+                    content = (transaction / "blocks" / f"{offset:016x}.block").read_bytes()
+                    if len(content) != size or hashlib.blake2b(content, digest_size=32).hexdigest() != block["digest"]:
+                        raise ValueError("delta block integrity failure")
+                    handle.seek(offset)
+                    handle.write(content)
+                handle.truncate(int(value["size"]))
+            digest = hashlib.sha256()
+            with temporary.open("rb") as handle:
+                while chunk := handle.read(4 * 1024 * 1024):
+                    digest.update(chunk)
+            if digest.hexdigest() != value["sha256"]:
+                raise ValueError("delta file integrity failure")
+            os.replace(temporary, target)
+            shutil.rmtree(transaction)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _close_log(self, share_id: str) -> None:
         with self._lock:

@@ -22,7 +22,40 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(decoded.host, "198.51.100.20")
         self.assertEqual(decoded.port, 22022)
         self.assertEqual(decoded.host_key, KEY)
-        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 2)
+        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 3)
+
+    def test_invitation_preserves_optional_no_storage_relay(self):
+        encoded = PeerInvitation(
+            "Project", "198.51.100.20", 22022, KEY,
+            relay_host="relay.example.net", relay_port=32022,
+        ).encode()
+        decoded = PeerInvitation.decode(encoded)
+        self.assertEqual(decoded.relay_host, "relay.example.net")
+        self.assertEqual(decoded.relay_port, 32022)
+
+    def test_peer_applies_verified_changed_block_transaction_atomically(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            target = root / "project.bin"
+            target.write_bytes(b"A" * 8 + b"B" * 8)
+            transaction = root / ".tuxdrive-delta" / "tx1"
+            blocks = transaction / "blocks"
+            blocks.mkdir(parents=True)
+            replacement = b"X" * 8
+            (blocks / "0000000000000008.block").write_bytes(replacement)
+            expected = b"A" * 8 + replacement
+            (transaction / "instruction.json").write_text(json.dumps({
+                "version": 1, "path": "project.bin", "size": len(expected),
+                "sha256": hashlib.sha256(expected).hexdigest(),
+                "blocks": [{
+                    "offset": 8, "size": 8,
+                    "digest": hashlib.blake2b(replacement, digest_size=32).hexdigest(),
+                }],
+            }), encoding="utf-8")
+            PeerManager._apply_delta_transaction(root, transaction)
+            self.assertEqual(target.read_bytes(), expected)
+            self.assertFalse(transaction.exists())
 
     def test_legacy_invitation_and_share_configuration_remain_compatible(self):
         legacy = json.dumps({"tuxdrive_peer": 1, "name": "Old", "host": "192.0.2.5", "port": 22022, "host_key": KEY})

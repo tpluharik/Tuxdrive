@@ -17,7 +17,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.11.4 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.12.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ### 0.9.0 release highlights
 
@@ -33,7 +33,9 @@ Version 0.10.2 corrects the Nautilus 4 information-provider callback and package
 
 Version 0.10.3 removes an exact GI minor-version pin that blocked the extension after Ubuntu 26.04 preloaded Nautilus 4.1. The extension now follows GNOME's host-loaded namespace model and supports both Nautilus 4.0 and 4.1.
 
-Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges for pending, synchronizing, synchronized, streaming, paused, and error states. Exact provider items open where a private item ID/path is available; unsupported backends fall back to their account root without creating a public share.
+### 0.12.0 efficient transfer and connectivity policies
+
+Version 0.12.0 adds verified block-level delta transactions for direct peer updates, automatic UPnP/NAT-PMP traversal, an optional SSH reverse-tunnel relay that forwards encrypted bytes without storing file content, per-file streaming availability controls in Nautilus, an optional default-on Nautilus integration flag, and metered-network/battery/schedule policies. Policy mode defaults to **Maximum usage**, preserving unrestricted behavior until the user explicitly enables controls.
 
 ## What works
 
@@ -42,6 +44,8 @@ Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges f
 - Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected in rclone's private configuration and the remote is tested before it is shown as connected
 - Proton Drive opens a dedicated in-app 2FA challenge only when Proton requests a fresh code
 - direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
+- block-level peer delta transactions with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and full-file fallback on the first transfer
+- automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
 - multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and one authenticated endpoint per folder
 - cooperative expiring edit leases that pause peer synchronization instead of overwriting a file another device is actively editing
 - optional LAN multicast discovery with host-key fingerprint confirmation and no central discovery service
@@ -61,6 +65,7 @@ Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges f
 - separate Google location browsing for My Drive, Shared with me, and every Shared Drive
 - a FUSE virtual-drive mode with full VFS caching for files-on-demand behavior
 - streaming drives expose the complete cloud tree without downloading file contents; opening a file fetches it in chunks and keeps a bounded local cache
+- Nautilus **Always keep available offline** and **Free local space** controls for individual streamed files and folders
 - streaming mount health checks, automatic restart after an unexpected disconnect, and prevention of overlapping/non-empty mount points
 - hybrid layouts: a streaming drive may live inside a normal synchronized tree and is automatically excluded from parent full/incremental synchronization
 - automatic background synchronization at a configurable interval
@@ -69,6 +74,8 @@ Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges f
 - automatic suppression of LibreOffice, Microsoft Office, browser, editor, and partial-download temporary files
 - pause/resume, sync now, cancellation, and tray controls
 - native Nautilus 4 status/emblem integration and context actions for configured TuxDrive paths
+- Nautilus integration can be disabled in Settings and is enabled by default
+- optional metered-network, battery-threshold and daily schedule policies; unrestricted maximum transfer usage remains the default
 - live Nautilus state transitions and safe **Open online/cloud folder** navigation without public-link creation
 - launch at login, desktop notifications, daily diagnostic logs
 - clickable per-job exception rules with add/remove controls, deletion safety ceiling, bandwidth limits, and conflict policy
@@ -91,14 +98,14 @@ Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges f
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.11.4_all.deb
+sudo apt install ./tuxdrive_0.12.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
 
 For a streaming drive, choose an empty mount folder. It may be a child of a normal synchronized tree, for example `~/Tuxdrive/tpluarikgdrive/Online`, and TuxDrive automatically excludes that subtree from the parent sync. A streaming drive must not be the parent of another sync job. Once connected, opening the mount folder loads the remote directory tree while file bodies remain online until opened.
 
-For direct collaboration, open the network icon in TuxDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxDrive pins the host public key and verifies the peer before starting two-way synchronization. Internet connections may require router port forwarding or a peer-reachable VPN address.
+For direct collaboration, open the network icon in TuxDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxDrive pins the host public key and verifies the peer before starting two-way synchronization. Automatic NAT mapping is attempted by default. Where direct reachability is impossible, configure an SSH relay account and public forwarding port; the relay carries nested encrypted SFTP traffic without receiving file keys or retaining content.
 
 This is the only installation command required: APT resolves the Ubuntu desktop libraries automatically, while TuxDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts.
 
@@ -109,9 +116,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.11.4_all.deb`.
+The installer is written to `dist/tuxdrive_0.12.0_all.deb`.
 
-The current suite contains 69 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming and stale-mount recovery, provider setup and private online URLs, Proton 2FA, multi-peer authorization, edit leases, LAN/QR pairing, live Nautilus actions/emblems, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 75 automated tests covering block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming and stale-mount recovery, provider setup and private online URLs, Proton 2FA, multi-peer authorization, edit leases, LAN/QR/NAT/relay behavior, optional Nautilus actions/offline controls, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -166,7 +173,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.11.4 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation and context menus, but does not yet provide a kernel-level placeholder API identical to Windows Cloud Files, per-file offline pinning, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.12.0 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation, context menus, and persistent per-file/per-folder offline availability controls. It does not provide a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud-file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

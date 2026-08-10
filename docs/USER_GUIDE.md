@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.11.4 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.12.0 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.11.4 on Ubuntu 26.04: installation, Nautilus integr
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.11.4_all.deb
+sudo apt install ./tuxdrive_0.12.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -101,7 +101,17 @@ Each installation creates a private Ed25519 identity. On every connecting comput
 6. Select **Save and start**, then **Copy invitation** or **Show invitation QR**.
 7. Send the invitation to authorized users through a trusted channel.
 
-The IP/DNS address, port, folder, authorized devices, discovery state, and lease duration remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
+The IP/DNS address, port, folder, authorized devices, discovery state, lease duration, NAT behavior and optional relay remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
+
+### NAT traversal and optional no-storage relay
+
+**Automatically request UPnP/NAT-PMP port mapping** is enabled for new shares. TuxDrive first asks the router to expose the selected peer port using UPnP, then tries NAT-PMP when available. This is best-effort: router policy, carrier-grade NAT and firewalls can still prevent direct access.
+
+For those cases, enter an SSH relay hostname, SSH user, SSH port and unused public forwarding port. TuxDrive creates a reverse SSH tunnel from the sharing computer. A connecting peer still uses TuxDrive's pinned, encrypted SFTP session inside that tunnel; the relay forwards ciphertext, receives no TuxDrive private key and stores no file body. The relay operator must enable remote TCP forwarding/GatewayPorts for the selected account. Leaving relay fields blank preserves direct-only operation.
+
+### Block-level peer delta transfer
+
+**Use block-level delta transfer** is enabled by default on new jobs. For direct peer callback updates, TuxDrive divides a file into 4 MiB content-addressed blocks and compares the new BLAKE2 manifest with the last successfully transferred version. Only changed blocks plus a small instruction are uploaded through the authenticated, host-key-pinned transport into the peer transaction queue. The receiving TuxDrive verifies every block, reconstructs a temporary file, validates its complete SHA-256 and atomically replaces the destination. A first transfer or missing manifest sends every block. Cloud backends continue using their provider/rclone native transfer behavior.
 
 ### LAN discovery and QR pairing
 
@@ -127,7 +137,7 @@ Leases reduce accidental simultaneous overwrites between TuxDrive peers, but the
 ### Network and security limitations
 
 - The sharing computer must remain running and TuxDrive must remain active.
-- For internet access behind NAT, forward the selected TCP port to the sharing computer. Carrier-grade NAT may require a VPN with peer-reachable addresses instead.
+- For internet access, TuxDrive first attempts UPnP/NAT-PMP. If automatic mapping is unavailable, configure a manual port forward, use a peer-reachable VPN, or enable the optional no-storage SSH relay. Carrier-grade NAT commonly requires the VPN or relay option.
 - Permit only the selected port in the host firewall. Restrict it to the other peer's source IP where practical.
 - The connecting public key authenticates the guest; the invitation's pinned host public key authenticates the server. If either key changes unexpectedly, stop and verify with the other user instead of bypassing validation.
 - LAN discovery is convenience, not trust. Always compare the complete fingerprint.
@@ -204,7 +214,9 @@ TuxDrive 0.10.2 includes its own green synchronized, blue streaming, and red err
 
 TuxDrive 0.10.3 supports the Nautilus 4.0 and 4.1 GI namespaces used across supported Ubuntu installations. It intentionally does not request an exact minor namespace because Nautilus loads its own version before importing extensions.
 
-Version 0.11.4 publishes job state through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The cache contains job identifiers and display status only—never OAuth tokens, passwords, private keys, or file content.
+Version 0.12.0 publishes job state through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The cache contains job identifiers and display status only—never OAuth tokens, passwords, private keys, or file content.
+
+Nautilus integration is enabled by default. Disable **Settings → Enable Nautilus integration** to hide all TuxDrive menus, metadata and emblems; restart Files with `nautilus -q` after changing the flag. Synchronization and streaming continue without the extension.
 
 The extension sends requests to TuxDrive's single application instance. If TuxDrive is closed, it starts in the background and waits for the verified transfer runtime before starting a requested job. It never runs a second independent transfer engine inside Nautilus.
 
@@ -227,6 +239,12 @@ LibreOffice/Microsoft Office lock files, editor swap files, browser partial down
 ## 7. Streaming files on demand
 
 A streaming drive exposes real file names, folders, sizes, and modification times without downloading file bodies. Opening a file reads it in chunks and places accessed content in a bounded cache (10 GB by default). Writes are uploaded after the write-back delay.
+
+### Per-file offline availability
+
+Right-click a file or folder inside a streaming drive and choose **TuxDrive → Always keep available offline**. TuxDrive reads the complete selection into its private VFS cache, stores the persistent pin rule in the job and disables normal age expiry while pins exist. Test availability before disconnecting the network, especially for very large trees.
+
+Choose **Free local space (online only)** to remove that rule and matching cached content. Choosing it on the streaming root clears all pin rules and the job's streaming cache. Unsynchronized local write-back content is never intentionally discarded; disconnect the drive cleanly and confirm uploads before freeing space.
 
 ![Streaming and hybrid folder layout](assets/04-streaming.svg)
 
@@ -319,6 +337,16 @@ Never point a vault at a folder containing ordinary unencrypted files, never edi
 
 ![Tray controls, settings, and logs](assets/06-tray-logs.svg)
 
+### Network, battery and schedule policies
+
+The default policy is **Maximum usage (no policy limits)**, matching earlier TuxDrive releases. To constrain transfers, select **Apply network, battery and schedule policies** and configure any combination of:
+
+- disallowing NetworkManager connections marked metered;
+- a battery percentage below which transfers pause while AC power is disconnected (`0` disables it);
+- a daily `HH:MM` start/end window, including an overnight window such as `22:00`–`06:00`.
+
+The gate runs before manual, callback and scheduled jobs. Deferred jobs show the policy reason and are reconsidered by the regular scheduler. Metadata already displayed by a mounted streaming filesystem can remain visible, but opening non-cached content still requires network access.
+
 The tray menu contains:
 
 - **Open TuxDrive**
@@ -390,7 +418,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.11.4_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.12.0_all.deb`.
 
 ## 13. Data safety
 

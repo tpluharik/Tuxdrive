@@ -218,6 +218,11 @@ class PeerShare:
     authorized_peers: list[AuthorizedPeer] = field(default_factory=list)
     lan_discovery: bool = True
     lease_minutes: int = 10
+    nat_traversal: bool = True
+    relay_host: str = ""
+    relay_user: str = ""
+    relay_ssh_port: int = 22
+    relay_public_port: int = 0
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "PeerShare":
@@ -262,6 +267,9 @@ class SyncJob:
     mass_change_percent: int = 25
     peer_leases: bool = False
     peer_lease_minutes: int = 10
+    block_delta_transfer: bool = True
+    peer_delta: bool = False
+    offline_paths: list[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None
@@ -295,6 +303,12 @@ class AppSettings:
     notifications: bool = True
     start_minimized: bool = False
     rclone_path: str = "rclone"
+    nautilus_integration: bool = True
+    network_policy: str = "maximum"
+    allow_metered_networks: bool = True
+    pause_below_battery_percent: int = 0
+    schedule_start: str = ""
+    schedule_end: str = ""
     config_version: int = 1
 
     @classmethod

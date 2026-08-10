@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.12.0 — efficient peer transfer, connectivity and desktop policies
+
+- Added verified 4 MiB block-level delta transactions for direct peer callback updates, with BLAKE2 block checks, final SHA-256 verification and atomic receiver replacement.
+- Added best-effort UPnP/NAT-PMP port mapping and an optional SSH reverse-tunnel relay that forwards encrypted SFTP traffic without storing file content or receiving TuxDrive keys.
+- Added persistent per-file/per-folder **Always keep available offline** and **Free local space** actions for streaming drives in Nautilus.
+- Made Nautilus integration optional in Settings while retaining the default-on behavior.
+- Added opt-in metered-network, battery-threshold and daily schedule policies; **Maximum usage** remains the unrestricted default.
+- Added installer dependencies, migration-safe configuration fields, tests, release documentation and roadmap status updates.
+
 ## 0.11.4 — exact Google Drive folder navigation
 
 - Resolves the selected Google Drive folder from its direct parent when `rclone lsjson --stat` omits the private item ID.
