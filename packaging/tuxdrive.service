@@ -8,6 +8,9 @@ Type=simple
 ExecStart=/usr/bin/tuxdrive --background
 Restart=on-failure
 RestartSec=10
+UMask=0077
+PrivateTmp=yes
+LockPersonality=yes
 
 [Install]
 WantedBy=default.target

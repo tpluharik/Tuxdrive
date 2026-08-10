@@ -46,6 +46,7 @@ def configure_logging(version: str) -> logging.Logger:
             logging.Formatter("%(asctime)s %(levelname)s %(threadName)s %(message)s")
         )
         logger.addHandler(handler)
+        os.chmod(application_log_path(), 0o600)
     logger.info(
         "Starting TuxDrive %s; Python=%s; platform=%s; display=%s; desktop=%s",
         version,
@@ -58,6 +59,8 @@ def configure_logging(version: str) -> logging.Logger:
 
 
 def install_crash_handlers(logger: logging.Logger) -> None:
+    crash_log_path().touch(mode=0o600, exist_ok=True)
+    os.chmod(crash_log_path(), 0o600)
     crash_file = crash_log_path().open("a", encoding="utf-8", buffering=1)
     crash_file.write(
         f"\n=== TuxDrive process started {datetime.now(timezone.utc).isoformat()} ===\n"
@@ -86,6 +89,9 @@ def install_crash_handlers(logger: logging.Logger) -> None:
 def log_boot_failure(message: str) -> None:
     directory = log_directory()
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(directory, 0o700)
+    crash_log_path().touch(mode=0o600, exist_ok=True)
+    os.chmod(crash_log_path(), 0o600)
     with crash_log_path().open("a", encoding="utf-8") as handle:
         handle.write(
             f"[{datetime.now(timezone.utc).isoformat()}] STARTUP FAILURE\n{message}\n"

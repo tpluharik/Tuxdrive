@@ -2,7 +2,9 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.15.0 on Ubuntu 26.04: Tor v3 private workspaces and fail-closed transport policy, encrypted profile backup and device migration, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.15.1 on Ubuntu 26.04, including signed updates, hardened Tor workspaces, encrypted profile migration, adaptive cloud-provider controls, Nautilus integration, multi-peer sharing, one-time encrypted drops, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, and diagnostics.
+
+Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +13,7 @@ This guide covers TuxDrive 0.15.0 on Ubuntu 26.04: Tor v3 private workspaces and
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.15.0_all.deb
+sudo apt install ./tuxdrive_0.15.1_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -479,7 +481,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.15.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.15.1_all.deb`.
 
 ## 13. Data safety
 

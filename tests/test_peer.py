@@ -10,6 +10,9 @@ from tuxdrive.peer import (
     DiscoveredPeer, FileLease, PeerError, PeerInvitation, PeerLeaseManager,
     PeerManager, key_fingerprint, normalize_public_key, validate_port,
 )
+from tuxdrive.security import sign_json
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 
 KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK7mfakebutsyntacticallyvalidkey1234567890"
@@ -42,6 +45,20 @@ class PeerSharingTests(unittest.TestCase):
                 manager = PeerManager(root=Path(temporary) / "peer")
                 with self.assertRaisesRegex(PeerError, "Tor-only"):
                     manager.start(share)
+
+    def test_tor_only_server_binds_only_to_loopback(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare("Private", str(folder), "", 22022, authorized_peers=[AuthorizedPeer("Laptop", KEY)], transport_policy=PeerTransportPolicy.TOR_ONLY, onion_enabled=True, id="private")
+            host = root / "hosts" / share.id
+            host.parent.mkdir(parents=True)
+            host.write_text("private", encoding="utf-8"); host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            process = MagicMock(); process.poll.return_value = None
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxdrive.peer.subprocess.Popen", return_value=process) as popen, patch.object(PeerManager(root=root).tor.__class__, "start", return_value="a" * 56 + ".onion"):
+                manager = PeerManager(root=root); manager.start(share); manager._servers.clear()
+            command = popen.call_args.args[0]
+            self.assertEqual(command[command.index("--addr") + 1], "127.0.0.1:22022")
 
     def test_role_and_one_time_drop_scope_round_trip(self):
         encoded = PeerInvitation(
@@ -86,15 +103,23 @@ class PeerSharingTests(unittest.TestCase):
             replacement = b"X" * 8
             (blocks / "0000000000000008.block").write_bytes(replacement)
             expected = b"A" * 8 + replacement
-            (transaction / "instruction.json").write_text(json.dumps({
+            instruction = {
                 "version": 1, "path": "project.bin", "size": len(expected),
                 "sha256": hashlib.sha256(expected).hexdigest(),
                 "blocks": [{
                     "offset": 8, "size": 8,
                     "digest": hashlib.blake2b(replacement, digest_size=32).hexdigest(),
                 }],
-            }), encoding="utf-8")
-            PeerManager._apply_delta_transaction(root, transaction)
+            }
+            private = Ed25519PrivateKey.generate()
+            private_path = root / "identity"
+            private_path.write_bytes(private.private_bytes(
+                serialization.Encoding.PEM, serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            ))
+            signer, signature = sign_json(instruction, private_path)
+            (transaction / "instruction.json").write_text(json.dumps({**instruction, "signer": signer, "signature": signature}), encoding="utf-8")
+            PeerManager._apply_delta_transaction(root, transaction, [signer])
             self.assertEqual(target.read_bytes(), expected)
             self.assertFalse(transaction.exists())
 

@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuxdrive"
-version = "0.15.0"
+version = "0.15.1"
 description = "Native multi-provider cloud sync and streaming client for Ubuntu"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "TuxDrive contributors"}]
-dependencies = ["cryptography>=41"]
+dependencies = ["cryptography>=46.0.5,<47"]
 
 [project.scripts]
 tuxdrive = "tuxdrive.app:main"

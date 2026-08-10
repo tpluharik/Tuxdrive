@@ -20,11 +20,12 @@ from typing import Callable
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
 from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
-from .config import cache_home
+from .config import cache_home, config_home
 from .models import ConflictPolicy, PeerRole, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
+from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
 
 
 @dataclass(slots=True)
@@ -224,7 +225,7 @@ class SyncEngine:
         if available:
             if relative not in job.offline_paths:
                 job.offline_paths.append(relative)
-            target = job.local / relative
+            target = confined_path(job.local, relative)
             if target.is_file():
                 with target.open("rb") as handle:
                     while handle.read(4 * 1024 * 1024):
@@ -252,7 +253,7 @@ class SyncEngine:
 
     def record_delta_manifest(self, job: SyncJob, relative: str) -> tuple[int, int]:
         """Persist rolling-block signatures and report changed/total bytes."""
-        source = job.local / relative
+        source = confined_path(job.local, relative)
         if not source.is_file():
             return 0, 0
         root = cache_home() / "tuxdrive" / "delta" / job.id
@@ -273,7 +274,7 @@ class SyncEngine:
 
     def transfer_peer_delta(self, job: SyncJob, relative: str, log) -> bool:
         """Upload only changed blocks plus an authenticated peer-side transaction."""
-        source = job.local / relative
+        source = confined_path(job.local, relative)
         if not source.is_file():
             return False
         root = cache_home() / "tuxdrive" / "delta" / job.id
@@ -305,6 +306,12 @@ class SyncEngine:
                 "sha256": file_digest.hexdigest(),
                 "blocks": [{"offset": item.offset, "size": item.size, "digest": item.digest} for item in changed],
             }
+            identity = config_home() / "tuxdrive" / "peer" / "identity_ed25519"
+            try:
+                signer, signature = sign_json(instruction, identity)
+            except (OSError, ValueError):
+                return False
+            instruction.update({"signer": signer, "signature": signature})
             if changed:
                 first = subprocess.run(
                     [self.rclone_path, "copy", str(blocks), f"{remote_root}/blocks"],
@@ -413,7 +420,7 @@ class SyncEngine:
                     "an empty folder; it may be an excluded child of a synchronized folder.",
                     log_path,
                 )
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        prepare_private_file(log_path)
         with log_path.open("a", encoding="utf-8") as diagnostic:
             diagnostic.write(
                 f"\n[{datetime.now(timezone.utc).isoformat()}] Streaming preflight\n"
@@ -433,6 +440,7 @@ class SyncEngine:
                 "Streaming requires fusermount3, but it is unavailable. Reinstall the TuxDrive package.",
                 log_path,
             )
+        prepare_private_file(log_path)
         log_handle = log_path.open("a", encoding="utf-8")
         log_handle.write(
             f"[{datetime.now(timezone.utc).isoformat()}] Starting files-on-demand mount\n"
@@ -629,6 +637,8 @@ class SyncEngine:
             return None
         if change.side == "remote" and job.peer_role is PeerRole.SEND_ONLY:
             return None
+        # Execution performs a descriptor-based confinement check immediately
+        # before touching this path; keep command construction side-effect free.
         local = str(job.local / relative)
         remote = f"{job.remote_spec.rstrip('/')}/{relative}"
         if change.side == "local":
@@ -649,7 +659,7 @@ class SyncEngine:
             if job.id in self._processes:
                 return False
         log_path = self._log_path(job)
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_directory(log_path.parent)
         completed = 0
         try:
             total_files = sum(1 for item in job.local.rglob("*") if item.is_file())
@@ -662,12 +672,13 @@ class SyncEngine:
                 ))
                 return False
             self.recovery.archive_incoming_changes(job, changes)
+            prepare_private_file(log_path)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"\n[{datetime.now(timezone.utc).isoformat()}] Incremental callback: {len(changes)} path(s)\n")
                 for change in changes:
                     if ".." in Path(change.path).parts:
                         raise RuntimeError(f"unsafe incremental path: {change.path}")
-                    local_path = job.local / change.path
+                    local_path = confined_path(job.local, change.path, create_parents=change.side == "remote")
                     lease = None
                     if job.peer_leases and change.side == "local":
                         try:
@@ -678,13 +689,11 @@ class SyncEngine:
                             return False
                     if change.side == "remote" and change.deleted:
                         try:
-                            local_path.unlink(missing_ok=True)
+                            unlink_confined(job.local, change.path)
                             completed += 1
                         except OSError as exc:
                             raise RuntimeError(str(exc)) from exc
                         continue
-                    if change.side == "remote":
-                        local_path.parent.mkdir(parents=True, exist_ok=True)
                     command = self._incremental_command(job, change)
                     if command is None:
                         if lease:
@@ -699,13 +708,18 @@ class SyncEngine:
                         job.block_delta_transfer and job.peer_delta
                         and change.side == "local" and not change.deleted
                     ):
-                        if not self.transfer_peer_delta(job, change.path, log):
-                            raise RuntimeError(f"block delta transfer failed for {change.path}")
-                        completed += 1
-                        if lease:
-                            self.leases.release(job, lease)
-                            log.write(f"Edit lease released: {change.path}\n")
-                        continue
+                        if self.transfer_peer_delta(job, change.path, log):
+                            completed += 1
+                            if lease:
+                                self.leases.release(job, lease)
+                                log.write(f"Edit lease released: {change.path}\n")
+                            continue
+                        log.write(f"Authenticated block delta unavailable; using full transfer for {change.path}\n")
+                    staged_download = None
+                    if change.side == "remote":
+                        staging = ensure_private_directory(cache_home() / "tuxdrive" / "incoming" / job.id)
+                        staged_download = staging / f"{uuid.uuid4().hex}.download"
+                        command[-1] = str(staged_download)
                     try:
                         process = subprocess.Popen(
                             command,
@@ -730,10 +744,13 @@ class SyncEngine:
                             log.write(f"Ignored save artifact that vanished during transfer: {change.path}\n")
                             continue
                         raise RuntimeError(f"incremental transfer failed for {change.path} (rclone exit {code})")
+                    if staged_download is not None:
+                        install_confined(staged_download, job.local, change.path)
+                        staged_download.unlink(missing_ok=True)
                     completed += 1
             callback(JobResult(job.id, True, f"Incremental sync complete: {completed} changed path(s)", log_path, incremental=True))
             return True
-        except (OSError, RuntimeError) as exc:
+        except (OSError, RuntimeError, UnsafePathError) as exc:
             callback(JobResult(job.id, False, f"Incremental sync failed: {exc}", log_path, incremental=True))
             return False
         finally:
@@ -747,7 +764,7 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
         dry_run: bool,
     ) -> None:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_directory(log_path.parent)
         cancelled = False
         try:
             resolved = resolve_rclone(self.rclone_path)
@@ -781,6 +798,7 @@ class SyncEngine:
                     ))
                     return
             command = self.command_for_job(job, dry_run=dry_run)
+            prepare_private_file(log_path)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(
                     f"\n[{datetime.now(timezone.utc).isoformat()}] Starting TuxDrive "

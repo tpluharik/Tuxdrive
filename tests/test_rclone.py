@@ -1,6 +1,9 @@
 import json
 import subprocess
+import tempfile
+import os
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from tuxdrive.models import Provider
@@ -8,6 +11,20 @@ from tuxdrive.rclone import RcloneClient, google_scoped_remote
 
 
 class RcloneClientTests(unittest.TestCase):
+    def test_plain_config_is_encrypted_with_secret_service_helper(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "rclone" / "rclone.conf"
+            config.parent.mkdir(); config.write_text("[cloud]\ntype = drive\n", encoding="utf-8")
+            helper = root / "helper"; helper.write_text("#!/bin/sh\n", encoding="utf-8"); helper.chmod(0o700)
+            client = RcloneClient("/usr/bin/rclone")
+            completed = subprocess.CompletedProcess([], 0, stdout="secret", stderr="")
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root), "TUXDRIVE_PASSWORD_HELPER": str(helper)}, clear=False), patch("tuxdrive.rclone.subprocess.run", return_value=completed) as run:
+                client._ensure_config_security()
+                self.assertEqual(os.environ.get("RCLONE_PASSWORD_COMMAND"), str(helper))
+            self.assertTrue((config.parent / ".tuxdrive-encrypted").is_file())
+            self.assertIn("encryption", run.call_args_list[-1].args[0])
+
     def test_noninteractive_question_is_parsed(self):
         output = json.dumps(
             {

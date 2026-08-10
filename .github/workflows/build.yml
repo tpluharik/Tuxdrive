@@ -8,12 +8,16 @@ jobs:
   test-and-package:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
         with:
           python-version: "3.12"
       - name: Install Python dependencies
-        run: python -m pip install .
+        run: python -m pip install . bandit pip-audit
+      - name: Static security analysis
+        run: bandit -q -r src -lll && pip-audit -r requirements-security.txt
       - name: Unit tests
         run: PYTHONPATH=src python -m unittest discover -s tests -v
       - name: Compile Python sources
@@ -21,8 +25,12 @@ jobs:
       - name: Build Debian package
         run: sh scripts/build-deb.sh
       - name: Inspect Debian package
-        run: dpkg-deb --info dist/tuxdrive_0.15.0_all.deb && dpkg-deb --contents dist/tuxdrive_0.15.0_all.deb
-      - uses: actions/upload-artifact@v4
+        run: dpkg-deb --info dist/tuxdrive_0.15.1_all.deb && dpkg-deb --contents dist/tuxdrive_0.15.1_all.deb
+      - name: Generate dependency SBOM
+        run: pip-audit -r requirements-security.txt --format cyclonedx-json --output dist/tuxdrive_0.15.1.cdx.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tuxdrive-deb
-          path: dist/tuxdrive_0.15.0_all.deb
+          path: |
+            dist/tuxdrive_0.15.1_all.deb
+            dist/tuxdrive_0.15.1.cdx.json

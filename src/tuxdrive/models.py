@@ -180,12 +180,6 @@ class PeerRole(str, Enum):
             self.RECEIVE_ONLY: "Receive-only",
         }[self]
 
-
-class PeerTransportPolicy(str, Enum):
-    DIRECT_ONLY = "direct_only"
-    TOR_ONLY = "tor_only"
-    AUTO = "auto"
-
     @property
     def sync_mode(self) -> SyncMode:
         return {
@@ -195,6 +189,11 @@ class PeerTransportPolicy(str, Enum):
             self.RECEIVE_ONLY: SyncMode.DOWNLOAD_ONLY,
         }[self]
 
+
+class PeerTransportPolicy(str, Enum):
+    DIRECT_ONLY = "direct_only"
+    TOR_ONLY = "tor_only"
+    AUTO = "auto"
 
 @dataclass(slots=True)
 class Account:

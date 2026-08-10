@@ -97,7 +97,7 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             # Nautilus 4.1 while preserving one application instance.
             Gio.Subprocess.new(
                 [
-                    "tuxdrive",
+                    "/usr/bin/tuxdrive",
                     {
                         "open-online-path": "--open-online",
                         "offline-path": "--offline-path",
@@ -115,7 +115,7 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             return
 
         # Start the registered desktop application, then retry without blocking Nautilus.
-        Gio.Subprocess.new(["tuxdrive", "--background"], Gio.SubprocessFlags.NONE)
+        Gio.Subprocess.new(["/usr/bin/tuxdrive", "--background"], Gio.SubprocessFlags.NONE)
 
         def retry(remaining: int = 20) -> bool:
             refreshed = Gio.DBusActionGroup.get(Gio.bus_get_sync(Gio.BusType.SESSION), APP_ID, APP_PATH)

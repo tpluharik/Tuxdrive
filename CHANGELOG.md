@@ -2,6 +2,19 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.15.1 — comprehensive security hardening
+
+- Added Ed25519-signed, expiring update manifests, bounded downloads, Debian package identity checks, and an external release-signing trust root.
+- Bound Tor-only and no-public-IP peer endpoints to loopback and added explicit invitation transport allowlists that remove forbidden relay/direct fallback.
+- Added descriptor-walk path confinement to reject symlink escapes during incremental transfer, delta application, recovery, integrity repair, and offline hydration.
+- Signed block-delta instructions with the sender's Ed25519 identity, authorized signers on receipt, bounded delta resources, and retained safe full-transfer fallback.
+- Fixed peer-role synchronization mapping; immediately rebuilds authorization and terminates sessions after consuming a one-time drop.
+- Randomized and readiness-tested per-remote Tor SOCKS listeners, isolated Tor SSH wrappers, restricted pluggable-transport executables, strict relay host verification, and NAT mapping cleanup.
+- Raised the cryptography dependency floor to 46.0.5, required rclone 1.75.0+, strengthened new profile backups to scrypt N=131072 with a 14-character minimum, bounded profiles, and excluded bridge material from non-sensitive backups.
+- Added automatic rclone configuration encryption backed by GNOME Secret Service, while preserving independently encrypted advanced-user configurations.
+- Hardened log/config permissions, sensitive child-process visibility, Python launcher isolation, Nautilus executable paths, CI action pinning, dependency auditing, static analysis, and SBOM generation.
+- Retained peer sharing and one-time drops. Per-key server-side role/drop isolation remains explicitly deferred to the planned peer server authorization layer.
+
 ## 0.15.0 — Tor transport and fail-closed workspace privacy
 
 - Added isolated Tor v3 Onion Services for peer workspaces with persistent or ephemeral service identity and no automatic clearnet fallback.

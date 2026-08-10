@@ -7,6 +7,7 @@ import shutil
 import socket
 import subprocess
 import threading
+import ctypes
 from urllib.parse import quote
 from dataclasses import dataclass
 from pathlib import Path
@@ -18,6 +19,16 @@ from .bootstrap import install_rclone, resolve_rclone
 
 class RcloneError(RuntimeError):
     pass
+
+
+def _protect_sensitive_child() -> None:
+    """Prevent same-user processes from reading sensitive rclone argv on Linux."""
+    try:
+        libc = ctypes.CDLL(None, use_errno=True)
+        if libc.prctl(4, 0, 0, 0, 0) != 0:  # PR_SET_DUMPABLE
+            os._exit(126)
+    except Exception:
+        os._exit(126)
 
 
 @dataclass(slots=True)
@@ -59,11 +70,13 @@ class RcloneClient:
         self._oauth_guard = threading.Lock()
         self._oauth_process: subprocess.Popen[str] | None = None
         self._oauth_session: str | None = None
+        self._config_security_checked = False
 
     def available(self) -> bool:
         resolved = resolve_rclone(self.executable)
         if resolved:
             self.executable = resolved
+            self._ensure_config_security()
             return True
         return False
 
@@ -376,15 +389,21 @@ class RcloneClient:
         result = self._run_oauth(args, session_id, timeout=600)
         output = result.stdout.strip()
         if not output:
+            self._secure_config_permissions()
+            self._ensure_config_security(force=True)
             return ConfigResult(complete=True)
         try:
             value = json.loads(output)
         except json.JSONDecodeError:
             # Some successful backend configurations print informational text.
+            self._secure_config_permissions()
+            self._ensure_config_security(force=True)
             return ConfigResult(complete=True)
         state = value.get("State", "")
         option = value.get("Option")
         if not state or not option:
+            self._secure_config_permissions()
+            self._ensure_config_security(force=True)
             return ConfigResult(complete=True)
         return ConfigResult(
             complete=False,
@@ -423,6 +442,7 @@ class RcloneClient:
                 text=True,
                 env=environment,
                 start_new_session=True,
+                preexec_fn=_protect_sensitive_child,
             )
             self._oauth_process = process
             self._oauth_session = session_id
@@ -477,6 +497,48 @@ class RcloneClient:
             if line.lower().startswith(("fatal error:", "error:")):
                 return line[:500]
         return (meaningful[0] if meaningful else "Cloud authorization failed")[:500]
+
+    @staticmethod
+    def _secure_config_permissions() -> None:
+        path = rclone_config_path()
+        if path.is_file():
+            os.chmod(path, 0o600)
+            os.chmod(path.parent, 0o700)
+
+    def _ensure_config_security(self, force: bool = False) -> None:
+        if self._config_security_checked and not force:
+            return
+        config = rclone_config_path()
+        helper = Path(os.environ.get("TUXDRIVE_PASSWORD_HELPER", "/usr/lib/tuxdrive/rclone-password"))
+        marker = config.parent / ".tuxdrive-encrypted"
+        if marker.is_file():
+            os.environ["RCLONE_PASSWORD_COMMAND"] = str(helper)
+            self._config_security_checked = True
+            return
+        if not config.is_file() or not config.read_bytes().strip():
+            return
+        if config.read_bytes().startswith(b"RCLONE_ENCRYPT_V"):
+            # Respect configurations encrypted independently by an advanced user.
+            self._config_security_checked = True
+            return
+        if not helper.is_file() or not os.access(helper, os.X_OK):
+            return
+        ensured = subprocess.run([str(helper), "--ensure"], capture_output=True, text=True, timeout=30, check=False, preexec_fn=_protect_sensitive_child)
+        if ensured.returncode:
+            raise RcloneError("Could not store the rclone configuration key in GNOME Secret Service")
+        environment = os.environ.copy()
+        environment["RCLONE_PASSWORD_COMMAND"] = str(helper)
+        result = subprocess.run(
+            [self.executable, "config", "encryption", "set", "--password-command", str(helper)],
+            capture_output=True, text=True, timeout=30, check=False, env=environment,
+            preexec_fn=_protect_sensitive_child,
+        )
+        if result.returncode:
+            raise RcloneError("Could not encrypt the rclone credential configuration")
+        marker.touch(mode=0o600, exist_ok=True)
+        os.chmod(marker, 0o600)
+        os.environ["RCLONE_PASSWORD_COMMAND"] = str(helper)
+        self._config_security_checked = True
 
     def _run(
         self,

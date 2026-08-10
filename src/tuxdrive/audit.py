@@ -37,6 +37,7 @@ class AuditTimeline:
         event = AuditEvent(datetime.now(timezone.utc).isoformat(), category, action, outcome, job_id, peer, path, detail[:1000], uuid4().hex)
         with self._lock:
             self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(self.path.parent, 0o700)
             with self.path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(asdict(event), ensure_ascii=False) + "\n")
             os.chmod(self.path, 0o600)

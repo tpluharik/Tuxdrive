@@ -7,7 +7,7 @@ import shutil
 import signal
 import subprocess
 import time
-import hashlib
+import socket
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -43,6 +43,7 @@ class TorServiceManager:
         self.tor_path = tor_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._client_processes: dict[str, subprocess.Popen[str]] = {}
+        self._client_ports: dict[str, int] = {}
 
     def available(self) -> bool:
         return bool(shutil.which(self.tor_path))
@@ -99,7 +100,7 @@ class TorServiceManager:
         if share.tor_bridge_lines:
             lines.append("UseBridges 1")
             lines.extend(f"Bridge {self._safe_profile(value)}" for value in share.tor_bridge_lines)
-            lines.extend(f"ClientTransportPlugin {self._safe_profile(value)}" for value in share.tor_pluggable_transports)
+            lines.extend(f"ClientTransportPlugin {self._safe_transport_plugin(value)}" for value in share.tor_pluggable_transports)
         self._private_write(config, "\n".join(lines) + "\n")
         process = subprocess.Popen([binary, "-f", str(config)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
         self._processes[share.id] = process
@@ -123,21 +124,38 @@ class TorServiceManager:
         safe = self._safe_name(remote)
         data = self.root / "clients" / safe
         data.mkdir(parents=True, exist_ok=True, mode=0o700)
-        port = 39000 + int(hashlib.sha256(remote.encode("utf-8")).hexdigest()[:4], 16) % 10000
+        current = self._client_processes.get(remote)
+        if current and current.poll() is None and remote in self._client_ports:
+            port = self._client_ports[remote]
+            torsocks = data / "torsocks.conf"
+            if torsocks.is_file():
+                return torsocks
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = int(probe.getsockname()[1])
         torrc = data / "torrc"
         self._private_write(torrc, "\n".join((
             f"DataDirectory {data}", f"SocksPort 127.0.0.1:{port}", "AvoidDiskWrites 1",
             f"ClientOnionAuthDir {self.root / 'client-auth'}",
         )) + "\n")
-        current = self._client_processes.get(remote)
-        if not current or current.poll() is not None:
-            self._client_processes[remote] = subprocess.Popen(
-                [binary, "-f", str(torrc)], stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL, text=True, start_new_session=True,
-            )
+        process = subprocess.Popen(
+            [binary, "-f", str(torrc)], stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, text=True, start_new_session=True,
+        )
+        self._client_processes[remote] = process
+        self._client_ports[remote] = port
         torsocks = data / "torsocks.conf"
         self._private_write(torsocks, f"TorAddress 127.0.0.1\nTorPort {port}\nOnionAddrRange 127.42.42.0/24\n")
-        return torsocks
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline and process.poll() is None:
+            try:
+                with socket.create_connection(("127.0.0.1", port), timeout=0.2):
+                    return torsocks
+            except OSError:
+                time.sleep(0.1)
+        self._client_processes.pop(remote, None)
+        self._client_ports.pop(remote, None)
+        raise TorError("Tor client did not establish a private SOCKS listener; no clearnet fallback was attempted")
 
     def reload(self, share_id: str) -> None:
         process = self._processes.get(share_id)
@@ -163,6 +181,7 @@ class TorServiceManager:
                 except ProcessLookupError:
                     pass
             self._client_processes.pop(remote, None)
+            self._client_ports.pop(remote, None)
 
     def _service_dir(self, share: PeerShare) -> Path:
         base = self.root / ("services" if share.onion_persistent else "ephemeral") / share.id
@@ -191,6 +210,18 @@ class TorServiceManager:
         if not value or "\n" in value or "\r" in value:
             raise TorError("Invalid bridge or pluggable-transport profile")
         return value
+
+    @staticmethod
+    def _safe_transport_plugin(value: str) -> str:
+        value = TorServiceManager._safe_profile(value)
+        fields = value.split()
+        allowed = {"obfs4": "/usr/bin/obfs4proxy", "snowflake": "/usr/bin/snowflake-client"}
+        if len(fields) < 3 or fields[1] != "exec" or fields[0] not in allowed:
+            raise TorError("Only packaged obfs4 or snowflake pluggable transports are allowed")
+        executable = str(Path(fields[2]).resolve(strict=False))
+        if executable != allowed[fields[0]]:
+            raise TorError("Pluggable transport must use its packaged executable")
+        return " ".join((fields[0], "exec", executable, *fields[3:]))
 
 
 def enforce_transport_policy(share: PeerShare, transport: str) -> None:

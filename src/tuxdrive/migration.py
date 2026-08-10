@@ -23,6 +23,8 @@ from .rclone import RcloneClient
 
 PROFILE_PATH = ".tuxdrive-profile/tuxdrive-profile.tdx"
 FORMAT = "tuxdrive-encrypted-profile"
+MAX_PROFILE_SIZE = 128 * 1024 * 1024
+CURRENT_SCRYPT_N = 2**17
 
 
 class MigrationError(RuntimeError):
@@ -39,15 +41,15 @@ class ProfileSummary:
     includes_credentials: bool
 
 
-def _derive(password: str, salt: bytes, n: int = 2**15) -> bytes:
-    if len(password) < 10:
-        raise MigrationError("Use a backup password of at least 10 characters")
+def _derive(password: str, salt: bytes, n: int = CURRENT_SCRYPT_N, minimum: int = 14) -> bytes:
+    if len(password) < minimum:
+        raise MigrationError(f"Use a backup passphrase of at least {minimum} characters")
     return Scrypt(salt=salt, length=32, n=n, r=8, p=1).derive(password.encode("utf-8"))
 
 
 def encrypt_profile(payload: dict[str, Any], password: str) -> bytes:
     salt, nonce = os.urandom(16), os.urandom(12)
-    header = {"format": FORMAT, "version": 1, "kdf": "scrypt", "n": 2**15, "r": 8, "p": 1}
+    header = {"format": FORMAT, "version": 2, "kdf": "scrypt", "n": CURRENT_SCRYPT_N, "r": 8, "p": 1}
     aad = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
     clear = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
     envelope = dict(header)
@@ -60,18 +62,22 @@ def encrypt_profile(payload: dict[str, Any], password: str) -> bytes:
 
 
 def decrypt_profile(data: bytes, password: str) -> dict[str, Any]:
+    if len(data) > MAX_PROFILE_SIZE:
+        raise MigrationError("The encrypted profile exceeds the 128 MiB safety limit")
     try:
         envelope = json.loads(data)
-        if envelope.get("format") != FORMAT or envelope.get("version") != 1:
+        version = int(envelope.get("version", 0))
+        if envelope.get("format") != FORMAT or version not in {1, 2}:
             raise MigrationError("This is not a supported TuxDrive profile backup")
         header = {key: envelope[key] for key in ("format", "version", "kdf", "n", "r", "p")}
-        if header["kdf"] != "scrypt" or header["r"] != 8 or header["p"] != 1 or header["n"] != 2**15:
+        expected_n = 2**15 if version == 1 else CURRENT_SCRYPT_N
+        if header["kdf"] != "scrypt" or header["r"] != 8 or header["p"] != 1 or header["n"] != expected_n:
             raise MigrationError("Unsupported profile key-derivation settings")
         aad = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
         salt = base64.b64decode(envelope["salt"], validate=True)
         nonce = base64.b64decode(envelope["nonce"], validate=True)
         cipher = base64.b64decode(envelope["ciphertext"], validate=True)
-        return json.loads(AESGCM(_derive(password, salt)).decrypt(nonce, cipher, aad))
+        return json.loads(AESGCM(_derive(password, salt, expected_n, 10 if version == 1 else 14)).decrypt(nonce, cipher, aad))
     except MigrationError:
         raise
     except (InvalidTag, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
@@ -104,6 +110,11 @@ class ProfileManager:
         }
 
     def create_bytes(self, config: AppConfig, password: str, include_credentials: bool = False) -> bytes:
+        serialized = config.to_dict()
+        if not include_credentials:
+            for share in serialized.get("peer_shares", []):
+                share["tor_bridge_lines"] = []
+                share["tor_pluggable_transports"] = []
         payload: dict[str, Any] = {
             "metadata": {
                 "created_at": datetime.now(timezone.utc).isoformat(),
@@ -111,7 +122,7 @@ class ProfileManager:
                 "device_name": socket.gethostname(),
                 "includes_credentials": include_credentials,
             },
-            "config": config.to_dict(),
+            "config": serialized,
         }
         if include_credentials:
             payload["secrets"] = self._secrets()
@@ -130,6 +141,8 @@ class ProfileManager:
         with tempfile.TemporaryDirectory(prefix="tuxdrive-profile-") as temporary:
             destination = Path(temporary) / "profile.tdx"
             self.rclone.copy_to(self.remote_spec(remote), destination)
+            if destination.stat().st_size > MAX_PROFILE_SIZE:
+                raise MigrationError("The downloaded profile exceeds the 128 MiB safety limit")
             return destination.read_bytes()
 
     def available(self, remote: str) -> bool:

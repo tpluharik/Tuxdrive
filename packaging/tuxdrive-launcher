@@ -1,7 +1,12 @@
 #!/bin/sh
-export PYTHONPATH="/usr/lib${PYTHONPATH:+:$PYTHONPATH}"
+unset PYTHONPATH PYTHONHOME
+rclone_config_root="${XDG_CONFIG_HOME:-${HOME}/.config}/rclone"
+if [ -f "$rclone_config_root/.tuxdrive-encrypted" ]; then
+  export RCLONE_PASSWORD_COMMAND=/usr/lib/tuxdrive/rclone-password
+fi
 state_root="${XDG_STATE_HOME:-${HOME}/.local/state}/tuxdrive"
 mkdir -p "$state_root"
 chmod 700 "$state_root"
 printf '\n=== launcher %s ===\n' "$(date --iso-8601=seconds)" >>"$state_root/startup.log"
-exec /usr/bin/python3 -m tuxdrive.app "$@" >>"$state_root/startup.log" 2>&1
+chmod 600 "$state_root/startup.log"
+exec /usr/bin/python3 -I -c 'import runpy,sys; sys.path.insert(0,"/usr/lib"); sys.argv[0]="tuxdrive"; runpy.run_module("tuxdrive.app",run_name="__main__")' tuxdrive "$@" >>"$state_root/startup.log" 2>&1

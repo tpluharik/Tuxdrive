@@ -5,9 +5,10 @@ from pathlib import Path
 class PackagingTests(unittest.TestCase):
     def test_launcher_points_to_parent_of_installed_package(self):
         launcher = Path("packaging/tuxdrive-launcher").read_text(encoding="utf-8")
-        self.assertIn('PYTHONPATH="/usr/lib', launcher)
-        self.assertNotIn('PYTHONPATH="/usr/lib/tuxdrive', launcher)
-        self.assertIn("-m tuxdrive.app", launcher)
+        self.assertIn("unset PYTHONPATH PYTHONHOME", launcher)
+        self.assertIn("/usr/bin/python3 -I", launcher)
+        self.assertIn('sys.path.insert(0,"/usr/lib")', launcher)
+        self.assertIn('run_module("tuxdrive.app"', launcher)
 
     def test_build_has_installed_layout_import_smoke_test(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
@@ -57,6 +58,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('docs/TESTING.md', build_script)
         self.assertIn('docs/ROADMAP.md', build_script)
         self.assertIn("python3-cryptography", control)
+        self.assertIn("libsecret-tools", control)
+        self.assertIn("tuxdrive-rclone-password", build_script)
         self.assertIn('find_spec("tuxdrive.migration")', build_script)
 
     def test_all_provider_icons_are_packaged(self):

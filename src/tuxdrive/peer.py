@@ -24,6 +24,7 @@ from .config import cache_home, config_home
 from .audit import AuditTimeline
 from .models import OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from .tor import ONION_V3, TorError, TorServiceManager, enforce_transport_policy
+from .security import confined_path, confined_parent, ensure_private_directory, prepare_private_file, verify_signed_json
 
 
 class PeerError(RuntimeError):
@@ -52,8 +53,10 @@ class PeerInvitation:
     transport: str = "direct"
     onion_address: str = ""
     onion_client_auth: str = ""
+    allowed_transports: tuple[str, ...] = ()
 
     def encode(self) -> str:
+        allowed_transports = self.allowed_transports or (self.transport,)
         return json.dumps(
             {
                 "tuxdrive_peer": 5,
@@ -72,6 +75,7 @@ class PeerInvitation:
                 "transport": self.transport,
                 "onion_address": self.onion_address,
                 "onion_client_auth": self.onion_client_auth,
+                "allowed_transports": list(allowed_transports),
             },
             indent=2,
         )
@@ -98,8 +102,13 @@ class PeerInvitation:
                 transport=str(data.get("transport") or "direct"),
                 onion_address=str(data.get("onion_address") or "").lower(),
                 onion_client_auth=str(data.get("onion_client_auth") or ""),
+                allowed_transports=tuple(data.get("allowed_transports") or (str(data.get("transport") or "direct"),)),
             )
             if invitation.transport not in {"direct", "relay", "tor"}:
+                raise ValueError
+            if not invitation.allowed_transports or any(item not in {"direct", "relay", "tor"} for item in invitation.allowed_transports):
+                raise ValueError
+            if invitation.transport not in invitation.allowed_transports:
                 raise ValueError
             if invitation.transport == "tor" and not ONION_V3.fullmatch(invitation.onion_address):
                 raise ValueError
@@ -348,6 +357,7 @@ class PeerManager:
         self._shares: dict[str, PeerShare] = {}
         self._logs: dict[str, object] = {}
         self._tunnels: dict[str, subprocess.Popen[str]] = {}
+        self._nat_ports: dict[str, int] = {}
         self._lock = threading.RLock()
         self.audit = audit or AuditTimeline()
         self.discovery = LanDiscovery(self._discovery_invitations)
@@ -382,6 +392,12 @@ class PeerManager:
                 raise PeerError("Choose the authorized device that will receive this Onion invitation")
             credential = self.tor.issue_client_credential(share, peer)
             client_auth = credential.private_key
+        permit_relay = bool(
+            transport == "direct" and not share.no_relay
+            and share.transport_policy is PeerTransportPolicy.AUTO
+            and share.relay_host and share.relay_public_port
+        )
+        allowed_transports = ("tor",) if transport == "tor" else (("direct", "relay") if permit_relay else ("direct",))
         return PeerInvitation(
             share.name,
             share.onion_address if transport == "tor" else validate_host(share.advertised_host),
@@ -389,22 +405,28 @@ class PeerManager:
             self.host_public_key(share),
             share.id,
             share.lease_minutes,
-            share.relay_host,
-            share.relay_public_port,
+            share.relay_host if permit_relay else "",
+            share.relay_public_port if permit_relay else 0,
             role,
             transport=transport,
             onion_address=share.onion_address,
             onion_client_auth=client_auth,
+            allowed_transports=allowed_transports,
         ).encode()
 
     def one_time_invitation(self, share: PeerShare, drop: OneTimeDrop) -> str:
         if not drop.active:
             raise PeerError("This one-time drop has expired or was already consumed")
+        transport = "tor" if share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.onion_enabled else "direct"
+        enforce_transport_policy(share, transport)
+        permit_relay = bool(transport == "direct" and not share.no_relay and share.transport_policy is PeerTransportPolicy.AUTO and share.relay_host and share.relay_public_port)
         return PeerInvitation(
-            drop.name, validate_host(share.advertised_host), validate_port(share.port),
+            drop.name, share.onion_address if transport == "tor" else validate_host(share.advertised_host), validate_port(share.port),
             self.host_public_key(share), share.id, share.lease_minutes,
-            share.relay_host, share.relay_public_port, PeerRole.SEND_ONLY,
+            share.relay_host if permit_relay else "", share.relay_public_port if permit_relay else 0, PeerRole.SEND_ONLY,
             drop.inbox_path, drop.id, drop.expires_at,
+            transport=transport, onion_address=share.onion_address,
+            allowed_transports=("tor",) if transport == "tor" else (("direct", "relay") if permit_relay else ("direct",)),
         ).encode()
 
     def start(self, share: PeerShare) -> None:
@@ -435,11 +457,12 @@ class PeerManager:
         authorized.write_text("\n".join(allowed_keys) + "\n", encoding="utf-8")
         os.chmod(authorized, 0o600)
         log_path = cache_home() / "tuxdrive" / "logs" / f"peer-{share.id}.log"
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        ensure_private_directory(log_path.parent)
         with self._lock:
             current = self._servers.get(share.id)
             if current and current.poll() is None:
                 return
+            prepare_private_file(log_path)
             log = log_path.open("a", encoding="utf-8")
             try:
                 read_only = bool(active_peers) and all(
@@ -448,7 +471,10 @@ class PeerManager:
                 ) and not any(item.active for item in share.one_time_drops)
                 command = [
                     rclone, "serve", "sftp", f":local:{folder}",
-                    "--addr", f":{port}",
+                    "--addr", f"127.0.0.1:{port}" if (
+                        share.transport_policy is PeerTransportPolicy.TOR_ONLY
+                        or share.no_public_ip_discovery
+                    ) else f":{port}",
                     "--authorized-keys", str(authorized),
                     "--key", str(host_private),
                     "--dir-cache-time", "10s",
@@ -484,7 +510,8 @@ class PeerManager:
                 self.audit.record("policy", "Onion Service unavailable", "blocked", peer=share.name, detail=str(exc))
                 raise
         if share.nat_traversal and not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
-            self._open_nat_mapping(port)
+            if self._open_nat_mapping(port):
+                self._nat_ports[share.id] = port
         if share.relay_host and share.relay_user and share.relay_public_port and not share.no_relay:
             try:
                 self._start_relay(share)
@@ -496,6 +523,9 @@ class PeerManager:
 
     def stop(self, share_id: str) -> bool:
         self.tor.stop(share_id)
+        mapped_port = self._nat_ports.pop(share_id, None)
+        if mapped_port:
+            self._close_nat_mapping(mapped_port)
         tunnel = self._tunnels.pop(share_id, None)
         if tunnel and tunnel.poll() is None:
             try:
@@ -537,6 +567,15 @@ class PeerManager:
             return result.returncode == 0
         return False
 
+    @staticmethod
+    def _close_nat_mapping(port: int) -> None:
+        upnpc = shutil.which("upnpc")
+        if upnpc:
+            subprocess.run([upnpc, "-d", str(port), "TCP"], capture_output=True, text=True, timeout=20, check=False)
+        natpmp = shutil.which("natpmpc")
+        if natpmp:
+            subprocess.run([natpmp, "-a", str(port), str(port), "tcp", "0"], capture_output=True, text=True, timeout=20, check=False)
+
     def _start_relay(self, share: PeerShare) -> None:
         ssh = shutil.which("ssh")
         if not ssh:
@@ -544,6 +583,8 @@ class PeerManager:
         identity, _public = self.ensure_identity()
         command = [
             ssh, "-N", "-T", "-o", "ExitOnForwardFailure=yes",
+            "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes",
+            "-o", "ConnectTimeout=15",
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
             "-p", str(validate_port(share.relay_ssh_port)), "-i", str(identity),
             "-R", f"{validate_port(share.relay_public_port)}:127.0.0.1:{validate_port(share.port)}",
@@ -597,7 +638,7 @@ class PeerManager:
             self._configure_onion_connection(remote, invitation, key_file, rclone)
             return
         endpoints = [(invitation.host, invitation.port)]
-        if invitation.relay_host and invitation.relay_port:
+        if "relay" in invitation.allowed_transports and invitation.relay_host and invitation.relay_port:
             endpoints.append((invitation.relay_host, invitation.relay_port))
         result = None
         for host, port in endpoints:
@@ -632,8 +673,8 @@ class PeerManager:
             torsocks_config = self.tor.start_client(remote)
         except TorError as exc:
             raise PeerError(str(exc)) from exc
-        wrapper = self.root / "tor" / "ssh-over-tor"
-        wrapper.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        wrapper = self.root / "tor" / f"ssh-over-tor-{self.tor._safe_name(remote)}"
+        ensure_private_directory(wrapper.parent)
         wrapper.write_text(f"#!/bin/sh\nexec torsocks -f {shlex.quote(str(torsocks_config))} ssh \"$@\"\n", encoding="utf-8")
         os.chmod(wrapper, 0o700)
         result = subprocess.run([
@@ -692,7 +733,10 @@ class PeerManager:
                     instruction = transaction / "instruction.json"
                     if instruction.is_file():
                         try:
-                            changed_path = self._apply_delta_transaction(Path(share.local_path).expanduser(), transaction)
+                            changed_path = self._apply_delta_transaction(
+                                Path(share.local_path).expanduser(), transaction,
+                                [item.public_key for item in share.authorized_peers if item.enabled],
+                            )
                             self.audit.record("peer", "block delta applied", "success", path=changed_path, detail=share.name)
                         except (OSError, ValueError, KeyError, json.JSONDecodeError):
                             continue
@@ -716,42 +760,74 @@ class PeerManager:
                     marker.touch(mode=0o600, exist_ok=True)
                     drop.consumed = True
                     self.audit.record("peer", "one-time drop consumed", "success", peer=drop.name, path=drop.inbox_path, detail=uploaded.name)
+                    threading.Thread(
+                        target=self._restart_after_drop, args=(share,), daemon=True,
+                        name=f"peer-drop-revoke-{share.id[:8]}",
+                    ).start()
+                    return
             time.sleep(1.0)
 
+    def _restart_after_drop(self, share: PeerShare) -> None:
+        """Rebuild authorized keys and terminate sessions after a drop is consumed."""
+        self.stop(share.id)
+        if share.enabled:
+            try:
+                self.start(share)
+            except PeerError as exc:
+                self.audit.record("peer", "one-time drop key revocation", "blocked", peer=share.name, detail=str(exc))
+
     @staticmethod
-    def _apply_delta_transaction(root: Path, transaction: Path) -> str:
+    def _apply_delta_transaction(root: Path, transaction: Path, authorized_keys: list[str]) -> str:
         value = json.loads((transaction / "instruction.json").read_text(encoding="utf-8"))
+        signer = normalize_public_key(str(value.pop("signer")))
+        signature = str(value.pop("signature"))
+        normalized_allowed = {normalize_public_key(item) for item in authorized_keys}
+        if signer not in normalized_allowed:
+            raise ValueError("delta signer is not authorized")
+        verify_signed_json(value, signer, signature)
         relative = Path(str(value["path"]))
-        if relative.is_absolute() or ".." in relative.parts or not relative.parts:
-            raise ValueError("unsafe delta path")
-        target = root / relative
-        target.parent.mkdir(parents=True, exist_ok=True)
-        temporary = target.with_name(f".{target.name}.tuxdrive-delta")
-        if target.is_file():
-            shutil.copy2(target, temporary)
-        else:
-            temporary.touch()
-        try:
-            with temporary.open("r+b") as handle:
-                for block in value.get("blocks", []):
-                    offset, size = int(block["offset"]), int(block["size"])
-                    content = (transaction / "blocks" / f"{offset:016x}.block").read_bytes()
-                    if len(content) != size or hashlib.blake2b(content, digest_size=32).hexdigest() != block["digest"]:
-                        raise ValueError("delta block integrity failure")
-                    handle.seek(offset)
-                    handle.write(content)
-                handle.truncate(int(value["size"]))
-            digest = hashlib.sha256()
-            with temporary.open("rb") as handle:
-                while chunk := handle.read(4 * 1024 * 1024):
-                    digest.update(chunk)
-            if digest.hexdigest() != value["sha256"]:
-                raise ValueError("delta file integrity failure")
-            os.replace(temporary, target)
-            shutil.rmtree(transaction)
-            return relative.as_posix()
-        finally:
-            temporary.unlink(missing_ok=True)
+        expected_size = int(value["size"])
+        blocks_value = value.get("blocks", [])
+        if expected_size < 0 or expected_size > 16 * 1024 * 1024 * 1024 or len(blocks_value) > 65536:
+            raise ValueError("delta transaction exceeds safety limits")
+        with confined_parent(root, relative, create_parents=True) as (parent_fd, target_name, normalized):
+            temporary_name = f".{target_name}.{uuid4().hex}.tuxdrive-delta"
+            temporary_fd = os.open(temporary_name, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=parent_fd)
+            try:
+                try:
+                    source_fd = os.open(target_name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
+                except FileNotFoundError:
+                    source_fd = None
+                if source_fd is not None:
+                    with os.fdopen(source_fd, "rb") as source, os.fdopen(os.dup(temporary_fd), "wb") as output:
+                        shutil.copyfileobj(source, output)
+                with os.fdopen(os.dup(temporary_fd), "r+b") as handle:
+                    for block in blocks_value:
+                        offset, size = int(block["offset"]), int(block["size"])
+                        if offset < 0 or size < 0 or size > 64 * 1024 * 1024 or offset + size > expected_size:
+                            raise ValueError("invalid delta block bounds")
+                        content = (transaction / "blocks" / f"{offset:016x}.block").read_bytes()
+                        if len(content) != size or hashlib.blake2b(content, digest_size=32).hexdigest() != block["digest"]:
+                            raise ValueError("delta block integrity failure")
+                        handle.seek(offset)
+                        handle.write(content)
+                    handle.truncate(expected_size)
+                digest = hashlib.sha256()
+                os.lseek(temporary_fd, 0, os.SEEK_SET)
+                with os.fdopen(os.dup(temporary_fd), "rb") as handle:
+                    while chunk := handle.read(4 * 1024 * 1024):
+                        digest.update(chunk)
+                if digest.hexdigest() != value["sha256"]:
+                    raise ValueError("delta file integrity failure")
+                os.replace(temporary_name, target_name, src_dir_fd=parent_fd, dst_dir_fd=parent_fd)
+                shutil.rmtree(transaction)
+                return normalized.as_posix()
+            finally:
+                os.close(temporary_fd)
+                try:
+                    os.unlink(temporary_name, dir_fd=parent_fd)
+                except FileNotFoundError:
+                    pass
 
     def _close_log(self, share_id: str) -> None:
         with self._lock:

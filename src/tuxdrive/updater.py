@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import shutil
 import subprocess
@@ -8,10 +9,16 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
+from datetime import datetime, timezone
+
+from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
 MANIFEST_URL = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/update/latest.json"
 ALLOWED_PREFIX = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/"
+UPDATE_PUBLIC_KEY = "xyquZ4Mp8SGBpNiNjEcjhkeaPxBkAOwiBT0AhdhjolU="
+MAX_UPDATE_SIZE = 1024 * 1024 * 1024
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +27,7 @@ class UpdateRelease:
     url: str
     sha256: str
     notes: str = ""
+    expires_at: str = ""
 
 
 def version_key(value: str) -> tuple[int, ...]:
@@ -30,30 +38,45 @@ def version_key(value: str) -> tuple[int, ...]:
 
 
 class UpdateManager:
-    def __init__(self, current_version: str, cache_dir: Path | None = None) -> None:
+    def __init__(self, current_version: str, cache_dir: Path | None = None, public_key: str = UPDATE_PUBLIC_KEY) -> None:
         self.current_version = current_version
         self.cache_dir = cache_dir or Path.home() / ".cache" / "tuxdrive" / "updates"
+        self.public_key = public_key
 
     @staticmethod
-    def parse_manifest(payload: bytes) -> UpdateRelease:
+    def parse_manifest(payload: bytes, public_key: str = UPDATE_PUBLIC_KEY) -> UpdateRelease:
         data = json.loads(payload.decode("utf-8"))
+        signed = {key: data[key] for key in ("version", "url", "sha256", "notes", "expires_at")}
+        canonical = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        try:
+            key = Ed25519PublicKey.from_public_bytes(base64.b64decode(public_key, validate=True))
+            key.verify(base64.b64decode(str(data["signature"]), validate=True), canonical)
+        except (KeyError, ValueError, InvalidSignature) as exc:
+            raise ValueError("The update manifest signature is missing or invalid") from exc
         release = UpdateRelease(
             version=str(data["version"]),
             url=str(data["url"]),
             sha256=str(data["sha256"]).lower(),
             notes=str(data.get("notes", "")),
+            expires_at=str(data["expires_at"]),
         )
         version_key(release.version)
         if not release.url.startswith(ALLOWED_PREFIX) or not release.url.endswith(".deb"):
             raise ValueError("The update package URL is not an approved TuxDrive repository URL")
         if len(release.sha256) != 64 or any(c not in "0123456789abcdef" for c in release.sha256):
             raise ValueError("The update manifest has an invalid SHA-256 checksum")
+        try:
+            expiry = datetime.fromisoformat(release.expires_at)
+        except ValueError as exc:
+            raise ValueError("The update manifest has an invalid expiry") from exc
+        if expiry.tzinfo is None or expiry <= datetime.now(timezone.utc):
+            raise ValueError("The signed update manifest has expired")
         return release
 
     def check(self) -> UpdateRelease | None:
         request = urllib.request.Request(MANIFEST_URL, headers={"User-Agent": "TuxDrive-Updater"})
         with urllib.request.urlopen(request, timeout=20) as response:
-            release = self.parse_manifest(response.read(128 * 1024))
+            release = self.parse_manifest(response.read(128 * 1024), self.public_key)
         return release if version_key(release.version) > version_key(self.current_version) else None
 
     def download(
@@ -73,6 +96,9 @@ class UpdateManager:
                 digest.update(chunk)
                 output.write(chunk)
                 received += len(chunk)
+                if received > MAX_UPDATE_SIZE:
+                    temporary.unlink(missing_ok=True)
+                    raise ValueError("The update package exceeded its 1 GiB safety limit")
                 if progress:
                     progress(received, total)
         if digest.hexdigest() != release.sha256:
@@ -88,6 +114,13 @@ class UpdateManager:
         apt_get = shutil.which("apt-get") or "/usr/bin/apt-get"
         if not pkexec:
             raise RuntimeError("The PolicyKit update helper (pkexec) is unavailable")
+        metadata = subprocess.run(
+            ["/usr/bin/dpkg-deb", "--show", "--showformat=${Package} ${Version}", str(package.resolve())],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False,
+        )
+        expected_version = package.name.removeprefix("tuxdrive_").removesuffix("_all.deb")
+        if metadata.returncode or metadata.stdout.strip() != f"tuxdrive {expected_version}":
+            raise RuntimeError("The verified update is not the expected TuxDrive Debian package")
         result = subprocess.run(
             [pkexec, apt_get, "install", "-y", str(package.resolve())],
             text=True,

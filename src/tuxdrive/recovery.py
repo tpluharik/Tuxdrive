@@ -13,6 +13,7 @@ from typing import Iterable
 from .callbacks import FileChange
 from .config import data_home
 from .models import SyncJob
+from .security import confined_path, install_confined, unlink_confined, copy_from_confined
 
 
 class SafetyError(RuntimeError):
@@ -60,14 +61,14 @@ class RecoveryManager:
 
     def archive_local(self, job: SyncJob, relative: str, reason: str) -> RecoveryEntry | None:
         relative = self._safe_relative(relative)
-        source = job.local / relative
+        source = confined_path(job.local, relative)
         if not source.is_file():
             return None
         timestamp = datetime.now(timezone.utc)
         token = timestamp.strftime("%Y%m%dT%H%M%S.%fZ")
         destination = self.root / job.id / token / relative
         destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        shutil.copy2(source, destination)
+        copy_from_confined(job.local, relative, destination)
         entry = RecoveryEntry(
             job.id,
             relative,
@@ -112,12 +113,11 @@ class RecoveryManager:
         if not source.is_file() or entry.job_id != job.id:
             raise SafetyError("The selected recovery version is no longer available")
         relative = self._safe_relative(entry.relative_path)
-        destination = job.local / relative
+        destination = confined_path(job.local, relative, create_parents=True)
         if destination.is_file():
             self.archive_local(job, entry.relative_path, "replaced during manual restore")
-        destination.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, destination)
-        return destination
+        installed = install_confined(source, job.local, relative)
+        return installed
 
     @staticmethod
     def _safe_relative(value: str) -> str:
@@ -244,16 +244,21 @@ class IntegrityAuditor:
             relative = issue.path.strip("/")
             if not relative or ".." in Path(relative).parts or issue.symbol == "!":
                 continue
-            local = job.local / relative
+            try:
+                local = confined_path(job.local, relative, create_parents=winner == "remote")
+            except ValueError:
+                continue
             remote = f"{job.remote_spec.rstrip('/')}/{relative}"
             if winner == "remote":
                 if issue.symbol == "+":
                     self.recovery.archive_local(job, relative, "removed by integrity repair")
-                    local.unlink(missing_ok=True)
+                    unlink_confined(job.local, relative)
                 else:
                     self.recovery.archive_local(job, relative, "replaced by integrity repair")
-                    local.parent.mkdir(parents=True, exist_ok=True)
-                    self._run([self.rclone_path, "copyto", remote, str(local)])
+                    with tempfile.TemporaryDirectory(prefix="tuxdrive-repair-") as temporary:
+                        staged = Path(temporary) / "incoming"
+                        self._run([self.rclone_path, "copyto", remote, str(staged)])
+                        install_confined(staged, job.local, relative)
             else:
                 if issue.symbol == "-":
                     # Retain a local recovery copy before removing the remote-only file.

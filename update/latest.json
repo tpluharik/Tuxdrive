@@ -1,6 +1,8 @@
 {
-  "version": "0.15.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.0_all.deb",
-  "sha256": "160d95d7e1ba9202931c30850d35afeac634182f5af882bfe36a97cce6d95638",
-  "notes": "Adds Tor v3 Onion peer workspaces, per-device client authorization and revocation, fail-closed transport/privacy policies, and bridge/pluggable-transport profiles."
+  "version": "0.15.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.1_all.deb",
+  "sha256": "e0247890c5e4933e261a412eb95ea5396dff6c67311bbfc382d0bf445b0da02d",
+  "notes": "Security hardening: signed updates, encrypted credentials, confined paths, hardened Tor and delta transfers",
+  "expires_at": "2026-11-08T16:16:44.784766+00:00",
+  "signature": "E4bJNkalRJhfc6MrLM/4XllD3vnyAo9CZK14u+y6eSe76Z9nmEvfuqH2U4GKlmJXmXpWKkDaxkPmTlLsDUxGAA=="
 }

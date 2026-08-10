@@ -8,6 +8,8 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
+🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
+
 ## Community and development
 
 TuxDrive is publicly readable. Direct repository writes remain restricted to maintainers, while everyone can participate through [Issues](https://github.com/tpluharik/Tuxdrive/issues), comments, forks, and pull requests.
@@ -17,7 +19,18 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.15.0 targets Ubuntu 26.04. The installer resolves desktop and optional privacy-transport dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.15.1 targets Ubuntu 26.04. It is a security-hardening release: update metadata is Ed25519-signed, Tor-only services bind only to loopback, peer delta transactions are signed, local writes reject symlink escapes, update/download sizes are bounded, rclone 1.75.0 or newer is required, and private runtime files receive explicit permissions.
+
+### 0.15.1 security hardening
+
+- Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
+- Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
+- Incremental download, recovery, integrity repair, offline hydration, and block-delta paths reject symlinked parents/targets outside their configured root.
+- Block-delta instructions are signed with the sender's Ed25519 peer identity and accepted only from an authorized device; unavailable delta signing safely falls back to a complete file transfer.
+- Encrypted profile backups use a stronger scrypt work factor and 14-character minimum for new backups while retaining read compatibility with version-1 profiles.
+- OAuth/configuration subprocesses disable same-user process inspection on Linux; logs/configuration files use explicit private permissions; the launcher runs Python in isolated mode.
+- Provider tokens/passwords are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to the application JSON. Independently encrypted advanced-user rclone configurations are preserved.
+- The remaining documented limitation is mixed-role generic SFTP enforcement: TuxDrive enforces directional roles, but hostile non-TuxDrive clients require the planned per-device server authorization layer.
 
 ### 0.15.0 private Onion workspaces
 
@@ -48,7 +61,7 @@ Version 0.12.0 adds verified block-level delta transactions for direct peer upda
 
 Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invitations; expiring upload-only encrypted file drops; a private local peer/sync audit timeline; a provider capability matrix that adapts mode and sharing controls; and a consolidated health dashboard showing running, mounted, callback, last-run and failure state. Existing peer invitations/configurations migrate to read/write behavior.
 
-### 0.15.0 encrypted profiles and device migration
+### 0.14.0 encrypted profiles and device migration
 
 TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new device, connect the same provider and restore from Settings. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its password never leaves the device. OAuth tokens and peer private keys remain excluded unless the user explicitly enables sensitive full-device migration.
 
@@ -58,10 +71,10 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - encrypted TuxDrive Profile backup stored in a linked OAuth account, with discovery after provider connection and password-protected restore on a new device
 - configuration-only backup by default; OAuth credentials and peer private keys require an explicit sensitive-migration opt-in
 - provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
-- Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected in rclone's private configuration and the remote is tested before it is shown as connected
+- Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected by rclone configuration encryption backed by GNOME Secret Service and the remote is tested before it is shown as connected
 - Proton Drive opens a dedicated in-app 2FA challenge only when Proton requests a fresh code
 - direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
-- block-level peer delta transactions with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and full-file fallback on the first transfer
+- block-level peer delta transactions signed by the sender identity, with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and safe full-file fallback
 - automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
 - multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and one authenticated endpoint per folder
 - per-device read/write, read-only, send-only and receive-only peer roles carried by protocol-v4 invitations and enforced by TuxDrive transfer direction
@@ -109,7 +122,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - account, folder, and tray icons with connected, synchronizing, paused, and error states
 - original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
 - provider-specific icons for all eight services in account selection and connected-account views
-- in-app repository update checks with HTTPS download, SHA-256 verification, and PolicyKit-authorized installation
+- in-app repository update checks with an Ed25519-signed expiring manifest, HTTPS download, SHA-256 verification, Debian identity check, and PolicyKit-authorized installation
 - update window with visible checking, download percentage, verification, installation, success, and failure states
 - one-click display-name editing that does not rename local or cloud folders
 - streaming preflight diagnostics, stale FUSE mount recovery, detailed mount logs, and a 45-second connection window
@@ -120,7 +133,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.15.0_all.deb
+sudo apt install ./tuxdrive_0.15.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -138,9 +151,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.15.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.15.1_all.deb`.
 
-The current suite contains 89 automated tests covering encrypted profile round trips, password/tamper rejection, opt-in credential migration, peer-role direction, expiring file-drop invitations, private audit persistence, adaptive provider capabilities, block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, synchronization, streaming, provider setup, Proton 2FA, LAN/QR/NAT/relay behavior, Nautilus integration, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains more than 100 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -148,7 +161,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 ## Update from the app
 
-Open **Settings → Check for updates**. TuxDrive reads `update/latest.json` from this repository, compares versions, downloads the listed `.deb` over HTTPS, verifies its SHA-256 checksum, and asks Ubuntu PolicyKit for authorization before installing it. No cloud credentials are involved. Restart TuxDrive after a successful update.
+Open **Settings → Check for updates**. TuxDrive verifies the manifest's Ed25519 signature and expiry, compares versions, downloads the listed `.deb` over HTTPS, verifies its SHA-256 digest and Debian package identity, and only then asks Ubuntu PolicyKit for authorization. No cloud credentials are involved. Restart TuxDrive after a successful update.
 
 ## Crash and startup diagnostics
 

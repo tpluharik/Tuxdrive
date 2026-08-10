@@ -14,7 +14,9 @@ PYTHONPATH=src python3 -m compileall -q src
 
 The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Ubuntu installations receive the same runtime through the `.deb` package's `python3-cryptography` dependency.
 
-The TuxDrive 0.15.0 suite contains **96 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
+CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
+
+The TuxDrive 0.15.1 suite contains **100 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -32,7 +34,8 @@ The TuxDrive 0.15.0 suite contains **96 automated tests**. Tests use temporary d
 | `test_peer.py` | 13 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
-| `test_rclone.py` | 17 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, exact Google parent-listing fallback, safe Google/Dropbox online URLs without public-link creation, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
+| `test_security.py` | 2 | Symlink/parent escape rejection plus Ed25519 signed-transaction tamper detection. |
+| `test_rclone.py` | 18 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
 | `test_updater.py` | 6 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation and removal of corrupt partial packages. |
 
 ## Important safety invariants covered
@@ -71,10 +74,20 @@ The TuxDrive 0.15.0 suite contains **96 automated tests**. Tests use temporary d
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.15.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.15.0_all.deb
-sha256sum dist/tuxdrive_0.15.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.15.1_all.deb
+dpkg-deb --contents dist/tuxdrive_0.15.1_all.deb
+sha256sum dist/tuxdrive_0.15.1_all.deb
 ```
+
+Release manifests must be signed outside Git with the Ed25519 release key:
+
+```bash
+python3 scripts/sign-update.py --version 0.15.1 \
+  --package dist/tuxdrive_0.15.1_all.deb \
+  --private-key /secure/offline/TuxDrive-update-signing-private.pem
+```
+
+Only the public key belongs in source control. Store the private key offline or in a protected release secret, restrict release environments, and rotate the embedded public key through a separately reviewed application release if compromise is suspected.
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
 
