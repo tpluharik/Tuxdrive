@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.17.0 suite contains **114 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files.
+The TuxDrive 0.17.0 suite contains **115 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files.
 
 ## Test groups
 
@@ -38,7 +38,7 @@ The TuxDrive 0.17.0 suite contains **114 automated tests**. Tests use temporary 
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_security.py` | 2 | Symlink/parent escape rejection plus Ed25519 signed-transaction tamper detection. |
 | `test_rclone.py` | 18 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
-| `test_updater.py` | 6 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation and removal of corrupt partial packages. |
+| `test_updater.py` | 7 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation, corrupt-partial cleanup, and a release gate requiring the signed manifest to match the current `.deb` version/name/digest. |
 
 ## Important safety invariants covered
 
@@ -100,7 +100,7 @@ python3 scripts/sign-update.py --version 0.17.0 \
 
 Only the public key belongs in source control. Store the private key offline or in a protected release secret, restrict release environments, and rotate the embedded public key through a separately reviewed application release if compromise is suspected.
 
-After signing, parse the manifest with `UpdateManager.parse_manifest`, compare its SHA-256 with the package, inspect the embedded Debian package/version, and confirm the expiry is in the future. A successful unit suite alone is not a release authorization.
+After signing, parse the manifest with `UpdateManager.parse_manifest`, compare its SHA-256 with the package, inspect the embedded Debian package/version, and confirm the expiry is in the future. `test_repository_manifest_matches_current_debian_release` now blocks CI if a version/package is committed without its matching signed manifest. A successful unit suite alone is not a release authorization.
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
 

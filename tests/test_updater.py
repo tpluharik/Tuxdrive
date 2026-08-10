@@ -51,6 +51,17 @@ class UpdateManagerTests(unittest.TestCase):
     def test_version_comparison_is_numeric(self):
         self.assertGreater(version_key("0.10.0"), version_key("0.9.9"))
 
+    def test_repository_manifest_matches_current_debian_release(self):
+        """Block releases whose signed update channel was left behind."""
+        from tuxdrive import __version__
+
+        package = Path(f"dist/tuxdrive_{__version__}_all.deb")
+        self.assertTrue(package.is_file(), "build/sign the current Debian package before release")
+        release = UpdateManager.parse_manifest(Path("update/latest.json").read_bytes())
+        self.assertEqual(release.version, __version__)
+        self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
+        self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
+
     def test_manifest_rejects_untrusted_download(self):
         payload = self.release_payload().replace(b"raw.githubusercontent.com/tpluharik/Tuxdrive", b"example.com")
         with self.assertRaises(ValueError):

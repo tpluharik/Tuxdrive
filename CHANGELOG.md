@@ -12,6 +12,7 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 - Kept DOCX, XLSX, PDF and unproven binary formats in safe lease/version/review mode.
 - Added the GTK collaborative editor under peer sharing, seven focused tests and updated documentation.
 - Removed the experimental macOS package workflow and sources; release CI now produces the adaptive `.deb` and SBOM only.
+- Published the signed 0.17.0 in-app update manifest and added a CI regression test that rejects manifest/package/version drift.
 
 ## 0.16.0 — adaptive Debian/GNOME packaging
 

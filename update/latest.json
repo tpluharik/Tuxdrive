@@ -1,8 +1,8 @@
 {
-  "version": "0.15.2",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.2_all.deb",
-  "sha256": "5b0bc5084ec07a08203fbd68ac2a97d99bab312a57ce02b4f6ecebb6818c6211",
-  "notes": "Dependency advisory response: cryptography 50 security floor and CI repair",
-  "expires_at": "2026-11-08T16:26:24.469993+00:00",
-  "signature": "iuLUU1IrAsxO0/JLYhpoNE3DnVgOjjk2Jo0e3mWcY3KucWfKn1hi4d+KzKfEya9/1OAZfGJLmd+2t7CYqxdHBA=="
+  "version": "0.17.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.17.0_all.deb",
+  "sha256": "96fb5edf9b88fd8eca7ec4cf89e624b25d0bec8fadf597a45433ad0b0c4cb595",
+  "notes": "Local-first collaborative editing, structured ODT/ODS checkpoints, encrypted presence, and Debian-only adaptive packaging",
+  "expires_at": "2027-02-06T18:05:20.569198+00:00",
+  "signature": "FdbCErKqU+EVP9V2kpdOqwnMRdmD2Xifl4QRRHZFXWmKWPMYrnsrmmdmeV8qa0SbFspbd0kO1QjIOnXUS2o/CA=="
 }

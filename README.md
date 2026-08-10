@@ -165,7 +165,7 @@ Open **Peer-to-peer sharing → Collaborate → Open collaborative editor**. Mar
 
 ODT paragraphs/styles/comments/tracked-change markers and ODS cells/formulas are imported structurally. Deterministic export retains the original `content.xml` inside the snapshot for recovery and warns where unsupported inline features may flatten. DOCX, XLSX, PDF and unknown binary formats deliberately remain under edit leases, local versions and review rather than making an unsafe real-time claim.
 
-The current suite contains 114 automated tests, including deterministic multi-peer convergence, separate state/checkpoints, authenticated presence, review events, recoverable ODT export and ODS formulas. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 115 automated tests, including deterministic multi-peer convergence, separate state/checkpoints, authenticated presence, review events, recoverable ODT export, ODS formulas, and a release gate that prevents the signed in-app update manifest from lagging behind the current `.deb`. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
