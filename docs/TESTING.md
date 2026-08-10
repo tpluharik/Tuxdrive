@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.13.0 suite contains **83 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.13.1 suite contains **83 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -61,9 +61,9 @@ The TuxDrive 0.13.0 suite contains **83 automated tests**. Tests use temporary d
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.13.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.13.0_all.deb
-sha256sum dist/tuxdrive_0.13.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.13.1_all.deb
+dpkg-deb --contents dist/tuxdrive_0.13.1_all.deb
+sha256sum dist/tuxdrive_0.13.1_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -87,6 +87,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Audit timeline | Produce success, failure, policy, peer, delta and drop events; verify local-only storage, permissions, compaction, path sensitivity and malformed-line recovery. |
 | Capability UI | Change among all providers and confirm unsupported modes/actions disappear or disable while server-specific caveats remain visible. |
 | Sync health | Verify running, mounted, paused, callback, last-run and error states against actual job behavior, then reopen to refresh the snapshot. |
+| Main-window identity | Connect one account for every provider and confirm account/job rows retain the provider icon in idle, syncing, paused and error states. Test the compact enable switch with Ubuntu default, dark and high-DPI themes. |
 | Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
 | LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
 | Nautilus integration | Test enabled and disabled settings after restarting Nautilus; confirm menus/badges disappear when disabled and streaming items expose pin/free-space actions when enabled. |

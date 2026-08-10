@@ -1,6 +1,6 @@
 {
-  "version": "0.13.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.13.0_all.deb",
-  "sha256": "41185a6b6d53aba54e626a580da69e36e3713f0808647f00360810ab1b5dc657",
-  "notes": "Adds directional peer roles, a private peer/sync audit timeline, expiring one-time encrypted file drops, an adaptive provider capability matrix, and a consolidated sync-health dashboard."
+  "version": "0.13.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.13.1_all.deb",
+  "sha256": "77289f132844c29e4539405a21dbfe0c143ddb0678f91747dadc6e923a1ed40a",
+  "notes": "Uses each job's cloud-provider icon throughout the main window and keeps job enable switches at a compact, theme-independent size."
 }

@@ -17,7 +17,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.13.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.13.1 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ### 0.9.0 release highlights
 
@@ -40,6 +40,10 @@ Version 0.12.0 adds verified block-level delta transactions for direct peer upda
 ### 0.13.0 controlled collaboration and operational visibility
 
 Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invitations; expiring upload-only encrypted file drops; a private local peer/sync audit timeline; a provider capability matrix that adapts mode and sharing controls; and a consolidated health dashboard showing running, mounted, callback, last-run and failure state. Existing peer invitations/configurations migrate to read/write behavior.
+
+### 0.13.1 provider identity and compact controls
+
+Folder and account rows now retain the icon of their actual provider—Google Drive, OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, peer or encrypted vault—while status remains visible in text and Nautilus emblems. Job enable switches use an application-scoped compact GTK style so high-DPI/theme minimum sizes no longer stretch them to the height of the row.
 
 ## What works
 
@@ -107,7 +111,7 @@ Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invit
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.13.0_all.deb
+sudo apt install ./tuxdrive_0.13.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -125,7 +129,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.13.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.13.1_all.deb`.
 
 The current suite contains 83 automated tests covering peer-role direction, expiring file-drop invitations, private audit persistence, adaptive provider capabilities, block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, synchronization, streaming, provider setup, Proton 2FA, LAN/QR/NAT/relay behavior, Nautilus integration, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 

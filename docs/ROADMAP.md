@@ -5,9 +5,9 @@ This document records completed safety work and proposes future work. Suggestion
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
 
-## Current baseline: 0.13.0
+## Current baseline: 0.13.1
 
-Version 0.13.0 is the current documented and packaged release. It adds directional peer roles, a private audit timeline, expiring inbox-scoped file drops, a conservative provider capability matrix with adaptive controls, and a consolidated sync-health view. Ranks 1–18 are implemented; continued work focuses on secure migration, a headless/cross-platform peer agent, richer health metrics and hard enforcement for mixed-role generic SFTP clients.
+Version 0.13.1 is the current documented and packaged release. It retains the provider's identity icon in every account/job state and constrains the job enable switch to a compact theme-independent size. Version 0.13.0 delivered directional peer roles, a private audit timeline, expiring inbox-scoped file drops, an adaptive capability matrix and consolidated sync health. Ranks 1–18 are implemented; continued work focuses on secure migration, a headless/cross-platform peer agent, richer health metrics and hard enforcement for mixed-role generic SFTP clients.
 
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on encrypted device migration, a headless peer agent, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing and isolated per-role service endpoints. No planned item should be read as available until its status changes to a shipped version.
 

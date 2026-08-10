@@ -1868,13 +1868,13 @@ class MainWindow(Gtk.ApplicationWindow):
                 job for job in self.controller.config.jobs if job.account_remote == account.remote
             ]
             if any(job.id in self.controller.engine.running_jobs for job in account_jobs):
-                account_state, account_icon = "Synchronizing", "tuxdrive-sync"
+                account_state = "Synchronizing"
             elif any(job.last_error for job in account_jobs):
-                account_state, account_icon = "Needs attention", "tuxdrive-error"
+                account_state = "Needs attention"
             else:
                 account_state = "Connected"
-                account_icon = account.provider.icon_name
-            icon = Gtk.Image.new_from_icon_name(account_icon, Gtk.IconSize.DND)
+            icon = Gtk.Image.new_from_icon_name(account.provider.icon_name, Gtk.IconSize.DND)
+            icon.set_tooltip_text(f"{account.provider.label} · {account_state}")
             text = Gtk.Label(xalign=0)
             text.set_markup(
                 f"<b>{GLib.markup_escape_text(account.display_name)}</b>\n"
@@ -1917,20 +1917,14 @@ class MainWindow(Gtk.ApplicationWindow):
     def _job_row(self, job: SyncJob) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
         mounted = job.id in self.controller.engine.mounted_jobs
+        account = next((item for item in self.controller.config.accounts if item.remote == job.account_remote), None)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_border_width(14)
         top = Gtk.Box(spacing=12)
-        if job.id in self.controller.engine.running_jobs:
-            icon_name = "tuxdrive-sync"
-        elif job.last_error:
-            icon_name = "tuxdrive-error"
-        elif not job.enabled:
-            icon_name = "media-playback-pause-symbolic"
-        elif job.initialized or mounted:
-            icon_name = "tuxdrive"
-        else:
-            icon_name = "folder-remote-symbolic"
-        top.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND), False, False, 0)
+        icon_name = account.provider.icon_name if account else "folder-remote-symbolic"
+        job_icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND)
+        job_icon.set_tooltip_text(account.provider.label if account else "Cloud storage")
+        top.pack_start(job_icon, False, False, 0)
         labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(xalign=0)
         title.set_markup(f"<b>{GLib.markup_escape_text(job.name)}</b>")
@@ -1950,6 +1944,12 @@ class MainWindow(Gtk.ApplicationWindow):
         labels.pack_start(status, False, False, 0)
         top.pack_start(labels, True, True, 0)
         toggle = Gtk.Switch(active=job.enabled)
+        toggle.set_name("tuxdrive-job-switch")
+        toggle.set_size_request(46, 26)
+        toggle.set_hexpand(False)
+        toggle.set_vexpand(False)
+        toggle.set_valign(Gtk.Align.CENTER)
+        toggle.set_halign(Gtk.Align.END)
         toggle.set_tooltip_text("Enable automatic synchronization")
         toggle.connect("notify::active", self._toggle_job, job)
         top.pack_end(toggle, False, False, 0)
@@ -1987,7 +1987,6 @@ class MainWindow(Gtk.ApplicationWindow):
         rename_button.connect("clicked", self._rename_job, job)
         share_button = Gtk.Button(label="Share link")
         share_button.connect("clicked", self._share_job, job)
-        account = next((item for item in self.controller.config.accounts if item.remote == job.account_remote), None)
         share_button.set_sensitive(bool(account and capabilities_for(account.provider).share_links))
         if not share_button.get_sensitive():
             share_button.set_tooltip_text("This provider does not expose a safe share-link capability")
@@ -3152,6 +3151,8 @@ class TuxDriveApplication(Gtk.Application):
         provider.load_from_data(
             b".sidebar { background: @theme_base_color; border-right: 1px solid alpha(@theme_fg_color, .12); }"
             b"list row { border-bottom: 1px solid alpha(@theme_fg_color, .10); }"
+            b"switch#tuxdrive-job-switch { min-width: 42px; min-height: 22px; padding: 0; margin: 0; }"
+            b"switch#tuxdrive-job-switch slider { min-width: 18px; min-height: 18px; margin: 2px; padding: 0; }"
         )
         Gtk.StyleContext.add_provider_for_screen(
             Gdk.Screen.get_default(),

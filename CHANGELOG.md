@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.13.1 — provider icons and compact job controls
+
+- Job and account rows now consistently use the connected provider's icon instead of substituting the TuxDrive/state icon.
+- Synchronization state remains available in row text, tooltips, the health dashboard and Nautilus state emblems.
+- Added an application-scoped GTK switch style, explicit size request and centered alignment to prevent oversized enable controls across Ubuntu themes and display scaling.
+- Updated visual documentation, packaging metadata, regression checks and the verified update manifest.
+
 ## 0.13.0 — controlled peer access and operational visibility
 
 - Added read/write, read-only, send-only and receive-only roles to named peer devices and protocol-v4 invitations, with migration-safe read/write defaults.

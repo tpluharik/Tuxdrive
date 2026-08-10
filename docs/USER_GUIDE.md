@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.13.0 on Ubuntu 26.04: installation, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.13.1 on Ubuntu 26.04: installation, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.13.0 on Ubuntu 26.04: installation, adaptive cloud-
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.13.0_all.deb
+sudo apt install ./tuxdrive_0.13.1_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -24,9 +24,9 @@ The main window contains:
 2. **Cloud accounts** — connection and aggregate activity state.
 3. **Account menu** — open online, reconnect OAuth, or remove an unused account.
 4. **Add folder** — create a synchronized or streaming job.
-5. **Job status icon** — connected, synchronizing, paused, or error.
+5. **Provider icon and status** — each account/job keeps its Google Drive, OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, peer, or vault icon; the adjacent text and Nautilus emblem communicate synchronization state.
 6. **Job controls** — sync/mount, stop, open, share, edit, log, and remove.
-7. **Enable switch** — pause or resume an individual job.
+7. **Compact enable switch** — pause or resume an individual job without enlarging the row under high-DPI GTK themes.
 8. **Live activity log** — current application and transfer activity.
 9. **Settings** — startup, notification, and minimized-start preferences.
 
@@ -447,7 +447,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.13.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.13.1_all.deb`.
 
 ## 13. Data safety
 
