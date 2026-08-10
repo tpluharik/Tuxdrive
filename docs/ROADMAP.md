@@ -5,11 +5,11 @@ This document records completed safety work and proposes future work. Suggestion
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
 
-## Current baseline: 0.8.0
+## Current baseline: 0.9.0
 
-Version 0.8.0 is the current documented and packaged release. It supports eight cloud providers, selective two-way and one-way synchronization, files-on-demand streaming, direct encrypted peer folders, saved-file callbacks, recovery history, mass-change protection, integrity repair, conflict review, and encrypted cloud vaults. Ranks 1–5 below are implemented; their remaining work is hardening and richer presentation rather than first delivery.
+Version 0.9.0 is the current documented and packaged release. It adds multi-device authorization, cooperative edit leases, LAN discovery, and offline QR pairing to the 0.8.0 cloud, streaming, peer, recovery, integrity, and encrypted-vault baseline. Ranks 1–7 and 9 are implemented; remaining work includes hardening and richer desktop integration.
 
-The next recommended development milestone is **0.9.0 — private collaboration and desktop integration**, beginning with multi-peer authorization, safe edit leases, per-file offline controls, and Nautilus status/actions. No planned item should be read as available until its status changes to a shipped version.
+The next recommended development milestone is **1.0.0 — desktop integration and operational hardening**, beginning with block-level peer transfer, per-file offline controls, Nautilus status/actions, and network/battery policies. No planned item should be read as available until its status changes to a shipped version.
 
 ## Prioritization principles
 
@@ -29,10 +29,10 @@ The next recommended development milestone is **0.9.0 — private collaboration 
 | 3 | Integrity audit and repair | Both | Completed 0.8.0 | Non-destructive comparison lists mismatches and repairs selected paths from an explicitly chosen authoritative side. |
 | 4 | Conflict review center | Both | Completed 0.8.0 | Filters content conflicts into a review surface with selected-path local or cloud/peer resolution. Rich previews remain future enhancement. |
 | 5 | Encrypted cloud vaults | Cloud | Completed 0.8.0 | Client-side content and name encryption layers a dedicated crypt path over a connected cloud account with password-loss warnings. |
-| 6 | Multi-peer shared folders | Peer | High | Extend one-host/one-guest sharing to several explicitly authorized devices, with individual keys, readable device names and immediate per-device revocation. |
-| 7 | Safe file leases and edit locks | Peer | High | Publish short authenticated edit leases so two users are warned before editing the same office/design file. Locks must expire safely and never permanently block access. |
+| 6 | Multi-peer shared folders | Peer | Completed 0.9.0 | Each share accepts multiple named public keys with enable/disable controls and immediate revocation on restart. |
+| 7 | Safe file leases and edit locks | Peer | Completed 0.9.0 | Peer jobs publish short cooperative leases and pause transfers when another device holds an unexpired lease. These are advisory application locks, not OS-enforced locks. |
 | 8 | Block-level delta transfer | Peer | High | Transfer only changed blocks of large files and reuse blocks already present locally. This is especially valuable for VM images, mail archives, media projects and unreliable links. |
-| 9 | LAN discovery and QR pairing | Peer | High | Discover TuxDrive peers by local multicast, then confirm the fingerprint/QR code on both screens. Keep manual IP and public-key exchange available for isolated networks. |
+| 9 | LAN discovery and QR pairing | Peer | Completed 0.9.0 | Optional local multicast lists shares; users verify pinned fingerprints and exchange invitations through locally generated/scanned QR images. Manual pairing remains available. |
 | 10 | NAT traversal with optional no-storage relay | Peer | High | Try UPnP/NAT-PMP and direct hole punching; offer an optional end-to-end encrypted transport relay when direct reachability fails. A relay may forward ciphertext but must never receive decryption keys or retain file content. |
 | 11 | Per-file offline availability controls | Cloud | High | Add **Online only**, **Available offline** and **Always keep locally** actions for streamed files/folders, including cache usage and hydration progress. |
 | 12 | Nautilus integration | Cloud | High | Show sync/hydration/error badges and context actions for sync now, keep offline, free local space, copy cloud link, exclude and inspect history. |
@@ -53,7 +53,7 @@ Ranks 1–5 shipped in 0.8.0. Continue hardening them with live-provider, large-
 
 ### Private collaboration
 
-Target 0.9.x should begin ranks 6–10 and 14–16: multi-device authorization, edit leases, delta transfer, pairing, connectivity and granular peer permissions. Manual direct mode must continue working without a discovery or relay service.
+Version 0.9.0 delivered ranks 6, 7 and 9. Next, prioritize block-level delta transfer, connectivity options, granular roles, audit timelines, and multi-peer stress testing. Manual direct mode must continue working without discovery or relay services.
 
 ### Desktop parity and operations
 

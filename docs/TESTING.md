@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.8.0 suite contains **56 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.9.0 suite contains **61 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -20,9 +20,9 @@ The TuxDrive 0.8.0 suite contains **56 automated tests**. Tests use temporary di
 | `test_bootstrap.py` | 4 | Transfer-engine selection, rejection of incompatible rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_config.py` | 2 | Round-trip persistence of accounts, jobs and peer shares; private `0600` permissions; invalid configuration quarantine. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
-| `test_engine.py` | 15 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
+| `test_engine.py` | 16 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
 | `test_packaging.py` | 6 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion and OpenSSH key-generator dependency. |
-| `test_peer.py` | 5 | Invitation parsing, host-key pinning, public-key validation, unprivileged port enforcement, authorized-peer-only SFTP serving and private-identity client authentication. |
+| `test_peer.py` | 9 | Invitation v1/v2 parsing, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_rclone.py` | 14 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
 | `test_updater.py` | 6 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation and removal of corrupt partial packages. |
@@ -42,14 +42,18 @@ The TuxDrive 0.8.0 suite contains **56 automated tests**. Tests use temporary di
 - Incoming replacement/deletion recovery retains restorable content before changing the local file.
 - Ransomware-like extensions and configured mass-change thresholds pause propagation.
 - Integrity audit differences are parsed into explicit, selectable repair findings.
+- A legacy one-key share migrates into the named-device model without losing access.
+- Multiple enabled public keys are written to the authenticated endpoint; revoked/disabled keys are omitted.
+- A foreign unexpired edit lease blocks acquisition instead of allowing an overwrite.
+- LAN/QR invitations preserve the pinned host key and lease duration; protocol-v1 invitations remain importable.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.8.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.8.0_all.deb
-sha256sum dist/tuxdrive_0.8.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.9.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.9.0_all.deb
+sha256sum dist/tuxdrive_0.9.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -65,7 +69,9 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Credential providers | MEGA, Nextcloud app password, Proton password plus conditional 2FA challenge. |
 | Selective sync | Nested folder selection, multiple selected roots, rename/move, deletion and conflict copy. |
 | Streaming | Empty mount, file hydration on open, write-back, disconnect, unexpected mount loss and restart. |
-| Peer sharing | Two clean machines on one LAN, wrong guest key rejection, wrong host key rejection, address edit, restart recovery and a large-file transfer. |
+| Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
+| Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
+| LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
 | Internet peer sharing | Routed/VPN connection or explicit port forwarding; verify that no intermediary storage is used. |
 | Update | No-update result, valid update, corrupted package rejection and cancelled PolicyKit prompt. |
 | Diagnostics | Startup log, application log, per-job log and crash-log paths contain useful information without secrets. |

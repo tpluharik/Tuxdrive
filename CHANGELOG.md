@@ -2,6 +2,17 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.9.0 — multi-peer collaboration, leases, and local pairing
+
+- Added multiple named authorized devices per shared folder, including enable/disable controls and immediate public-key revocation when the share is saved.
+- Migrates legacy single-key peer shares automatically.
+- Added cooperative expiring edit leases for peer jobs; active foreign leases pause incremental transfers and complete reconciliations.
+- Added optional LAN-only multicast discovery without a central directory or intermediary storage.
+- Added pinned host-key fingerprint presentation and explicit verification guidance for discovered peers.
+- Added offline QR invitation generation and QR-image import using local `qrencode` and `zbarimg` tools installed by the Debian package.
+- Added invitation protocol v2 with share identity and lease duration while retaining v1 import compatibility.
+- Expanded automated coverage to 61 tests.
+
 ## 0.8.0 — recovery, integrity, and encrypted vaults
 
 - Added per-job local version history and recycle recovery with configurable retention and one-click restore.

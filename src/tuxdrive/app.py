@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import tempfile
 import uuid
 import webbrowser
 from datetime import datetime, timezone
@@ -49,10 +50,10 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import (
-    Account, AppConfig, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode,
+    Account, AppConfig, AuthorizedPeer, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode,
     paths_overlap, safe_streaming_overlap,
 )
-from .peer import PeerError, PeerInvitation, PeerManager, normalize_public_key, validate_host, validate_port
+from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .updater import UpdateManager, UpdateRelease
@@ -1051,6 +1052,7 @@ class PeerSharingDialog(Gtk.Dialog):
         notebook = Gtk.Notebook()
         notebook.append_page(self._host_page(), Gtk.Label(label="Share a folder"))
         notebook.append_page(self._client_page(), Gtk.Label(label="Connect to a peer"))
+        notebook.append_page(self._lan_page(), Gtk.Label(label="Find on LAN"))
         area.pack_start(notebook, True, True, 0)
         self.status = Gtk.Label(xalign=0)
         self.status.set_line_wrap(True)
@@ -1083,15 +1085,46 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_host.set_placeholder_text("Public/LAN IP or DNS name")
         self.share_port = Gtk.SpinButton.new_with_range(1024, 65535, 1)
         self.share_port.set_value(2022)
+        self.peer_store = Gtk.ListStore(bool, str, str)
+        peer_view = Gtk.TreeView(model=self.peer_store)
+        enabled = Gtk.CellRendererToggle()
+        enabled.connect("toggled", lambda _cell, path: self.peer_store.set_value(self.peer_store.get_iter(path), 0, not self.peer_store[path][0]))
+        peer_view.append_column(Gtk.TreeViewColumn("Enabled", enabled, active=0))
+        peer_view.append_column(Gtk.TreeViewColumn("Device", Gtk.CellRendererText(), text=1))
+        peer_view.append_column(Gtk.TreeViewColumn("Public key", Gtk.CellRendererText(), text=2))
+        self.peer_view = peer_view
+        peer_scroll = Gtk.ScrolledWindow()
+        peer_scroll.set_min_content_height(115)
+        peer_scroll.add(peer_view)
+        self.peer_name = Gtk.Entry()
+        self.peer_name.set_placeholder_text("Device name")
         self.share_peer_key = Gtk.Entry()
         self.share_peer_key.set_placeholder_text("Peer’s ssh-ed25519 public key")
+        peer_add = Gtk.Button(label="Authorize device")
+        peer_add.connect("clicked", self._add_authorized_peer)
+        peer_remove = Gtk.Button(label="Revoke selected")
+        peer_remove.connect("clicked", self._remove_authorized_peer)
+        peer_editor = Gtk.Box(spacing=6)
+        peer_editor.pack_start(self.peer_name, False, False, 0)
+        peer_editor.pack_start(self.share_peer_key, True, True, 0)
+        peer_editor.pack_start(peer_add, False, False, 0)
+        peer_editor.pack_start(peer_remove, False, False, 0)
+        peer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        peer_box.pack_start(peer_scroll, True, True, 0)
+        peer_box.pack_start(peer_editor, False, False, 0)
+        self.share_discovery = Gtk.CheckButton(label="Advertise this share on the local network")
+        self.share_discovery.set_active(True)
+        self.share_lease_minutes = Gtk.SpinButton.new_with_range(1, 1440, 1)
+        self.share_lease_minutes.set_value(10)
         grid = Gtk.Grid(column_spacing=12, row_spacing=9)
         self._row(grid, 0, "Saved share", self.share_choice)
         self._row(grid, 1, "Display name", self.share_name)
         self._row(grid, 2, "Local folder", self.share_folder)
         self._row(grid, 3, "Address peers use", self.share_host)
         self._row(grid, 4, "TCP port", self.share_port)
-        self._row(grid, 5, "Allowed peer public key", self.share_peer_key)
+        self._row(grid, 5, "Authorized peer devices", peer_box)
+        self._row(grid, 6, "LAN discovery", self.share_discovery)
+        self._row(grid, 7, "Edit lease duration (minutes)", self.share_lease_minutes)
         page.pack_start(grid, False, False, 0)
         note = Gtk.Label(
             label=(
@@ -1109,9 +1142,11 @@ class PeerSharingDialog(Gtk.Dialog):
         stop.connect("clicked", self._stop_share)
         invitation = Gtk.Button(label="Copy invitation")
         invitation.connect("clicked", self._copy_invitation)
+        qr = Gtk.Button(label="Show invitation QR")
+        qr.connect("clicked", self._show_invitation_qr)
         delete = Gtk.Button(label="Delete")
         delete.connect("clicked", self._delete_share)
-        for button in (save, stop, invitation, delete):
+        for button in (save, stop, invitation, qr, delete):
             buttons.pack_start(button, False, False, 0)
         page.pack_start(buttons, False, False, 0)
         return page
@@ -1128,6 +1163,8 @@ class PeerSharingDialog(Gtk.Dialog):
         self.connection_host_key = Gtk.Entry()
         self.connection_host_key.set_placeholder_text("Host key from the invitation")
         self.connection_folder = self._folder_button("Local synchronized folder")
+        self.connection_lease = Gtk.SpinButton.new_with_range(1, 1440, 1)
+        self.connection_lease.set_value(10)
         grid = Gtk.Grid(column_spacing=12, row_spacing=9)
         self._row(grid, 0, "Saved connection", self.connection_choice)
         self._row(grid, 1, "Display name", self.connection_name)
@@ -1135,6 +1172,7 @@ class PeerSharingDialog(Gtk.Dialog):
         self._row(grid, 3, "Peer TCP port", self.connection_port)
         self._row(grid, 4, "Peer host public key", self.connection_host_key)
         self._row(grid, 5, "My local folder", self.connection_folder)
+        self._row(grid, 6, "Cooperative edit lease (minutes)", self.connection_lease)
         page.pack_start(grid, False, False, 0)
         invitation_label = Gtk.Label(label="Paste invitation from the sharing computer", xalign=0)
         page.pack_start(invitation_label, False, False, 0)
@@ -1147,12 +1185,37 @@ class PeerSharingDialog(Gtk.Dialog):
         buttons = Gtk.Box(spacing=8)
         load = Gtk.Button(label="Load invitation")
         load.connect("clicked", self._load_invitation)
+        scan = Gtk.Button(label="Import QR image")
+        scan.connect("clicked", self._scan_qr)
         connect = Gtk.Button(label="Save and connect")
         connect.connect("clicked", self._save_connection)
         delete = Gtk.Button(label="Remove connection")
         delete.connect("clicked", self._delete_connection)
-        for button in (load, connect, delete):
+        for button in (load, scan, connect, delete):
             buttons.pack_start(button, False, False, 0)
+        page.pack_start(buttons, False, False, 0)
+        return page
+
+    def _lan_page(self) -> Gtk.Widget:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        page.set_border_width(12)
+        label = Gtk.Label(label="Discovery is local-network only. Verify the displayed host-key fingerprint with the sharing user before connecting.", xalign=0)
+        label.set_line_wrap(True)
+        page.pack_start(label, False, False, 0)
+        self.discovery_store = Gtk.ListStore(str, str, str, object)
+        self.discovery_view = Gtk.TreeView(model=self.discovery_store)
+        for index, title in enumerate(("Share", "Address", "Host-key fingerprint")):
+            self.discovery_view.append_column(Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=index))
+        scroll = Gtk.ScrolledWindow()
+        scroll.add(self.discovery_view)
+        page.pack_start(scroll, True, True, 0)
+        buttons = Gtk.Box(spacing=8)
+        find = Gtk.Button(label="Scan local network")
+        find.connect("clicked", self._discover_lan)
+        use = Gtk.Button(label="Use selected peer")
+        use.connect("clicked", self._use_discovered)
+        buttons.pack_start(find, False, False, 0)
+        buttons.pack_start(use, False, False, 0)
         page.pack_start(buttons, False, False, 0)
         return page
 
@@ -1173,7 +1236,15 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_name.set_text(share.name if share else "Peer shared folder")
         self.share_host.set_text(share.advertised_host if share else "")
         self.share_port.set_value(share.port if share else 2022)
-        self.share_peer_key.set_text(share.allowed_peer_key if share else "")
+        self.peer_store.clear()
+        if share:
+            peers = share.authorized_peers or ([AuthorizedPeer("Legacy peer", share.allowed_peer_key)] if share.allowed_peer_key else [])
+            for peer in peers:
+                self.peer_store.append([peer.enabled, peer.name, peer.public_key])
+        self.peer_name.set_text("")
+        self.share_peer_key.set_text("")
+        self.share_discovery.set_active(share.lan_discovery if share else True)
+        self.share_lease_minutes.set_value(share.lease_minutes if share else 10)
         if share and Path(share.local_path).is_dir():
             self.share_folder.set_filename(str(Path(share.local_path).expanduser()))
 
@@ -1186,7 +1257,9 @@ class PeerSharingDialog(Gtk.Dialog):
             name = self.share_name.get_text().strip() or "Peer shared folder"
             advertised_host = validate_host(self.share_host.get_text())
             port = validate_port(self.share_port.get_value_as_int())
-            allowed_peer_key = normalize_public_key(self.share_peer_key.get_text())
+            authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0]) for row in self.peer_store]
+            if not any(item.enabled for item in authorized_peers):
+                raise PeerError("Authorize at least one enabled peer device")
             if share is None:
                 share = PeerShare("", folder, "")
                 self.controller.config.peer_shares.append(share)
@@ -1196,7 +1269,10 @@ class PeerSharingDialog(Gtk.Dialog):
             share.local_path = folder
             share.advertised_host = advertised_host
             share.port = port
-            share.allowed_peer_key = allowed_peer_key
+            share.allowed_peer_key = ""
+            share.authorized_peers = authorized_peers
+            share.lan_discovery = self.share_discovery.get_active()
+            share.lease_minutes = self.share_lease_minutes.get_value_as_int()
             share.enabled = True
             self.controller.peers.start(share)
             share.last_status = f"Listening on TCP {share.port}"
@@ -1205,6 +1281,26 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status("Direct encrypted share is running.", False)
         except Exception as exc:
             self._set_status(str(exc), True)
+
+    def _add_authorized_peer(self, _button: Gtk.Button) -> None:
+        try:
+            name = self.peer_name.get_text().strip() or f"Peer {len(self.peer_store) + 1}"
+            key = normalize_public_key(self.share_peer_key.get_text())
+            if any(row[2] == key for row in self.peer_store):
+                raise PeerError("That public key is already authorized")
+            self.peer_store.append([True, name, key])
+            self.peer_name.set_text("")
+            self.share_peer_key.set_text("")
+            self._set_status(f"{name} added. Save and start to apply authorization.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _remove_authorized_peer(self, _button: Gtk.Button) -> None:
+        model, selected = self.peer_view.get_selection().get_selected()
+        if selected:
+            name = model[selected][1]
+            model.remove(selected)
+            self._set_status(f"{name} revoked. Save and start to apply immediately.", False)
 
     def _stop_share(self, _button: Gtk.Button) -> None:
         share = self._selected_share()
@@ -1226,6 +1322,34 @@ class PeerSharingDialog(Gtk.Dialog):
             value = self.controller.peers.invitation(share)
             Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(value, -1)
             self._set_status("Invitation copied. Send it through a trusted channel.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _show_invitation_qr(self, _button: Gtk.Button) -> None:
+        share = self._selected_share()
+        if not share:
+            self._set_status("Save the shared folder first.", True)
+            return
+        try:
+            value = self.controller.peers.invitation(share)
+            encoder = shutil.which("qrencode")
+            if not encoder:
+                raise PeerError("QR support is missing; reinstall the complete TuxDrive package")
+            with tempfile.NamedTemporaryFile(suffix=".png") as image_file:
+                result = subprocess.run([encoder, "-o", image_file.name, "-s", "7", "--", value], capture_output=True, text=True, timeout=20, check=False)
+                if result.returncode:
+                    raise PeerError((result.stderr or "Could not generate QR code").strip())
+                dialog = Gtk.Dialog(title=f"Pair with {share.name}", transient_for=self, modal=True)
+                dialog.get_content_area().set_border_width(18)
+                dialog.get_content_area().pack_start(Gtk.Image.new_from_file(image_file.name), True, True, 0)
+                fingerprint = key_fingerprint(self.controller.peers.host_public_key(share))
+                detail = Gtk.Label(label=f"Verify this host-key fingerprint on both computers:\n{fingerprint}")
+                detail.set_selectable(True)
+                dialog.get_content_area().pack_start(detail, False, False, 8)
+                dialog.add_button("Close", Gtk.ResponseType.CLOSE)
+                dialog.show_all()
+                dialog.run()
+                dialog.destroy()
         except Exception as exc:
             self._set_status(str(exc), True)
 
@@ -1263,19 +1387,66 @@ class PeerSharingDialog(Gtk.Dialog):
             job = next((item for item in self.controller.config.jobs if item.account_remote == account.remote), None)
             if job and job.local.is_dir():
                 self.connection_folder.set_filename(str(job.local))
+            if job:
+                self.connection_lease.set_value(job.peer_lease_minutes)
 
     def _load_invitation(self, _button: Gtk.Button) -> None:
         buffer = self.invitation_text.get_buffer()
         value = buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)
         try:
             invitation = PeerInvitation.decode(value)
-            self.connection_name.set_text(invitation.name)
-            self.connection_host.set_text(invitation.host)
-            self.connection_port.set_value(invitation.port)
-            self.connection_host_key.set_text(invitation.host_key)
-            self._set_status("Invitation loaded. Select your local folder and connect.", False)
+            self._apply_invitation(invitation)
         except Exception as exc:
             self._set_status(str(exc), True)
+
+    def _scan_qr(self, _button: Gtk.Button) -> None:
+        chooser = Gtk.FileChooserDialog(title="Select invitation QR image", transient_for=self, action=Gtk.FileChooserAction.OPEN)
+        chooser.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        chooser.add_button("Open", Gtk.ResponseType.OK)
+        if chooser.run() == Gtk.ResponseType.OK:
+            try:
+                decoder = shutil.which("zbarimg")
+                if not decoder:
+                    raise PeerError("QR scanning support is missing; reinstall the complete TuxDrive package")
+                result = subprocess.run([decoder, "--quiet", "--raw", chooser.get_filename()], capture_output=True, text=True, timeout=20, check=False)
+                if result.returncode or not result.stdout.strip():
+                    raise PeerError("No valid TuxDrive invitation QR code was found")
+                invitation = PeerInvitation.decode(result.stdout.strip())
+                self._apply_invitation(invitation)
+            except Exception as exc:
+                self._set_status(str(exc), True)
+        chooser.destroy()
+
+    def _apply_invitation(self, invitation: PeerInvitation) -> None:
+        self.connection_name.set_text(invitation.name)
+        self.connection_host.set_text(invitation.host)
+        self.connection_port.set_value(invitation.port)
+        self.connection_host_key.set_text(invitation.host_key)
+        self.connection_lease.set_value(invitation.lease_minutes)
+        self._set_status(f"Invitation loaded. Verify fingerprint {key_fingerprint(invitation.host_key)} before connecting.", False)
+
+    def _discover_lan(self, _button: Gtk.Button) -> None:
+        self.discovery_store.clear()
+        self._set_status("Scanning the local network for TuxDrive shares…", False)
+        _run_thread(self.controller.peers.discover, self._discovery_loaded, 4.0)
+
+    def _discovery_loaded(self, peers: list[DiscoveredPeer] | None, error: Exception | None) -> bool:
+        if error:
+            self._set_status(f"LAN discovery failed: {error}", True)
+            return False
+        for peer in peers or []:
+            self.discovery_store.append([peer.name, f"{peer.host}:{peer.port}", peer.fingerprint, peer])
+        self._set_status(f"Found {len(peers or [])} local TuxDrive share(s). Verify the fingerprint before use.", False)
+        return False
+
+    def _use_discovered(self, _button: Gtk.Button) -> None:
+        model, selected = self.discovery_view.get_selection().get_selected()
+        if not selected:
+            self._set_status("Select a discovered share first.", True)
+            return
+        peer = model[selected][3]
+        self._apply_invitation(peer.invitation())
+        self._set_status(f"Loaded {peer.name}. Confirm fingerprint {peer.fingerprint}, select a local folder, then connect.", False)
 
     def _save_connection(self, _button: Gtk.Button) -> None:
         try:
@@ -1287,6 +1458,7 @@ class PeerSharingDialog(Gtk.Dialog):
                 validate_host(self.connection_host.get_text()),
                 validate_port(self.connection_port.get_value_as_int()),
                 normalize_public_key(self.connection_host_key.get_text()),
+                lease_minutes=self.connection_lease.get_value_as_int(),
             )
             account = self._selected_connection()
             remote = account.remote if account else "peer-" + datetime.now().strftime("%H%M%S")
@@ -1313,6 +1485,8 @@ class PeerSharingDialog(Gtk.Dialog):
                     name=invitation.name,
                     cloud_location_name="Direct encrypted peer",
                     mode=SyncMode.TWO_WAY,
+                    peer_leases=True,
+                    peer_lease_minutes=invitation.lease_minutes,
                 )
                 self.controller.config.jobs.append(job)
             else:
@@ -1321,6 +1495,8 @@ class PeerSharingDialog(Gtk.Dialog):
                     job.local_path = folder
                     job.name = invitation.name
                     job.initialized = False
+                    job.peer_leases = True
+                    job.peer_lease_minutes = invitation.lease_minutes
             account.display_name = invitation.name
             account.peer_host = invitation.host
             account.peer_port = invitation.port
@@ -2400,6 +2576,7 @@ class TuxDriveApplication(Gtk.Application):
                     except Exception as exc:
                         share.last_status = f"Could not start: {exc}"
                         LOGGER.error("Peer share %s failed: %s", share.id, exc)
+            self.peers.start_discovery()
             self.save()
             for job in self.config.jobs:
                 if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:

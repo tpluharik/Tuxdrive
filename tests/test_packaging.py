@@ -48,6 +48,8 @@ class PackagingTests(unittest.TestCase):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
         self.assertIn("openssh-client", control)
+        self.assertIn("qrencode", control)
+        self.assertIn("zbar-tools", control)
         self.assertIn('find_spec("tuxdrive.peer")', build_script)
         self.assertIn('docs/TESTING.md', build_script)
         self.assertIn('docs/ROADMAP.md', build_script)

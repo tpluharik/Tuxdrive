@@ -18,6 +18,7 @@ from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transie
 from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
+from .peer import PeerError, PeerLeaseManager
 
 
 @dataclass(slots=True)
@@ -32,6 +33,7 @@ class JobResult:
     incremental: bool = False
     mount_lost: bool = False
     mass_change_blocked: bool = False
+    lease_blocked: bool = False
 
 
 class SyncEngine:
@@ -43,6 +45,7 @@ class SyncEngine:
         self._intentional_unmounts: set[str] = set()
         self._protected_patterns: dict[str, tuple[str, ...]] = {}
         self.recovery = RecoveryManager()
+        self.leases = PeerLeaseManager(rclone_path)
         self._lock = threading.RLock()
 
     @property
@@ -106,6 +109,7 @@ class SyncEngine:
             *self._protected_patterns.get(job.id, ()),
             *TRANSIENT_PATTERNS,
             "/.tuxdrive-versions/**",
+            "/.tuxdrive-leases/**",
         ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
@@ -481,6 +485,14 @@ class SyncEngine:
                     if ".." in Path(change.path).parts:
                         raise RuntimeError(f"unsafe incremental path: {change.path}")
                     local_path = job.local / change.path
+                    lease = None
+                    if job.peer_leases and change.side == "local":
+                        try:
+                            lease = self.leases.acquire(job, change.path)
+                            log.write(f"Edit lease acquired: {change.path}\n")
+                        except PeerError as exc:
+                            callback(JobResult(job.id, False, f"Edit lease blocked synchronization: {exc}", log_path, incremental=True, lease_blocked=True))
+                            return False
                     if change.side == "remote" and change.deleted:
                         try:
                             local_path.unlink(missing_ok=True)
@@ -492,20 +504,29 @@ class SyncEngine:
                         local_path.parent.mkdir(parents=True, exist_ok=True)
                     command = self._incremental_command(job, change)
                     if command is None:
+                        if lease:
+                            self.leases.release(job, lease)
                         continue
                     if change.side == "local" and not change.deleted and not local_path.exists():
                         log.write(f"Skipped vanished temporary save: {change.path}\n")
+                        if lease:
+                            self.leases.release(job, lease)
                         continue
-                    process = subprocess.Popen(
-                        command,
-                        stdout=log,
-                        stderr=subprocess.STDOUT,
-                        text=True,
-                        start_new_session=True,
-                    )
-                    with self._lock:
-                        self._processes[job.id] = process
-                    code = process.wait()
+                    try:
+                        process = subprocess.Popen(
+                            command,
+                            stdout=log,
+                            stderr=subprocess.STDOUT,
+                            text=True,
+                            start_new_session=True,
+                        )
+                        with self._lock:
+                            self._processes[job.id] = process
+                        code = process.wait()
+                    finally:
+                        if lease:
+                            self.leases.release(job, lease)
+                            log.write(f"Edit lease released: {change.path}\n")
                     if code:
                         if (
                             change.side == "local"
@@ -539,6 +560,13 @@ class SyncEngine:
             if resolved is None:
                 resolved = install_rclone()
             self.rclone_path = resolved
+            self.leases.rclone_path = resolved
+            if job.peer_leases and not dry_run:
+                active = self.leases.foreign_leases(job)
+                if active:
+                    detail = ", ".join(f"{item.path} ({item.owner})" for item in active[:5])
+                    callback(JobResult(job.id, False, f"Synchronization paused for active peer edit lease(s): {detail}", log_path, lease_blocked=True))
+                    return
             if job.ransomware_protection and job.initialized and not dry_run:
                 preview_path = log_path.with_name(log_path.stem + "-safety-preview.log")
                 preview_command = self.command_for_job(job, dry_run=True)

@@ -1,17 +1,17 @@
 Package: tuxdrive
-Version: 0.8.0
+Version: 0.9.0
 Section: net
 Priority: optional
 Architecture: all
 Maintainer: TuxDrive contributors <tpluharik@users.noreply.github.com>
-Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, fuse3, openssh-client, xdg-utils, ca-certificates
+Depends: python3 (>= 3.10), python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, fuse3, openssh-client, qrencode, zbar-tools, xdg-utils, ca-certificates
 Recommends: libnotify-bin
-Breaks: tuxdrive (<< 0.8.0)
-Replaces: tuxdrive (<< 0.8.0)
+Breaks: tuxdrive (<< 0.9.0)
+Replaces: tuxdrive (<< 0.9.0)
 Homepage: https://github.com/tpluharik/Tuxdrive
 Description: Multi-provider cloud storage client for Ubuntu
  TuxDrive provides browser-based OAuth, automatic transfer-engine bootstrap,
- eight cloud providers, direct encrypted peer sharing, multiple accounts, two-way and
+ eight cloud providers, multi-peer encrypted sharing, LAN/QR pairing, edit leases, multiple accounts, two-way and
  one-way synchronization, selective folders, conflict handling, tray controls,
  notifications, in-app verified updates, and files-on-demand virtual drives
  through rclone and FUSE.

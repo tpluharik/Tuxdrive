@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.8.0 on Ubuntu 26.04: installation, provider authorization, direct encrypted peer sharing, selective synchronization, streaming drives, local version recovery, mass-change protection, integrity repair, conflict review, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.9.0 on Ubuntu 26.04: installation, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.8.0 on Ubuntu 26.04: installation, provider authori
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.8.0_all.deb
+sudo apt install ./tuxdrive_0.9.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -79,26 +79,35 @@ TuxDrive lists these separately:
 
 Changing the cloud location refreshes the visual folder tree. This prevents a remote preconfigured for one Shared Drive from hiding My Drive or other shared locations.
 
-## 3. Direct encrypted peer sharing
+## 3. Direct encrypted multi-peer sharing
 
-Select the network icon in the title bar or open **Settings → Peer-to-peer sharing**. This mode synchronizes a folder directly between two computers running TuxDrive. The sharing computer runs an authenticated SFTP endpoint backed by its selected local folder; the connecting computer uses an ordinary TuxDrive two-way synchronization job. File data travels only between the two endpoints and is not stored by TuxDrive, GitHub, or a cloud provider.
+Select the network icon or open **Settings → Peer-to-peer sharing**. One sharing computer runs an authenticated SFTP endpoint backed by its selected folder. Any number of explicitly authorized TuxDrive devices can connect with their individual keys. File data travels directly between endpoints and is not stored by TuxDrive, GitHub, a discovery directory, or a cloud provider.
 
 ![Direct peer sharing setup](assets/05-peer-sharing.svg)
 
-### Exchange identities
+![Multi-peer authorization, leases, and LAN pairing](assets/08-multi-peer-pairing.svg)
 
-Each installation creates a private Ed25519 identity under its private TuxDrive configuration directory. Select **This computer's public identity key → Copy public key** on both computers and exchange only the public lines through a trusted channel. Never send either file without the `.pub` suffix and never paste a private key into chat or email.
+### Authorize multiple devices
+
+Each installation creates a private Ed25519 identity. On every connecting computer select **This computer's public identity key → Copy public key** and exchange only the public line through a trusted channel. On the host enter a readable device name, paste the key, and select **Authorize device**. Repeat for every collaborator. A device can be disabled temporarily or revoked by selecting it, choosing **Revoke selected**, then **Save and start**.
 
 ### On the computer sharing the folder
 
 1. Open **Share a folder** and select the local folder.
 2. Enter the current LAN/public IP address or DNS name that the other computer will use.
 3. Choose an unprivileged TCP port, such as `22022`.
-4. Paste the connecting computer's public identity key into **Allowed peer public key**.
-5. Select **Save and start**, then **Copy invitation**.
-6. Send the invitation to the other user through a trusted channel.
+4. Add one or more named peer public keys under **Authorized peer devices**.
+5. Choose whether the share is advertised on the LAN and set the edit-lease duration.
+6. Select **Save and start**, then **Copy invitation** or **Show invitation QR**.
+7. Send the invitation to authorized users through a trusted channel.
 
-The IP/DNS address, port, local folder, and allowed public key remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
+The IP/DNS address, port, folder, authorized devices, discovery state, and lease duration remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
+
+### LAN discovery and QR pairing
+
+If **Advertise this share on the local network** is enabled, open **Find on LAN → Scan local network** on another computer. Discovery uses local-scope UDP multicast and advertises only the share name, address, port, public host key, share ID, and lease duration. It does not authenticate a person and does not normally cross routers.
+
+Select a result and compare its complete `SHA256:` host-key fingerprint with the host through a second trusted channel. Only then choose **Use selected peer**. Alternatively, show the invitation QR on the host and choose **Import QR image** on the client. QR encoding and decoding occur locally using tools installed by the Debian package; no online QR service sees the invitation.
 
 ### On the computer connecting to the folder
 
@@ -109,12 +118,21 @@ The IP/DNS address, port, local folder, and allowed public key remain editable. 
 
 The saved peer entry lets you continuously edit a changing IP/DNS address or port. Changes are verified before replacing the working endpoint. The same move, deletion, conflict, callback, exception, and logging rules used by cloud two-way synchronization apply.
 
+### Safe edit leases
+
+Peer jobs enable cooperative edit leases by default. Before an incremental local upload or deletion, TuxDrive writes a short lease record into the hidden `.tuxdrive-leases` area and confirms ownership. It releases the record after transfer. A complete reconciliation pauses while a foreign, unexpired lease exists. Lease metadata is excluded from ordinary synchronization.
+
+Leases reduce accidental simultaneous overwrites between TuxDrive peers, but they are advisory application locks: they do not prevent another program, a non-TuxDrive SFTP client, or a malicious authorized device from writing. A crash may leave a record until expiry; the timeout prevents permanent lockout. Use an application-specific collaboration system for databases or real-time coauthoring.
+
 ### Network and security limitations
 
 - The sharing computer must remain running and TuxDrive must remain active.
 - For internet access behind NAT, forward the selected TCP port to the sharing computer. Carrier-grade NAT may require a VPN with peer-reachable addresses instead.
 - Permit only the selected port in the host firewall. Restrict it to the other peer's source IP where practical.
 - The connecting public key authenticates the guest; the invitation's pinned host public key authenticates the server. If either key changes unexpectedly, stop and verify with the other user instead of bypassing validation.
+- LAN discovery is convenience, not trust. Always compare the complete fingerprint.
+- Revocation prevents future authentication after the share restarts; it cannot retract copies already downloaded by that device.
+- Every authorized device has the same folder-level access in 0.9.0. Per-device roles remain roadmap work.
 - This is direct encrypted transport, not anonymous communication. Endpoint IP addresses are visible to each peer and to intervening network operators.
 - Keep backups of important collaborative data: two-way synchronization intentionally propagates allowed changes and deletions.
 
@@ -322,7 +340,7 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.8.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.9.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
 ### Proton Drive says username and password are required
 
@@ -350,7 +368,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.8.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.9.0_all.deb`.
 
 ## 13. Data safety
 

@@ -17,11 +17,11 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.8.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.9.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
-### 0.8.0 release highlights
+### 0.9.0 release highlights
 
-This release adds the safety and privacy layer around synchronization: recoverable local versions and recycled deletions, pre-transfer mass-change protection, user-directed integrity repair, a conflict review center, and client-side encrypted vaults. Existing 0.7.0 account, peer, folder, and streaming configurations remain readable; the new job safeguards default to enabled. See the [changelog](CHANGELOG.md) for the version-by-version summary and the [roadmap](docs/ROADMAP.md) for shipped versus planned capabilities.
+This release expands private collaboration: each shared folder can authorize multiple named devices with immediate key revocation, peer jobs coordinate expiring edit leases, local shares can be discovered without a directory server, and invitations can be exchanged as offline QR images. Existing single-peer 0.7/0.8 configurations migrate automatically. See the [changelog](CHANGELOG.md) and [roadmap](docs/ROADMAP.md).
 
 ## What works
 
@@ -30,6 +30,10 @@ This release adds the safety and privacy layer around synchronization: recoverab
 - Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected in rclone's private configuration and the remote is tested before it is shown as connected
 - Proton Drive opens a dedicated in-app 2FA challenge only when Proton requests a fresh code
 - direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
+- multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and one authenticated endpoint per folder
+- cooperative expiring edit leases that pause peer synchronization instead of overwriting a file another device is actively editing
+- optional LAN multicast discovery with host-key fingerprint confirmation and no central discovery service
+- offline QR invitation display and QR-image import; no online QR service receives pairing data
 - generated Ed25519 identities, exchanged public keys, host-key pinning, editable IP/DNS address and port, and per-share folder selection
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
@@ -73,7 +77,7 @@ This release adds the safety and privacy layer around synchronization: recoverab
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.8.0_all.deb
+sudo apt install ./tuxdrive_0.9.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -91,13 +95,13 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.8.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.9.0_all.deb`.
 
-The current suite contains 56 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, mass-change protection, integrity auditing, synchronization commands, streaming, provider setup, Proton 2FA, encrypted peer authentication, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for the detailed test catalogue, safety invariants, manual release matrix and current coverage boundaries.
+The current suite contains 61 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming, provider setup, Proton 2FA, multi-peer authorization, edit leases, LAN/QR pairing, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
-The prioritized [feature suggestions and top-20 roadmap](docs/ROADMAP.md) focuses on recoverable cloud synchronization and private peer collaboration. Version 0.8.0 completes its first safety group: local history, mass-change protection, integrity repair, conflict review, and encrypted cloud vaults. Community discussion should use the feature-request issue form so design, security and test requirements remain reviewable.
+The [feature status and top-20 roadmap](docs/ROADMAP.md) records the safety foundation shipped in 0.8.0 and the multi-peer, lease, LAN-discovery, and QR-pairing work shipped in 0.9.0. Community discussion should use the feature-request issue form.
 
 ## Update from the app
 
@@ -148,7 +152,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.8.0 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.9.0 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

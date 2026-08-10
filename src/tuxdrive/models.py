@@ -193,6 +193,19 @@ class Account:
 
 
 @dataclass(slots=True)
+class AuthorizedPeer:
+    name: str
+    public_key: str
+    enabled: bool = True
+    added_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "AuthorizedPeer":
+        allowed = set(cls.__dataclass_fields__)
+        return cls(**{key: item for key, item in value.items() if key in allowed})
+
+
+@dataclass(slots=True)
 class PeerShare:
     name: str
     local_path: str
@@ -202,11 +215,27 @@ class PeerShare:
     id: str = field(default_factory=lambda: uuid4().hex)
     enabled: bool = True
     last_status: str = "Not started"
+    authorized_peers: list[AuthorizedPeer] = field(default_factory=list)
+    lan_discovery: bool = True
+    lease_minutes: int = 10
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "PeerShare":
+        data = dict(value)
+        peers = [AuthorizedPeer.from_dict(item) for item in data.get("authorized_peers", [])]
+        legacy = data.get("allowed_peer_key", "")
+        if legacy and not peers:
+            peers = [AuthorizedPeer("Legacy peer", legacy)]
+        data["authorized_peers"] = peers
         allowed = set(cls.__dataclass_fields__)
-        return cls(**{key: item for key, item in value.items() if key in allowed})
+        return cls(**{key: item for key, item in data.items() if key in allowed})
+
+    @property
+    def active_peer_keys(self) -> list[str]:
+        keys = [item.public_key for item in self.authorized_peers if item.enabled]
+        if self.allowed_peer_key and self.allowed_peer_key not in keys:
+            keys.append(self.allowed_peer_key)
+        return keys
 
 
 @dataclass(slots=True)
@@ -231,6 +260,8 @@ class SyncJob:
     ransomware_protection: bool = True
     mass_change_limit: int = 200
     mass_change_percent: int = 25
+    peer_leases: bool = False
+    peer_lease_minutes: int = 10
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None

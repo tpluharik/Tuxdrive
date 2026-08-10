@@ -36,6 +36,11 @@ class SyncEngineCommandTests(unittest.TestCase):
         job = SyncJob(account_remote="one", local_path="/data/One", initialized=True)
         self.assertNotIn("--resync", self.engine.command_for_job(job))
 
+    def test_peer_lease_metadata_is_never_synchronized_as_user_content(self):
+        job = SyncJob(account_remote="peer-team", local_path="/data/Team", peer_leases=True)
+        command = self.engine.command_for_job(job)
+        self.assertIn("/.tuxdrive-leases/**", command)
+
     def test_google_location_scope_is_used_in_sync_command(self):
         job = SyncJob(
             account_remote="google",
