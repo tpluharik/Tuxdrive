@@ -30,6 +30,17 @@ class PlatformSupportTests(unittest.TestCase):
         self.assertFalse(report["architecture_supported"])
         self.assertFalse(report["required_ready"])
 
+    @patch("tuxdrive.platform_support.platform.mac_ver", return_value=("15.6", ("", "", ""), "arm64"))
+    @patch("tuxdrive.platform_support.platform.system", return_value="Darwin")
+    @patch("tuxdrive.platform_support.platform.machine", return_value="arm64")
+    @patch("tuxdrive.platform_support.shutil.which", return_value="/usr/bin/tool")
+    def test_macos_report_uses_keychain_and_application_bundle(self, _which, _machine, _system, _version):
+        report = inspect_host()
+        self.assertTrue(report["required_ready"])
+        self.assertEqual(report["distribution"], "macOS 15.6")
+        self.assertEqual(report["installation"]["application"], "/Applications/TuxDrive.app")
+        self.assertEqual(report["features"][1]["name"], "security")
+
 
 if __name__ == "__main__":
     unittest.main()

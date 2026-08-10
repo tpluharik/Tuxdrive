@@ -4,6 +4,7 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## 0.16.0 — adaptive Debian/GNOME packaging
 
+- Added an experimental macOS 13+ Apple-silicon `.app`/`.pkg` CI build with Keychain-backed rclone configuration encryption, LaunchAgent login startup, native URL opening, pinned macOS rclone bootstrap and optional macFUSE handling. Finder integration, notarization and the automatic updater are not yet available.
 - Added install-time and user-session host capability discovery with human-readable and JSON output through `tuxdrive --system-check`.
 - Reduced the mandatory package set to the secure GTK/Secret-Service core and moved Nautilus, tray, FUSE, Tor, NAT, network-policy, QR, notification and update integrations to recommendations.
 - Added per-feature availability and remediation reporting so an absent optional integration does not block unrelated cloud synchronization.

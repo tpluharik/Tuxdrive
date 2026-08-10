@@ -17,8 +17,10 @@ RCLONE_VERSION = "1.75.0"
 RCLONE_MINIMUM = (1, 75, 0)
 MAX_RCLONE_ARCHIVE = 64 * 1024 * 1024
 RCLONE_SHA256 = {
-    "amd64": "aa2804e08f48250e71009c727124b6341cd0288465804a9a09d14663cabafbaa",
-    "arm64": "d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203",
+    ("linux", "amd64"): "aa2804e08f48250e71009c727124b6341cd0288465804a9a09d14663cabafbaa",
+    ("linux", "arm64"): "d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203",
+    ("osx", "amd64"): "19edbb8e5e73096eb66e92a42abbc5c34bfa8981ea3986a53872c7eef85a22f4",
+    ("osx", "arm64"): "35e8f2a666ce789b29111db0dd843ddabc0d59c6b609d07bcaae5d1a07cba6f8",
 }
 
 
@@ -27,6 +29,8 @@ class BootstrapError(RuntimeError):
 
 
 def user_rclone_path() -> Path:
+    if platform.system() == "Darwin":
+        return Path.home() / "Library" / "Application Support" / "TuxDrive" / "bin" / "rclone"
     return Path.home() / ".local" / "lib" / "tuxdrive" / "rclone"
 
 
@@ -89,7 +93,10 @@ def install_rclone(progress: Callable[[str], None] | None = None) -> str:
     }.get(machine)
     if not architecture:
         raise BootstrapError(f"Unsupported CPU architecture: {machine}")
-    filename = f"rclone-v{RCLONE_VERSION}-linux-{architecture}.zip"
+    operating_system = {"Linux": "linux", "Darwin": "osx"}.get(platform.system())
+    if not operating_system:
+        raise BootstrapError(f"Unsupported operating system: {platform.system()}")
+    filename = f"rclone-v{RCLONE_VERSION}-{operating_system}-{architecture}.zip"
     url = f"https://downloads.rclone.org/v{RCLONE_VERSION}/{filename}"
     if progress:
         progress(f"Downloading rclone {RCLONE_VERSION}…")
@@ -110,7 +117,7 @@ def install_rclone(progress: Callable[[str], None] | None = None) -> str:
                 "Could not download the embedded transfer engine. Check the internet connection."
             ) from exc
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
-        if digest != RCLONE_SHA256[architecture]:
+        if digest != RCLONE_SHA256[(operating_system, architecture)]:
             raise BootstrapError("Downloaded rclone archive failed SHA-256 verification")
         if progress:
             progress("Installing verified transfer engine…")

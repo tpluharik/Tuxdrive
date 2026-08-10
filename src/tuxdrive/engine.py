@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import errno
 import os
+import platform
 import re
 import shutil
 import signal
@@ -421,23 +422,28 @@ class SyncEngine:
                     log_path,
                 )
         prepare_private_file(log_path)
+        is_macos = platform.system() == "Darwin"
+        fuse_available = (
+            Path("/Library/Filesystems/macfuse.fs").exists() if is_macos else Path("/dev/fuse").exists()
+        )
+        unmount_tool = shutil.which("umount") if is_macos else (shutil.which("fusermount3") or shutil.which("fusermount"))
         with log_path.open("a", encoding="utf-8") as diagnostic:
             diagnostic.write(
                 f"\n[{datetime.now(timezone.utc).isoformat()}] Streaming preflight\n"
                 f"TuxDrive={__version__}\nRemote={job.remote_spec}\nMountPoint={job.local}\n"
-                f"Rclone={self.rclone_path}\nFuseDevice={Path('/dev/fuse').exists()}\n"
-                f"Fusermount={shutil.which('fusermount3') or shutil.which('fusermount') or 'missing'}\n"
+                f"Rclone={self.rclone_path}\nFuseAvailable={fuse_available}\n"
+                f"UnmountTool={unmount_tool or 'missing'}\n"
             )
-        if not Path("/dev/fuse").exists():
+        if not fuse_available:
             return JobResult(
                 job.id, False,
-                "Streaming requires /dev/fuse, but the FUSE device is unavailable. See the job log.",
+                "Streaming requires macFUSE on macOS or /dev/fuse on Linux, but it is unavailable. See the job log.",
                 log_path,
             )
-        if not (shutil.which("fusermount3") or shutil.which("fusermount")):
+        if not unmount_tool:
             return JobResult(
                 job.id, False,
-                "Streaming requires fusermount3, but it is unavailable. Reinstall the TuxDrive package.",
+                "Streaming requires a supported FUSE unmount tool, but it is unavailable.",
                 log_path,
             )
         prepare_private_file(log_path)
@@ -502,6 +508,14 @@ class SyncEngine:
 
     @staticmethod
     def _unmount_path(path: Path) -> bool:
+        if platform.system() == "Darwin":
+            unmount = shutil.which("umount")
+            if not unmount:
+                return False
+            result = subprocess.run(
+                [unmount, str(path)], check=False, capture_output=True, text=True
+            )
+            return result.returncode == 0
         unmount = shutil.which("fusermount3") or shutil.which("fusermount")
         if not unmount:
             return False

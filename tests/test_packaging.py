@@ -88,7 +88,7 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("resolve(strict=False)", extension)
         self.assertIn('(\"sync-path\", self._nautilus_sync_path)', app)
         self.assertIn('(\"open-online-path\", self._nautilus_open_online)', app)
-        self.assertIn('["xdg-open", url]', app)
+        self.assertIn('_desktop_open_command(url)', app)
         self.assertIn("Gio.ApplicationFlags.HANDLES_COMMAND_LINE", app)
         self.assertIn('"open-online-path": "--open-online"', extension)
         self.assertIn("def do_command_line", app)
@@ -112,6 +112,18 @@ class PackagingTests(unittest.TestCase):
             self.assertNotIn(package, depends)
             self.assertIn(package, recommends)
         self.assertIn("install-capabilities.json", Path("packaging/DEBIAN/postinst").read_text(encoding="utf-8"))
+
+    def test_experimental_macos_package_uses_keychain_and_native_bundle(self):
+        build = Path("scripts/build-macos-pkg.sh").read_text(encoding="utf-8")
+        launcher = Path("packaging/macos/tuxdrive-launcher").read_text(encoding="utf-8")
+        helper = Path("packaging/macos/rclone_password.py").read_text(encoding="utf-8")
+        self.assertIn("pkgbuild", build)
+        self.assertIn("codesign", build)
+        self.assertIn("TuxDrive.app", build)
+        self.assertIn("/opt/homebrew/bin/python3", launcher)
+        self.assertIn("TUXDRIVE_PASSWORD_HELPER", launcher)
+        self.assertIn("SecKeychainAddGenericPassword", helper)
+        self.assertNotIn("security add-generic-password", helper)
 
 
 if __name__ == "__main__":

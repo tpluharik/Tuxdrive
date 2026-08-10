@@ -1,0 +1,32 @@
+#!/bin/sh
+set -eu
+
+resources=$(CDPATH= cd -- "$(dirname -- "$0")/../Resources" && pwd)
+for candidate in /opt/homebrew/bin/python3 /usr/local/bin/python3; do
+  if [ -x "$candidate" ] && "$candidate" -c 'import gi' >/dev/null 2>&1; then
+    python=$candidate
+    break
+  fi
+done
+if [ -z "${python:-}" ]; then
+  osascript -e 'display alert "TuxDrive Experimental cannot start" message "Install Homebrew Python, GTK 3 and PyGObject. See the macOS installation guide." as critical' || true
+  exit 2
+fi
+
+export XDG_CONFIG_HOME="$HOME/Library/Application Support"
+export XDG_DATA_HOME="$HOME/Library/Application Support"
+export XDG_CACHE_HOME="$HOME/Library/Caches"
+export XDG_STATE_HOME="$HOME/Library/Logs"
+export TUXDRIVE_PASSWORD_HELPER="$resources/rclone-password"
+if [ -f "$XDG_CONFIG_HOME/rclone/.tuxdrive-encrypted" ]; then
+  export RCLONE_PASSWORD_COMMAND="$TUXDRIVE_PASSWORD_HELPER"
+fi
+
+if [ "${1:-}" = "--system-check" ]; then
+  shift
+  exec "$python" -I -c 'import runpy,sys; sys.path[:0]=[sys.argv.pop(1),sys.argv.pop(1)]; sys.argv[0]="tuxdrive --system-check"; runpy.run_module("tuxdrive.platform_support",run_name="__main__")' \
+    "$resources/python" "$resources/app" "$@"
+fi
+
+exec "$python" -I -c 'import runpy,sys; sys.path[:0]=[sys.argv.pop(1),sys.argv.pop(1)]; sys.argv[0]="tuxdrive"; runpy.run_module("tuxdrive.app",run_name="__main__")' \
+  "$resources/python" "$resources/app" "$@"

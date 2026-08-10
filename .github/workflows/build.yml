@@ -54,3 +54,20 @@ jobs:
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./dist/tuxdrive_0.16.0_all.deb
       - name: Verify installed layout and host discovery
         run: tuxdrive --version && tuxdrive --system-check --json
+
+  macos-experimental-package:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install experimental GTK runtime
+        run: brew install python@3.12 gtk+3 pygobject3 adwaita-icon-theme
+      - name: Verify Python and macOS bootstrap tests
+        run: PYTHONPATH=src python3 -m unittest tests.test_bootstrap tests.test_platform_support tests.test_packaging -v
+      - name: Build experimental macOS installer
+        run: sh scripts/build-macos-pkg.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: tuxdrive-macos-experimental
+          path: dist/tuxdrive_0.16.0_experimental_macos_*.pkg

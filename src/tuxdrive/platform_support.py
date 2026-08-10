@@ -40,17 +40,31 @@ def _command(name: str, required: bool, detail: str, hint: str) -> FeatureCheck:
 
 def inspect_host() -> dict[str, object]:
     release = _os_release()
+    system = platform.system()
+    is_macos = system == "Darwin"
     machine = platform.machine().lower()
     supported_arch = machine in {"x86_64", "amd64", "aarch64", "arm64"}
-    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "unknown")
-    session = os.environ.get("XDG_SESSION_TYPE", "unknown")
+    desktop = "Aqua" if is_macos else os.environ.get("XDG_CURRENT_DESKTOP", "unknown")
+    session = "Quartz" if is_macos else os.environ.get("XDG_SESSION_TYPE", "unknown")
     checks = [
-        _command("secret-tool", True, "Secret Service client missing", "Install libsecret-tools and enable a Secret Service keyring"),
-        _command("xdg-open", True, "Desktop URL opener missing", "Install xdg-utils"),
+        _command(
+            "security" if is_macos else "secret-tool", True,
+            "macOS Keychain client missing" if is_macos else "Secret Service client missing",
+            "The macOS security utility is required" if is_macos else "Install libsecret-tools and enable a Secret Service keyring",
+        ),
+        _command("open" if is_macos else "xdg-open", True, "Desktop URL opener missing", "Install xdg-utils"),
+        FeatureCheck(
+            "macFUSE", Path("/Library/Filesystems/macfuse.fs").exists(), False,
+            "/Library/Filesystems/macfuse.fs" if Path("/Library/Filesystems/macfuse.fs").exists() else "Experimental streaming unavailable",
+            "Install and approve macFUSE, then reboot" if is_macos else "",
+        ) if is_macos else
         _command("fusermount3", False, "Streaming unavailable", "Install fuse3 and permit access to /dev/fuse"),
+        FeatureCheck("Finder integration", False, False, "Not included in the experimental package", "Use the TuxDrive application controls") if is_macos else
         _command("nautilus", False, "Nautilus integration unavailable", "Install nautilus and python3-nautilus, or leave integration disabled"),
+        FeatureCheck("signed updater", False, False, "Not included in the unsigned experimental macOS package", "Install a newer notarized package manually") if is_macos else
         _command("pkexec", False, "In-app package installation unavailable", "Install the distribution's PolicyKit pkexec package"),
-        _command("notify-send", False, "Desktop notifications unavailable", "Install libnotify-bin"),
+        _command("osascript" if is_macos else "notify-send", False, "Desktop notifications unavailable", "Install libnotify-bin"),
+        FeatureCheck("metered-network policy", False, False, "NetworkManager policy probe is Linux-only", "Use schedule/battery policies") if is_macos else
         _command("nmcli", False, "Metered-network policies unavailable", "Install and enable NetworkManager"),
         _command("tor", False, "Onion transport unavailable", "Install tor and torsocks"),
         _command("obfs4proxy", False, "Obfs4 bridge profile unavailable", "Install obfs4proxy"),
@@ -67,19 +81,19 @@ def inspect_host() -> dict[str, object]:
     required_ok = supported_arch and all(item.available for item in checks if item.required)
     return {
         "schema": 1,
-        "distribution": release.get("PRETTY_NAME", release.get("ID", "unknown")),
-        "distribution_id": release.get("ID", "unknown"),
+        "distribution": platform.mac_ver()[0] and f"macOS {platform.mac_ver()[0]}" if is_macos else release.get("PRETTY_NAME", release.get("ID", "unknown")),
+        "distribution_id": "macos" if is_macos else release.get("ID", "unknown"),
         "distribution_like": release.get("ID_LIKE", ""),
         "architecture": machine,
         "architecture_supported": supported_arch,
         "desktop": desktop,
         "session": session,
         "installation": {
-            "launcher": "/usr/bin/tuxdrive",
-            "application": "/usr/lib/tuxdrive",
-            "nautilus_extension": "/usr/share/nautilus-python/extensions/tuxdrive.py",
-            "machine_report": "/var/lib/tuxdrive/install-capabilities.json",
-            "user_configuration": "${XDG_CONFIG_HOME:-~/.config}/tuxdrive",
+            "launcher": "/Applications/TuxDrive.app/Contents/MacOS/tuxdrive" if is_macos else "/usr/bin/tuxdrive",
+            "application": "/Applications/TuxDrive.app" if is_macos else "/usr/lib/tuxdrive",
+            "nautilus_extension": "unavailable" if is_macos else "/usr/share/nautilus-python/extensions/tuxdrive.py",
+            "machine_report": "user-session only" if is_macos else "/var/lib/tuxdrive/install-capabilities.json",
+            "user_configuration": "~/Library/Application Support/tuxdrive" if is_macos else "${XDG_CONFIG_HOME:-~/.config}/tuxdrive",
         },
         "required_ready": required_ok,
         "features": [asdict(item) for item in checks],

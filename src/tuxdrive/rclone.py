@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import signal
 import shutil
 import socket
@@ -23,6 +24,8 @@ class RcloneError(RuntimeError):
 
 def _protect_sensitive_child() -> None:
     """Prevent same-user processes from reading sensitive rclone argv on Linux."""
+    if platform.system() != "Linux":
+        return
     try:
         libc = ctypes.CDLL(None, use_errno=True)
         if libc.prctl(4, 0, 0, 0, 0) != 0:  # PR_SET_DUMPABLE
@@ -509,7 +512,11 @@ class RcloneClient:
         if self._config_security_checked and not force:
             return
         config = rclone_config_path()
-        helper = Path(os.environ.get("TUXDRIVE_PASSWORD_HELPER", "/usr/lib/tuxdrive/rclone-password"))
+        default_helper = (
+            "/Applications/TuxDrive.app/Contents/Resources/rclone-password"
+            if platform.system() == "Darwin" else "/usr/lib/tuxdrive/rclone-password"
+        )
+        helper = Path(os.environ.get("TUXDRIVE_PASSWORD_HELPER", default_helper))
         marker = config.parent / ".tuxdrive-encrypted"
         if marker.is_file():
             os.environ["RCLONE_PASSWORD_COMMAND"] = str(helper)
@@ -525,7 +532,7 @@ class RcloneClient:
             return
         ensured = subprocess.run([str(helper), "--ensure"], capture_output=True, text=True, timeout=30, check=False, preexec_fn=_protect_sensitive_child)
         if ensured.returncode:
-            raise RcloneError("Could not store the rclone configuration key in GNOME Secret Service")
+            raise RcloneError("Could not store the rclone configuration key in the system credential store")
         environment = os.environ.copy()
         environment["RCLONE_PASSWORD_COMMAND"] = str(helper)
         result = subprocess.run(

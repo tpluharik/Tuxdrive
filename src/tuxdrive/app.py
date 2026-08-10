@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
+import plistlib
 import re
 import shutil
 import subprocess
@@ -72,6 +74,10 @@ except (ImportError, ValueError):  # pragma: no cover - optional desktop compone
 
 
 APP_ID = "io.github.tuxdrive.TuxDrive"
+
+
+def _desktop_open_command(target: str) -> list[str]:
+    return ["open", target] if platform.system() == "Darwin" else ["xdg-open", target]
 
 
 def _run_thread(function: Callable, callback: Callable, *args) -> None:
@@ -2724,7 +2730,7 @@ class MainWindow(Gtk.ApplicationWindow):
     @staticmethod
     def _open_path(path: Path) -> None:
         path.mkdir(parents=True, exist_ok=True)
-        subprocess.Popen(["xdg-open", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.Popen(_desktop_open_command(str(path)), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     def _hide_instead_of_close(self, *_args) -> bool:
         self.hide()
@@ -2967,7 +2973,7 @@ class TuxDriveApplication(Gtk.Application):
     def _launch_online_url(url: str, exact: bool) -> tuple[bool, str]:
         """Launch through the freedesktop handler and return a checked result."""
         result = subprocess.run(
-            ["xdg-open", url],
+            _desktop_open_command(url),
             check=False,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -2976,7 +2982,7 @@ class TuxDriveApplication(Gtk.Application):
         )
         if result.returncode:
             detail = (result.stderr or result.stdout).strip()
-            raise RuntimeError(detail or f"xdg-open exited with status {result.returncode}")
+            raise RuntimeError(detail or f"desktop opener exited with status {result.returncode}")
         return exact, url
 
     def _online_launch_ready(
@@ -3286,6 +3292,22 @@ class TuxDriveApplication(Gtk.Application):
         self.send_notification(None, notification)
 
     def configure_autostart(self) -> None:
+        if platform.system() == "Darwin":
+            target = Path.home() / "Library" / "LaunchAgents" / f"{APP_ID}.plist"
+            if self.config.settings.launch_at_login:
+                target.parent.mkdir(parents=True, exist_ok=True)
+                payload = {
+                    "Label": APP_ID,
+                    "ProgramArguments": [
+                        "/Applications/TuxDrive.app/Contents/MacOS/tuxdrive", "--background"
+                    ],
+                    "RunAtLoad": True,
+                    "ProcessType": "Interactive",
+                }
+                target.write_bytes(plistlib.dumps(payload))
+            elif target.exists():
+                target.unlink()
+            return
         target = Path.home() / ".config" / "autostart" / "tuxdrive.desktop"
         if self.config.settings.launch_at_login:
             target.parent.mkdir(parents=True, exist_ok=True)

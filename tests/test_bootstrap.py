@@ -25,8 +25,22 @@ class BootstrapTests(unittest.TestCase):
             self.assertIsNone(resolve_rclone())
 
     def test_release_checksums_cover_supported_architectures(self):
-        self.assertEqual(len(RCLONE_SHA256["amd64"]), 64)
-        self.assertEqual(len(RCLONE_SHA256["arm64"]), 64)
+        for system in ("linux", "osx"):
+            self.assertEqual(len(RCLONE_SHA256[(system, "amd64")]), 64)
+            self.assertEqual(len(RCLONE_SHA256[(system, "arm64")]), 64)
+
+    @patch("tuxdrive.bootstrap.resolve_rclone", return_value=None)
+    @patch("tuxdrive.bootstrap.platform.system", return_value="Darwin")
+    @patch("tuxdrive.bootstrap.platform.machine", return_value="arm64")
+    @patch("tuxdrive.bootstrap.urllib.request.urlopen")
+    def test_macos_bootstrap_selects_osx_archive(self, urlopen, _machine, _system, _resolve):
+        urlopen.side_effect = OSError("offline test")
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "tuxdrive.bootstrap.user_rclone_path", return_value=Path(temporary) / "rclone"
+        ):
+            with self.assertRaises(BootstrapError):
+                install_rclone()
+        self.assertIn("rclone-v1.75.0-osx-arm64.zip", urlopen.call_args.args[0])
 
     @patch("tuxdrive.bootstrap.resolve_rclone", return_value=None)
     @patch("tuxdrive.bootstrap.platform.machine", return_value="mips64")

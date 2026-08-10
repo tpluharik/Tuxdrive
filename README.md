@@ -159,7 +159,11 @@ sh scripts/build-deb.sh
 
 The installer is written to `dist/tuxdrive_0.16.0_all.deb`.
 
-The current suite contains 104 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, adaptive platform checks, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
+### Experimental macOS package
+
+GitHub Actions also builds an ad-hoc-signed Apple-silicon `.pkg`. It uses macOS Keychain, LaunchAgents, native URL opening and verified macOS rclone downloads, but currently requires Homebrew GTK/PyGObject and has no Finder extension or notarized updater. It is a development artifact, not a production release. See [experimental macOS installation and limitations](docs/MACOS_EXPERIMENTAL.md).
+
+The current suite contains 107 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, adaptive Linux/macOS platform checks, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
