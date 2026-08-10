@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import os
 import re
 import shutil
@@ -41,6 +42,7 @@ class SyncEngine:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._mounts: dict[str, subprocess.Popen[str]] = {}
+        self._mount_paths: dict[str, Path] = {}
         self._monitors: dict[str, ChangeMonitor] = {}
         self._intentional_unmounts: set[str] = set()
         self._protected_patterns: dict[str, tuple[str, ...]] = {}
@@ -245,7 +247,29 @@ class SyncEngine:
             existing = self._mounts.get(job.id)
             if existing and existing.poll() is None:
                 return JobResult(job.id, True, "Virtual drive is already mounted", log_path)
-        job.local.mkdir(parents=True, exist_ok=True)
+        # Detach an untracked/orphaned mount before touching the directory.
+        # Calling mkdir/iterdir on a dead FUSE endpoint raises ENOTCONN.
+        if os.path.ismount(job.local):
+            self._unmount_path(job.local)
+            deadline = time.monotonic() + 5
+            while os.path.ismount(job.local) and time.monotonic() < deadline:
+                time.sleep(0.1)
+            if os.path.ismount(job.local):
+                return JobResult(
+                    job.id, False,
+                    "An existing streaming mount could not be detached. Log out and back in, then retry.",
+                    log_path,
+                )
+        try:
+            job.local.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            if exc.errno == errno.ENOTCONN and self._unmount_path(job.local):
+                try:
+                    job.local.mkdir(parents=True, exist_ok=True)
+                except OSError as retry_exc:
+                    return JobResult(job.id, False, f"Cannot prepare streaming mount point: {retry_exc}", log_path)
+            else:
+                return JobResult(job.id, False, f"Cannot prepare streaming mount point: {exc}", log_path)
         if not os.path.ismount(job.local):
             try:
                 contents = list(job.local.iterdir())
@@ -279,19 +303,6 @@ class SyncEngine:
                 "Streaming requires fusermount3, but it is unavailable. Reinstall the TuxDrive package.",
                 log_path,
             )
-        if os.path.ismount(job.local):
-            # A crash can leave an orphaned FUSE mount that blocks the next
-            # connection. Detach it before starting the tracked mount.
-            self._unmount_path(job.local)
-            deadline = time.monotonic() + 5
-            while os.path.ismount(job.local) and time.monotonic() < deadline:
-                time.sleep(0.1)
-            if os.path.ismount(job.local):
-                return JobResult(
-                    job.id, False,
-                    "An existing streaming mount could not be detached. Log out and back in, then retry.",
-                    log_path,
-                )
         log_handle = log_path.open("a", encoding="utf-8")
         log_handle.write(
             f"[{datetime.now(timezone.utc).isoformat()}] Starting files-on-demand mount\n"
@@ -317,6 +328,7 @@ class SyncEngine:
             if os.path.ismount(job.local):
                 with self._lock:
                     self._mounts[job.id] = process
+                    self._mount_paths[job.id] = job.local
                 return JobResult(
                     job.id,
                     True,
@@ -361,18 +373,45 @@ class SyncEngine:
         return result.returncode == 0
 
     def stop_mount(self, job: SyncJob) -> bool:
+        stopped_process = False
         with self._lock:
             process = self._mounts.pop(job.id, None)
+            self._mount_paths.pop(job.id, None)
             if process and process.poll() is None:
                 self._intentional_unmounts.add(job.id)
         if process and process.poll() is None:
             try:
                 os.killpg(process.pid, signal.SIGTERM)
                 process.wait(timeout=5)
-                return True
+                stopped_process = True
             except (ProcessLookupError, subprocess.TimeoutExpired):
                 process.kill()
-        return self._unmount_path(job.local)
+                stopped_process = True
+        return self._unmount_path(job.local) or stopped_process
+
+    def recover_stale_mounts(self, jobs: list[SyncJob]) -> list[str]:
+        """Lazily detach configured streaming mounts not owned by this process."""
+        recovered: list[str] = []
+        with self._lock:
+            tracked = {
+                job_id for job_id, process in self._mounts.items()
+                if process.poll() is None
+            }
+        for job in jobs:
+            if job.mode is not SyncMode.VIRTUAL_DRIVE or job.id in tracked:
+                continue
+            try:
+                mounted = os.path.ismount(job.local)
+            except OSError:
+                mounted = True
+            if not mounted:
+                try:
+                    job.local.stat()
+                except OSError as exc:
+                    mounted = exc.errno == errno.ENOTCONN
+            if mounted and self._unmount_path(job.local):
+                recovered.append(job.id)
+        return recovered
 
     def _watch_mount(
         self,
@@ -385,9 +424,14 @@ class SyncEngine:
         with self._lock:
             if self._mounts.get(job.id) is process:
                 self._mounts.pop(job.id, None)
+                self._mount_paths.pop(job.id, None)
             intentional = job.id in self._intentional_unmounts
             self._intentional_unmounts.discard(job.id)
         if not intentional:
+            # rclone/FUSE can leave the kernel mount entry behind after an
+            # abrupt exit. Detach it immediately so parent folders remain
+            # browsable in Nautilus while the controller schedules a retry.
+            self._unmount_path(job.local)
             callback(
                 JobResult(
                     job.id,
@@ -402,12 +446,15 @@ class SyncEngine:
     def shutdown(self) -> None:
         with self._lock:
             job_ids = list(self._processes)
-            mounted = list(self._mounts.items())
+            mounted = [
+                (job_id, process, self._mount_paths.get(job_id))
+                for job_id, process in self._mounts.items()
+            ]
         for job_id in job_ids:
             self.cancel(job_id)
         for monitor in list(self._monitors.values()):
             monitor.stop()
-        for job_id, process in mounted:
+        for job_id, process, path in mounted:
             if process.poll() is None:
                 try:
                     with self._lock:
@@ -415,6 +462,8 @@ class SyncEngine:
                     os.killpg(process.pid, signal.SIGTERM)
                 except ProcessLookupError:
                     pass
+            if path is not None:
+                self._unmount_path(path)
 
     def start_callbacks(
         self,

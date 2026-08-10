@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -2270,7 +2271,11 @@ class MainWindow(Gtk.ApplicationWindow):
 
 class TuxDriveApplication(Gtk.Application):
     def __init__(self, background: bool = False) -> None:
-        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
+        super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+        self.add_main_option(
+            "open-online", 0, GLib.OptionFlags.NONE, GLib.OptionArg.STRING,
+            "Open the cloud location corresponding to a local TuxDrive path", "PATH",
+        )
         self.updater = UpdateManager(__version__)
         self.background = background
         self.store = ConfigStore()
@@ -2285,6 +2290,8 @@ class TuxDriveApplication(Gtk.Application):
         self.indicator = None
         self._runtime_ready_once = False
         self._pending_nautilus_paths: list[str] = []
+        self._pending_nautilus_online: list[str] = []
+        self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
 
@@ -2292,6 +2299,13 @@ class TuxDriveApplication(Gtk.Application):
         Gtk.Application.do_startup(self)
         self.hold()
         LOGGER.info("GTK application startup completed")
+        recovered = set(self.engine.recover_stale_mounts(self.config.jobs))
+        for job in self.config.jobs:
+            if job.id in recovered:
+                job.last_status = "Recovered a disconnected files-on-demand mount; reconnecting…"
+                LOGGER.warning("Detached stale streaming mount: %s", job.local_path)
+        if recovered:
+            self.save()
         self._install_css()
         GLib.timeout_add_seconds(30, self._scheduler_tick)
         self.configure_autostart()
@@ -2299,11 +2313,13 @@ class TuxDriveApplication(Gtk.Application):
         for name, callback in (
             ("show-path", self._nautilus_show_path),
             ("sync-path", self._nautilus_sync_path),
+            ("open-online-path", self._nautilus_open_online),
             ("open-logs", self._nautilus_open_logs),
         ):
             action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             action.connect("activate", callback)
             self.add_action(action)
+        self._publish_nautilus_state()
 
     def do_activate(self) -> None:
         if self.window is None:
@@ -2316,6 +2332,33 @@ class TuxDriveApplication(Gtk.Application):
             self.window.present()
         self.background = False
         LOGGER.info("Application activated; window_visible=%s", self.window.get_visible())
+
+    def do_command_line(self, command_line: Gio.ApplicationCommandLine) -> int:
+        """Receive Nautilus requests in the primary application instance."""
+        arguments = list(command_line.get_arguments())[1:]
+        option = command_line.get_options_dict().lookup_value(
+            "open-online", GLib.VariantType.new("s")
+        )
+        if option is not None or "--open-online" in arguments:
+            if option is not None:
+                value = option.get_string()
+            else:
+                index = arguments.index("--open-online")
+                if index + 1 >= len(arguments):
+                    LOGGER.error("Nautilus online-folder request had no local path")
+                    return 2
+                value = arguments[index + 1]
+            LOGGER.info("Received Nautilus online/cloud request: %s", value)
+            if self.window is None:
+                self.background = True
+                self.activate()
+            if self._runtime_ready_once:
+                self._open_online_path(value)
+            else:
+                self._pending_nautilus_online.append(value)
+            return 0
+        self.activate()
+        return 0
 
     def _job_for_local_path(self, value: str) -> SyncJob | None:
         try:
@@ -2363,6 +2406,119 @@ class TuxDriveApplication(Gtk.Application):
     def _nautilus_open_logs(self, _action: Gio.SimpleAction, _parameter: GLib.Variant) -> None:
         MainWindow._open_path(log_directory())
 
+    def _nautilus_open_online(self, _action: Gio.SimpleAction, parameter: GLib.Variant) -> None:
+        value = parameter.get_string()
+        if not self._runtime_ready_once:
+            self._pending_nautilus_online.append(value)
+            LOGGER.info("Queued online/cloud location while runtime initializes: %s", value)
+            return
+        self._open_online_path(value)
+
+    def _open_online_path(self, value: str) -> None:
+        job = self._job_for_local_path(value)
+        if not job:
+            if self.window:
+                self.window.message("That path is not part of a TuxDrive folder.", Gtk.MessageType.WARNING)
+            return
+        account = next((item for item in self.config.accounts if item.remote == job.account_remote), None)
+        if not account or account.provider in {Provider.PEER, Provider.VAULT}:
+            if self.window:
+                self.window.message("This peer or encrypted-vault path has no safe provider web page.", Gtk.MessageType.WARNING)
+            return
+        try:
+            local_root = Path(os.path.abspath(os.path.expanduser(job.local_path)))
+            selected = Path(os.path.abspath(os.path.expanduser(value)))
+            relative = selected.relative_to(local_root)
+        except (OSError, ValueError):
+            relative = Path()
+        remote_path = "/".join(
+            part for part in (job.remote_path.strip("/"), relative.as_posix().strip("/"))
+            if part and part != "."
+        )
+        remote = job.remote_scope or job.account_remote
+        remote_spec = f"{remote}:{remote_path}" if remote_path else f"{remote}:"
+        if self.window:
+            self.window.message("Locating the corresponding provider page…")
+        _run_thread(self.rclone.online_url, self._online_url_ready, remote_spec, account.provider)
+
+    def _online_url_ready(self, result: tuple[str, bool] | None, error: Exception | None) -> bool:
+        if error or not result or not result[0]:
+            if self.window:
+                self.window.message(
+                    str(error or "This provider does not expose a safe web-folder URL."),
+                    Gtk.MessageType.WARNING,
+                )
+            return False
+        url, exact = result
+        LOGGER.info("Launching online/cloud location: %s", url)
+        _run_thread(self._launch_online_url, self._online_launch_ready, url, exact)
+        return False
+
+    @staticmethod
+    def _launch_online_url(url: str, exact: bool) -> tuple[bool, str]:
+        """Launch through the freedesktop handler and return a checked result."""
+        result = subprocess.run(
+            ["xdg-open", url],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode:
+            detail = (result.stderr or result.stdout).strip()
+            raise RuntimeError(detail or f"xdg-open exited with status {result.returncode}")
+        return exact, url
+
+    def _online_launch_ready(
+        self, result: tuple[bool, str] | None, error: Exception | None
+    ) -> bool:
+        if error or not result:
+            detail = str(error or "The desktop URL handler did not return a result.")
+            LOGGER.error("Could not open online/cloud location: %s", detail)
+            notification = Gio.Notification.new("Could not open online/cloud folder")
+            notification.set_body(detail)
+            self.send_notification("online-folder-error", notification)
+            if self.window:
+                self.window.message(f"Could not open the default web browser: {detail}", Gtk.MessageType.ERROR)
+            return False
+        exact, url = result
+        LOGGER.info("Desktop browser accepted online/cloud location: %s", url)
+        if self.window:
+            self.window.message(
+                "Opened the matching online item."
+                if exact else
+                "This provider cannot address that exact path safely; opened the account root instead."
+            )
+        return False
+
+    def _publish_nautilus_state(self) -> None:
+        target = cache_home() / "tuxdrive" / "nautilus-state.json"
+        target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        mounted = self.engine.mounted_jobs
+        payload: dict[str, dict[str, str]] = {}
+        for job in self.config.jobs:
+            state = (
+                "syncing" if job.id in self._nautilus_active_jobs else
+                "streaming" if job.id in mounted else
+                "error" if job.last_error else
+                "paused" if not job.enabled or job.last_status == "Stopped" else
+                "synced" if job.initialized else "pending"
+            )
+            payload[job.id] = {"state": state, "detail": job.last_status or state.title()}
+        descriptor, temporary = tempfile.mkstemp(
+            prefix="nautilus-state-", suffix=".json", dir=target.parent
+        )
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, ensure_ascii=False)
+                handle.write("\n")
+            os.replace(temporary, target)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
     def add_account(self, account: Account) -> None:
         self.config.accounts = [item for item in self.config.accounts if item.remote != account.remote]
         self.config.accounts.append(account)
@@ -2394,9 +2550,14 @@ class TuxDriveApplication(Gtk.Application):
         )
         self._set_tray_state("syncing", job.name)
         self._last_started[job.id] = datetime.now(timezone.utc)
+        self._nautilus_active_jobs.add(job.id)
+        self._publish_nautilus_state()
         if self.window:
             self.window.refresh()
         started = self.engine.run_async(job, self._job_finished)
+        if not started:
+            self._nautilus_active_jobs.discard(job.id)
+            self._publish_nautilus_state()
         if not started and self.window and not quiet:
             self.window.message("The job could not be started.", Gtk.MessageType.WARNING)
 
@@ -2404,6 +2565,7 @@ class TuxDriveApplication(Gtk.Application):
         self.engine.stop_callbacks(job.id)
         stopped = self.engine.stop_mount(job) if job.mode is SyncMode.VIRTUAL_DRIVE else self.engine.cancel(job.id)
         if stopped:
+            self._nautilus_active_jobs.discard(job.id)
             job.last_status = "Stopped"
             self.save()
             if self.window:
@@ -2416,6 +2578,7 @@ class TuxDriveApplication(Gtk.Application):
         job = next((item for item in self.config.jobs if item.id == result.job_id), None)
         if not job:
             return False
+        self._nautilus_active_jobs.discard(job.id)
         now = datetime.now(timezone.utc)
         job.last_run = now.isoformat()
         job.last_status = result.message
@@ -2569,6 +2732,7 @@ class TuxDriveApplication(Gtk.Application):
 
     def save(self) -> None:
         self.store.save(self.config)
+        self._publish_nautilus_state()
 
     def notify(self, title: str, body: str) -> None:
         if not self.config.settings.notifications:
@@ -2645,6 +2809,9 @@ class TuxDriveApplication(Gtk.Application):
                 if job and job.id not in started_jobs and job.enabled and job.mode is not SyncMode.VIRTUAL_DRIVE:
                     started_jobs.add(job.id)
                     self.run_job(job)
+            pending_online, self._pending_nautilus_online = self._pending_nautilus_online, []
+            for value in pending_online:
+                self._open_online_path(value)
         return False
 
     @staticmethod

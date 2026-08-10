@@ -43,7 +43,7 @@ PYTHONPATH=src python3 -m compileall -q src
 6. Update documentation when controls, configuration, packaging, or user-visible behaviour changes.
 7. Open a pull request and complete the checklist.
 
-The [testing guide](docs/TESTING.md) describes the current 62-test suite, release matrix, safety invariants and known coverage gaps. Recovery, integrity, mass-change, conflict-resolution, peer authorization, lease, discovery, Nautilus, or encryption changes must include focused safety tests and document trust, expiry, authoritative-side, and rollback behavior.
+The [testing guide](docs/TESTING.md) describes the current 69-test suite, release matrix, safety invariants and known coverage gaps. Recovery, integrity, mass-change, conflict-resolution, peer authorization, lease, discovery, Nautilus, streaming-mount, provider-URL, or encryption changes must include focused safety tests and document trust, expiry, authoritative-side, and rollback behavior.
 
 ## Pull-request expectations
 

@@ -17,7 +17,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.10.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.11.4 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ### 0.9.0 release highlights
 
@@ -26,6 +26,14 @@ This release expands private collaboration: each shared folder can authorize mul
 ### 0.10.0 desktop integration
 
 Nautilus now shows TuxDrive status metadata and a right-click **TuxDrive** submenu for configured folders and their contents. It can show the job in TuxDrive, run its safety-checked synchronization, or open activity logs. Actions are sent to the single running application instance; if needed, Nautilus starts TuxDrive in the background and waits until its transfer runtime is ready.
+
+Version 0.10.1 hardens that integration against disconnected FUSE endpoints: the extension performs no path-resolution I/O, unexpected streaming exits detach stale kernel mounts immediately, and startup recovers orphaned configured mounts before reconnecting.
+
+Version 0.10.2 corrects the Nautilus 4 information-provider callback and packages dedicated green synchronized, blue streaming, and red error emblems, ensuring badges do not depend on the active Ubuntu icon theme.
+
+Version 0.10.3 removes an exact GI minor-version pin that blocked the extension after Ubuntu 26.04 preloaded Nautilus 4.1. The extension now follows GNOME's host-loaded namespace model and supports both Nautilus 4.0 and 4.1.
+
+Version 0.11.4 adds safe provider-web navigation from Nautilus and live badges for pending, synchronizing, synchronized, streaming, paused, and error states. Exact provider items open where a private item ID/path is available; unsupported backends fall back to their account root without creating a public share.
 
 ## What works
 
@@ -61,6 +69,7 @@ Nautilus now shows TuxDrive status metadata and a right-click **TuxDrive** subme
 - automatic suppression of LibreOffice, Microsoft Office, browser, editor, and partial-download temporary files
 - pause/resume, sync now, cancellation, and tray controls
 - native Nautilus 4 status/emblem integration and context actions for configured TuxDrive paths
+- live Nautilus state transitions and safe **Open online/cloud folder** navigation without public-link creation
 - launch at login, desktop notifications, daily diagnostic logs
 - clickable per-job exception rules with add/remove controls, deletion safety ceiling, bandwidth limits, and conflict policy
 - interactive blocked-file recovery: safely exclude the file or explicitly allow and retry
@@ -82,7 +91,7 @@ Nautilus now shows TuxDrive status metadata and a right-click **TuxDrive** subme
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.10.0_all.deb
+sudo apt install ./tuxdrive_0.11.4_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -100,9 +109,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.10.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.11.4_all.deb`.
 
-The current suite contains 62 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming, provider setup, Proton 2FA, multi-peer authorization, edit leases, LAN/QR pairing, Nautilus integration, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 69 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming and stale-mount recovery, provider setup and private online URLs, Proton 2FA, multi-peer authorization, edit leases, LAN/QR pairing, live Nautilus actions/emblems, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -157,7 +166,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.10.0 provides Nautilus status metadata, emblems and context menus, but does not yet provide a kernel-level placeholder API identical to Windows Cloud Files, per-file offline pinning, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.11.4 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation and context menus, but does not yet provide a kernel-level placeholder API identical to Windows Cloud Files, per-file offline pinning, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

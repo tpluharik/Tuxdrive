@@ -119,6 +119,37 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertFalse(result.success)
         self.assertIn("empty local folder", result.message)
 
+    def test_startup_recovers_only_untracked_stale_streaming_mounts(self):
+        stale = SyncJob(account_remote="google", local_path="/data/stale", mode=SyncMode.VIRTUAL_DRIVE)
+        normal = SyncJob(account_remote="google", local_path="/data/normal")
+        with patch("tuxdrive.engine.os.path.ismount", side_effect=lambda value: str(value) == "/data/stale"), \
+             patch.object(self.engine, "_unmount_path", return_value=True) as unmount:
+            recovered = self.engine.recover_stale_mounts([normal, stale])
+        self.assertEqual(recovered, [stale.id])
+        unmount.assert_called_once_with(stale.local)
+
+    def test_unexpected_stream_exit_detaches_kernel_mount_before_retry(self):
+        job = SyncJob(account_remote="google", local_path="/data/stream", mode=SyncMode.VIRTUAL_DRIVE)
+        process = MagicMock()
+        process.wait.return_value = 7
+        self.engine._mounts[job.id] = process
+        callback = MagicMock()
+        with patch.object(self.engine, "_unmount_path", return_value=True) as unmount:
+            self.engine._watch_mount(job, process, Path("/tmp/stream.log"), callback)
+        unmount.assert_called_once_with(job.local)
+        self.assertTrue(callback.call_args.args[0].mount_lost)
+
+    def test_orderly_shutdown_also_detaches_streaming_mount(self):
+        job = SyncJob(account_remote="google", local_path="/data/stream", mode=SyncMode.VIRTUAL_DRIVE)
+        process = MagicMock(pid=1234)
+        process.poll.return_value = None
+        self.engine._mounts[job.id] = process
+        self.engine._mount_paths[job.id] = job.local
+        with patch("tuxdrive.engine.os.killpg"), \
+             patch.object(self.engine, "_unmount_path", return_value=True) as unmount:
+            self.engine.shutdown()
+        unmount.assert_called_once_with(job.local)
+
     def test_failure_summary_surfaces_fatal_detail(self):
         with tempfile.TemporaryDirectory() as temporary:
             log = os.path.join(temporary, "sync.log")

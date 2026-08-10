@@ -1,6 +1,6 @@
 {
-  "version": "0.10.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.10.0_all.deb",
-  "sha256": "a4def17ef51329a01b1bdd05b18426d646e4be2d134533904faad381902ae161",
-  "notes": "Adds native Nautilus 4 status metadata, synchronized/error emblems, and safe context actions routed through the single running TuxDrive application."
+  "version": "0.11.4",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.11.4_all.deb",
+  "sha256": "4d53ed35296fb6c8442c8867bafbd640f48f09d66e6d3d14d8eba5256a9b83ec",
+  "notes": "Opens the exact selected Google Drive folder, including nested My Drive and Shared Drive folders, using a parent-listing resolver when direct metadata omits the item ID."
 }

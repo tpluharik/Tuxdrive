@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.10.0 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.11.4 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.10.0 on Ubuntu 26.04: installation, Nautilus integr
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.10.0_all.deb
+sudo apt install ./tuxdrive_0.11.4_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -197,8 +197,14 @@ Version 0.10.0 installs a native extension for Ubuntu Files (Nautilus 4). Right-
 - **Show in TuxDrive** opens the application and displays the containing job's current status.
 - **Synchronize this TuxDrive folder now** starts the containing normal synchronization job using the same conflict, deletion, ransomware, exception, and lease protections as the main window. Multiple selected files must belong to the same job.
 - **Open TuxDrive activity logs** opens the diagnostic log directory.
+- **Open online/cloud folder** opens the matching private provider page where the backend exposes a safe item ID/path. Google Drive, Dropbox, Box, and supported OneDrive configurations can open exact items; other providers open their account root when available. This action never creates a public sharing link.
 
 Configured paths expose TuxDrive status metadata and a synchronized/error emblem to Nautilus. Files-on-demand drives show their streaming status; their content is still fetched by opening the file, so the explicit synchronization action is intentionally omitted.
+TuxDrive 0.10.2 includes its own green synchronized, blue streaming, and red error emblems and completes Nautilus 4 metadata requests explicitly, so badge availability no longer depends on the desktop icon theme.
+
+TuxDrive 0.10.3 supports the Nautilus 4.0 and 4.1 GI namespaces used across supported Ubuntu installations. It intentionally does not request an exact minor namespace because Nautilus loads its own version before importing extensions.
+
+Version 0.11.4 publishes job state through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The cache contains job identifiers and display status only—never OAuth tokens, passwords, private keys, or file content.
 
 The extension sends requests to TuxDrive's single application instance. If TuxDrive is closed, it starts in the background and waits for the verified transfer runtime before starting a requested job. It never runs a second independent transfer engine inside Nautilus.
 
@@ -356,7 +362,7 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.10.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.10.1 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash or unexpected rclone exit and waits up to 45 seconds for large cloud trees. The Nautilus extension uses lexical path matching, so it does not resolve or stat disconnected streaming endpoints. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
 ### Proton Drive says username and password are required
 
@@ -384,7 +390,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.10.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.11.4_all.deb`.
 
 ## 13. Data safety
 

@@ -2,6 +2,59 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.11.4 — exact Google Drive folder navigation
+
+- Resolves the selected Google Drive folder from its direct parent when `rclone lsjson --stat` omits the private item ID.
+- Preserves My Drive, Shared-with-me, and Shared Drive scopes while resolving nested folders.
+- Opens the selected folder's private Drive URL instead of falling back to the Drive home page.
+
+## 0.11.3 — reliable Nautilus request delivery
+
+- Replaced the desktop-dependent Nautilus D-Bus action discovery for online folders with a registered GApplication command-line request.
+- Requests are forwarded to the primary TuxDrive instance, logged on receipt, and handled without foregrounding the application window.
+
+## 0.11.2 — monitored online-folder launch
+
+- The Nautilus online-folder action no longer foregrounds TuxDrive.
+- Provider URLs are opened through a monitored `xdg-open` process, with its exit status and diagnostic output checked.
+- Failed launches now produce a desktop notification and activity-log error containing the actionable desktop-handler detail.
+
+## 0.11.1 — reliable desktop browser handoff
+
+- Opens provider web folders through GNOME's registered default URI handler, fixing silent browser-launch failures when the action originates in Nautilus over D-Bus.
+- Reports browser-launch failures in both the application activity message and diagnostic log instead of claiming that the folder opened.
+
+## 0.11.0 — provider web folders and live Nautilus states
+
+- Added **Open online/cloud folder** to the Nautilus TuxDrive submenu.
+- Opens exact Google Drive, Dropbox, Box, and supported OneDrive paths where provider identifiers allow it; otherwise opens the safe account root and explains the fallback.
+- Never creates a public share link while opening an online folder.
+- Added an atomic local runtime-state channel watched by Nautilus.
+- Added live synchronized, synchronizing, streaming, paused, pending, and error emblems with automatic metadata invalidation.
+- Added provider URL and no-public-link regression coverage.
+
+## 0.10.3 — Nautilus 4.1 compatibility
+
+- Fixed extension startup on Ubuntu 26.04 where Nautilus preloads GI namespace version 4.1.
+- Removed the incorrect exact `Nautilus` 4.0 namespace requirement, following GNOME's host-loaded extension model.
+- Restores TuxDrive context menus, status metadata, and state emblems on Nautilus 4.1 while remaining compatible with Nautilus 4.0.
+- Tracker and GSConnect warnings emitted during `nautilus -q` are unrelated desktop-service messages and do not affect TuxDrive.
+
+## 0.10.2 — visible Nautilus status emblems
+
+- Fixed the Nautilus 4 `InfoProvider` callback contract and explicit completion result.
+- Added packaged TuxDrive emblems for synchronized, files-on-demand, and error states.
+- Removed reliance on optional theme-specific emblem names.
+- Icon cache refresh remains part of package installation; restart Nautilus once after upgrading.
+
+## 0.10.1 — disconnected streaming mount recovery
+
+- Fixed Nautilus directory failures caused by an orphaned FUSE endpoint returning `Transport endpoint is not connected`.
+- Streaming-process failure now lazily detaches the kernel mount before automatic retry.
+- Application startup recovers untracked configured streaming mounts left behind by a crash or forced shutdown.
+- Nautilus status/menu matching now uses lexical local paths and never resolves or stats a streaming endpoint.
+- Added regression coverage for startup cleanup and unexpected streaming-process exits.
+
 ## 0.10.0 — Nautilus desktop integration
 
 - Added a native Nautilus 4 extension for Ubuntu 26.04.

@@ -67,10 +67,29 @@ class PackagingTests(unittest.TestCase):
         app = Path("src/tuxdrive/app.py").read_text(encoding="utf-8")
         self.assertIn("python3-nautilus", control)
         self.assertIn("usr/share/nautilus-python/extensions", build_script)
-        self.assertIn('gi.require_version("Nautilus", "4.0")', extension)
+        self.assertNotIn('gi.require_version("Nautilus"', extension)
         self.assertIn('group.activate_action(action, parameter)', extension)
+        self.assertIn('"open-online-path"', extension)
+        self.assertIn("nautilus-state.json", extension)
+        self.assertNotIn("resolve(strict=False)", extension)
         self.assertIn('(\"sync-path\", self._nautilus_sync_path)', app)
+        self.assertIn('(\"open-online-path\", self._nautilus_open_online)', app)
+        self.assertIn('["xdg-open", url]', app)
+        self.assertIn("Gio.ApplicationFlags.HANDLES_COMMAND_LINE", app)
+        self.assertIn('["tuxdrive", "--open-online", str(path or "")]', extension)
+        self.assertIn("def do_command_line", app)
+        self.assertNotIn("self.activate()\n        if not self._runtime_ready_once:\n            self._pending_nautilus_online", app)
+        self.assertIn("_publish_nautilus_state", app)
         self.assertIn("_pending_nautilus_paths", app)
+
+    def test_nautilus_info_provider_completes_and_packages_emblems(self):
+        extension = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")
+        build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
+        self.assertIn("def update_file_info_full", extension)
+        self.assertIn("Nautilus.OperationResult.COMPLETE", extension)
+        for state in ("synced", "syncing", "streaming", "paused", "pending", "error"):
+            self.assertTrue(Path(f"packaging/emblem-tuxdrive-{state}.svg").exists())
+        self.assertIn("scalable/emblems", build_script)
 
 
 if __name__ == "__main__":

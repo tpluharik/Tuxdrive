@@ -5,9 +5,9 @@ This document records completed safety work and proposes future work. Suggestion
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
 
-## Current baseline: 0.10.0
+## Current baseline: 0.11.4
 
-Version 0.10.0 is the current documented and packaged release. It adds native Nautilus status and safe context actions to the 0.9.0 multi-peer, lease, LAN/QR, cloud, streaming, recovery, integrity, and encrypted-vault baseline. Ranks 1–7, 9 and the first phase of 12 are implemented; remaining work includes per-file cache control and operational hardening.
+Version 0.11.4 is the current documented and packaged release. It adds safe provider-web navigation and live pending/syncing/synced/streaming/paused/error badges to the Nautilus 4.0/4.1 integration, theme-independent emblems, no-I/O matching, and disconnected-FUSE recovery. Ranks 1–7, 9 and the second phase of 12 are implemented; remaining work includes per-file cache control and operational hardening.
 
 The next recommended development milestone is **1.0.0 — desktop integration and operational hardening**, beginning with block-level peer transfer, per-file offline controls, richer hydration/error badges, and network/battery policies. No planned item should be read as available until its status changes to a shipped version.
 
@@ -35,7 +35,7 @@ The next recommended development milestone is **1.0.0 — desktop integration an
 | 9 | LAN discovery and QR pairing | Peer | Completed 0.9.0 | Optional local multicast lists shares; users verify pinned fingerprints and exchange invitations through locally generated/scanned QR images. Manual pairing remains available. |
 | 10 | NAT traversal with optional no-storage relay | Peer | High | Try UPnP/NAT-PMP and direct hole punching; offer an optional end-to-end encrypted transport relay when direct reachability fails. A relay may forward ciphertext but must never receive decryption keys or retain file content. |
 | 11 | Per-file offline availability controls | Cloud | High | Add **Online only**, **Available offline** and **Always keep locally** actions for streamed files/folders, including cache usage and hydration progress. |
-| 12 | Nautilus integration | Cloud | Phase 1 completed 0.10.0 | Native status metadata/emblems and safe show, sync-job, and log actions are shipped. Per-file keep-offline/free-space, link, exception, history, and hydration-progress actions remain tied to rank 11. |
+| 12 | Nautilus integration | Cloud | Phase 2 completed 0.11.4 | Native live state emblems plus safe show, sync-job, provider-web-folder, and log actions are shipped. Per-file keep-offline/free-space, exception, history, and hydration-progress actions remain tied to rank 11. |
 | 13 | Network, battery and schedule policies | Both | Medium | Pause or limit transfers on metered/mobile networks, low battery, specified Wi-Fi networks or working hours; permit small metadata checks while deferring large bodies. |
 | 14 | Read-only, send-only and receive-only peer roles | Peer | Medium | Give each authorized device explicit folder permissions. Enforce the direction both in TuxDrive jobs and at the served endpoint rather than relying only on user discipline. |
 | 15 | Peer activity and audit timeline | Peer | Medium | Record which authenticated device uploaded, replaced, moved or deleted each path, with retention controls and secret-safe export. This is essential for collaborative troubleshooting. |

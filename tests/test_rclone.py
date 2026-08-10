@@ -63,6 +63,43 @@ class RcloneClientTests(unittest.TestCase):
         self.assertEqual(folders, ["Projects", "Reports"])
         self.assertEqual(run.call_args.args[0][1], "work:Shared")
 
+    def test_google_online_folder_url_uses_private_item_id_without_creating_share(self):
+        client = RcloneClient()
+        result = subprocess.CompletedProcess([], 0, stdout=json.dumps({"ID": "folder 123", "IsDir": True}), stderr="")
+        with patch.object(client, "_run", return_value=result) as run:
+            url, exact = client.online_url("google:Projects/Design", Provider.GOOGLE_DRIVE)
+        self.assertTrue(exact)
+        self.assertEqual(url, "https://drive.google.com/drive/folders/folder%20123")
+        self.assertEqual(run.call_args.args[0][0], "lsjson")
+        self.assertNotIn("link", run.call_args.args[0])
+
+    def test_google_online_folder_falls_back_to_exact_parent_listing(self):
+        client = RcloneClient()
+        responses = [
+            subprocess.CompletedProcess([], 0, stdout=json.dumps({"IsDir": True}), stderr=""),
+            subprocess.CompletedProcess(
+                [], 0,
+                stdout=json.dumps([
+                    {"Name": "Other", "ID": "other-id", "IsDir": True},
+                    {"Name": "Design", "ID": "design-id", "IsDir": True},
+                ]),
+                stderr="",
+            ),
+        ]
+        with patch.object(client, "_run", side_effect=responses) as run:
+            url, exact = client.online_url(
+                "google,team_drive=shared-1:Projects/Design", Provider.GOOGLE_DRIVE
+            )
+        self.assertTrue(exact)
+        self.assertEqual(url, "https://drive.google.com/drive/folders/design-id")
+        self.assertEqual(run.call_args_list[1].args[0][1], "google,team_drive=shared-1:Projects")
+
+    def test_dropbox_online_folder_url_preserves_nested_path_without_public_link(self):
+        client = RcloneClient()
+        url, exact = client.online_url("drop:Team files/Design", Provider.DROPBOX)
+        self.assertTrue(exact)
+        self.assertEqual(url, "https://www.dropbox.com/home/Team%20files/Design")
+
     def test_google_locations_include_my_drive_shared_with_me_and_shared_drives(self):
         client = RcloneClient()
         output = json.dumps([{"id": "drive-123", "name": "Operations"}])

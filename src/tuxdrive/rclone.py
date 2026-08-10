@@ -7,6 +7,7 @@ import shutil
 import socket
 import subprocess
 import threading
+from urllib.parse import quote
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -284,6 +285,61 @@ class RcloneClient:
     def public_link(self, remote_spec: str) -> str:
         result = self._run(["link", remote_spec])
         return result.stdout.strip()
+
+    def online_url(self, remote_spec: str, provider: Provider) -> tuple[str, bool]:
+        """Return a non-sharing provider URL and whether it targets the exact item."""
+        remote_name, _, raw_path = remote_spec.partition(":")
+        remote_path = raw_path.strip("/")
+        if provider is Provider.DROPBOX:
+            suffix = f"/{quote(remote_path, safe='/')}" if remote_path else ""
+            return f"https://www.dropbox.com/home{suffix}", True
+
+        metadata: dict[str, Any] = {}
+        if remote_path and provider in {Provider.GOOGLE_DRIVE, Provider.ONEDRIVE, Provider.BOX}:
+            try:
+                result = self._run(["lsjson", remote_spec, "--stat", "--no-mimetype", "--no-modtime"])
+                metadata = json.loads(result.stdout or "{}")
+            except (RcloneError, json.JSONDecodeError):
+                metadata = {}
+        # Some Google Drive/rclone combinations omit ID from an lsjson --stat
+        # response even though normal directory listings contain it. Resolve
+        # the selected item from its direct parent before falling back to the
+        # provider home page. The scoped remote name is preserved, so this also
+        # works for My Drive, Shared with me, and Shared Drives.
+        if provider is Provider.GOOGLE_DRIVE and remote_path and not metadata.get("ID"):
+            parent, _, child = remote_path.rpartition("/")
+            parent_spec = f"{remote_name}:{parent}" if parent else f"{remote_name}:"
+            try:
+                result = self._run([
+                    "lsjson", parent_spec, "--max-depth", "1",
+                    "--no-mimetype", "--no-modtime",
+                ])
+                entries = json.loads(result.stdout or "[]")
+                if isinstance(entries, list):
+                    metadata = next(
+                        (
+                            item for item in entries
+                            if isinstance(item, dict)
+                            and str(item.get("Name") or item.get("Path") or "").strip("/") == child
+                            and item.get("ID")
+                        ),
+                        {},
+                    )
+            except (RcloneError, json.JSONDecodeError):
+                metadata = {}
+        item_id = str(metadata.get("ID", "")).strip()
+        is_dir = bool(metadata.get("IsDir", True))
+        if item_id and provider is Provider.GOOGLE_DRIVE:
+            return (
+                f"https://drive.google.com/drive/folders/{quote(item_id, safe='')}"
+                if is_dir else f"https://drive.google.com/open?id={quote(item_id, safe='')}",
+                True,
+            )
+        if item_id and provider is Provider.BOX and is_dir:
+            return f"https://app.box.com/folder/{quote(item_id, safe='')}", True
+        if item_id and provider is Provider.ONEDRIVE:
+            return f"https://onedrive.live.com/?id={quote(item_id, safe='!')}", True
+        return provider.home_url, False
 
     def about(self, remote: str) -> dict[str, Any]:
         self._validate_remote_name(remote)

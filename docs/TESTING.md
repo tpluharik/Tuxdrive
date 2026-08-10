@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.10.0 suite contains **62 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.11.4 suite contains **69 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -20,11 +20,11 @@ The TuxDrive 0.10.0 suite contains **62 automated tests**. Tests use temporary d
 | `test_bootstrap.py` | 4 | Transfer-engine selection, rejection of incompatible rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_config.py` | 2 | Round-trip persistence of accounts, jobs and peer shares; private `0600` permissions; invalid configuration quarantine. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
-| `test_engine.py` | 16 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
-| `test_packaging.py` | 7 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, and Nautilus extension dependency/layout/action routing. |
+| `test_engine.py` | 19 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
+| `test_packaging.py` | 8 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, Nautilus extension dependency/layout/action routing, InfoProvider completion, and packaged state emblems. |
 | `test_peer.py` | 9 | Invitation v1/v2 parsing, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
-| `test_rclone.py` | 14 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
+| `test_rclone.py` | 17 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, exact Google parent-listing fallback, safe Google/Dropbox online URLs without public-link creation, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
 | `test_updater.py` | 6 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation and removal of corrupt partial packages. |
 
 ## Important safety invariants covered
@@ -52,9 +52,9 @@ The TuxDrive 0.10.0 suite contains **62 automated tests**. Tests use temporary d
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.10.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.10.0_all.deb
-sha256sum dist/tuxdrive_0.10.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.11.4_all.deb
+dpkg-deb --contents dist/tuxdrive_0.11.4_all.deb
+sha256sum dist/tuxdrive_0.11.4_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.

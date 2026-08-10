@@ -2,8 +2,8 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.10.0_all"
-OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.10.0_all.deb"
+PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.11.4_all"
+OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.11.4_all.deb"
 
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p \
@@ -15,6 +15,7 @@ mkdir -p \
   "$PACKAGE_ROOT/usr/share/doc/tuxdrive/assets" \
   "$PACKAGE_ROOT/usr/share/nautilus-python/extensions" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems" \
   "$PACKAGE_ROOT/usr/lib/systemd/user" \
   "$PROJECT_ROOT/dist"
 
@@ -31,6 +32,10 @@ cp "$PROJECT_ROOT/packaging/tuxdrive-sync.svg" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-sync.svg"
 cp "$PROJECT_ROOT/packaging/tuxdrive-error.svg" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-error.svg"
+for STATE in synced syncing streaming paused pending error; do
+  cp "$PROJECT_ROOT/packaging/emblem-tuxdrive-${STATE}.svg" \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems/emblem-tuxdrive-${STATE}.svg"
+done
 cp "$PROJECT_ROOT/packaging/tuxdrive-google-drive.svg" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-google-drive.svg"
 cp "$PROJECT_ROOT/packaging/tuxdrive-onedrive.svg" \
@@ -64,7 +69,7 @@ chmod 0644 "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxdrive.py"
 # Verify the exact installed layout used by /usr/bin/tuxdrive. This catches
 # PYTHONPATH/package-placement regressions before a .deb can be published.
 PYTHONPATH="$PACKAGE_ROOT/usr/lib" /usr/bin/python3 -c \
-  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.10.0"; assert importlib.util.find_spec("tuxdrive.app"); assert importlib.util.find_spec("tuxdrive.updater"); assert importlib.util.find_spec("tuxdrive.peer"); assert importlib.util.find_spec("tuxdrive.recovery")'
+  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.11.4"; assert importlib.util.find_spec("tuxdrive.app"); assert importlib.util.find_spec("tuxdrive.updater"); assert importlib.util.find_spec("tuxdrive.peer"); assert importlib.util.find_spec("tuxdrive.recovery")'
 
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
 printf '%s\n' "$OUTPUT"
