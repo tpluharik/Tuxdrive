@@ -131,6 +131,35 @@ class RcloneClient:
         self._validate_remote_name(remote)
         self._run(["lsf", f"{remote}:", "--dirs-only", "--max-depth", "1"])
 
+    def create_crypt_remote(
+        self,
+        remote: str,
+        base_spec: str,
+        password: str,
+        password2: str = "",
+        filename_encryption: str = "standard",
+    ) -> None:
+        """Create a crypt remote without ever placing cleartext secrets in config."""
+        self._validate_remote_name(remote)
+        if not base_spec or ":" not in base_spec:
+            raise RcloneError("Choose a configured storage account and a dedicated vault folder")
+        if not password:
+            raise RcloneError("A vault password is required")
+        if filename_encryption not in {"standard", "obfuscate", "off"}:
+            raise RcloneError("Unsupported filename encryption mode")
+        args = [
+            "config", "create", remote, "crypt",
+            "remote", base_spec,
+            "filename_encryption", filename_encryption,
+            "directory_name_encryption", "true",
+            "password", self._obscure(password),
+        ]
+        if password2:
+            args.extend(["password2", self._obscure(password2)])
+        args.append("--non-interactive")
+        self._run(args)
+        self.validate_remote(remote)
+
     def update_credentials(
         self, remote: str, provider: Provider, credentials: dict[str, str]
     ) -> None:

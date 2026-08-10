@@ -84,7 +84,7 @@ class RcloneClientTests(unittest.TestCase):
         self.assertIn("shared_with_me=true", google_scoped_remote("work", "shared_with_me"))
 
     def test_eight_cloud_backends_and_direct_peer_backend_are_available(self):
-        self.assertEqual(len(Provider), 9)
+        self.assertEqual(len(Provider), 10)
         self.assertEqual(Provider.DROPBOX.rclone_type, "dropbox")
         self.assertEqual(Provider.BOX.rclone_type, "box")
         self.assertEqual(Provider.PCLOUD.rclone_type, "pcloud")

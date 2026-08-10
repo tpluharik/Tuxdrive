@@ -1,9 +1,15 @@
 # TuxDrive feature suggestions and roadmap
 
-This document proposes future work; it is **not** a promise that the features already exist. Suggestions should preserve TuxDrive's two primary roles:
+This document records completed safety work and proposes future work. Suggestions should preserve TuxDrive's two primary roles:
 
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
+
+## Current baseline: 0.8.0
+
+Version 0.8.0 is the current documented and packaged release. It supports eight cloud providers, selective two-way and one-way synchronization, files-on-demand streaming, direct encrypted peer folders, saved-file callbacks, recovery history, mass-change protection, integrity repair, conflict review, and encrypted cloud vaults. Ranks 1–5 below are implemented; their remaining work is hardening and richer presentation rather than first delivery.
+
+The next recommended development milestone is **0.9.0 — private collaboration and desktop integration**, beginning with multi-peer authorization, safe edit leases, per-file offline controls, and Nautilus status/actions. No planned item should be read as available until its status changes to a shipped version.
 
 ## Prioritization principles
 
@@ -14,15 +20,15 @@ This document proposes future work; it is **not** a promise that the features al
 - Prefer interoperable protocols and provider APIs over proprietary emulation.
 - Treat real-time document collaboration as a separate consistency problem from ordinary file synchronization.
 
-## Top 20 proposed features
+## Top 20 feature status and proposals
 
 | Rank | Proposed feature | Focus | Priority | Why it matters / suggested approach |
 |---:|---|---|---|---|
-| 1 | Local version history and recycle recovery | Both | Critical | Archive files replaced or deleted by an incoming sync, with retention by age/count and one-click restore. This provides a recovery layer against mistakes, bad conflicts and remote deletions. |
-| 2 | Ransomware and mass-change protection | Both | Critical | Detect unusually large rename, rewrite, encryption-extension or deletion bursts; pause the job and require review before propagation. Combine event thresholds with the existing maximum-deletion guard. |
-| 3 | Integrity audit and repair | Both | Critical | Compare file counts, sizes and available hashes, display mismatches, then repair selected paths. Schedule non-destructive verification separately from synchronization. |
-| 4 | Conflict review center | Both | Critical | Present both versions, timestamps, origins and text/image previews; allow keep-local, keep-remote, keep-both or external merge instead of hiding conflicts in renamed files. |
-| 5 | Encrypted cloud vaults | Cloud | High | Add opt-in client-side filename and content encryption using a crypt layer above supported cloud remotes. Include password recovery warnings and encrypted-name previews. |
+| 1 | Local version history and recycle recovery | Both | Completed 0.8.0 | Archives files replaced/deleted by incoming changes, adds dated two-side version directories, configurable retention, and one-click restore. |
+| 2 | Ransomware and mass-change protection | Both | Completed 0.8.0 | Dry-run and callback gates detect large rewrite/deletion batches and ransomware-like suffixes, then pause the job for review. |
+| 3 | Integrity audit and repair | Both | Completed 0.8.0 | Non-destructive comparison lists mismatches and repairs selected paths from an explicitly chosen authoritative side. |
+| 4 | Conflict review center | Both | Completed 0.8.0 | Filters content conflicts into a review surface with selected-path local or cloud/peer resolution. Rich previews remain future enhancement. |
+| 5 | Encrypted cloud vaults | Cloud | Completed 0.8.0 | Client-side content and name encryption layers a dedicated crypt path over a connected cloud account with password-loss warnings. |
 | 6 | Multi-peer shared folders | Peer | High | Extend one-host/one-guest sharing to several explicitly authorized devices, with individual keys, readable device names and immediate per-device revocation. |
 | 7 | Safe file leases and edit locks | Peer | High | Publish short authenticated edit leases so two users are warned before editing the same office/design file. Locks must expire safely and never permanently block access. |
 | 8 | Block-level delta transfer | Peer | High | Transfer only changed blocks of large files and reuse blocks already present locally. This is especially valuable for VM images, mail archives, media projects and unreliable links. |
@@ -43,15 +49,15 @@ This document proposes future work; it is **not** a promise that the features al
 
 ### Safety foundation
 
-Implement ranks 1–4 first: version history, ransomware protection, integrity checking and conflict review. These reduce the consequences of every later cloud and peer feature.
+Ranks 1–5 shipped in 0.8.0. Continue hardening them with live-provider, large-tree, retention, fault-injection, and desktop usability testing.
 
 ### Private collaboration
 
-Then implement ranks 6–10 and 14–16: multi-device authorization, edit leases, delta transfer, pairing, connectivity and granular peer permissions. Manual direct mode must continue working without a discovery or relay service.
+Target 0.9.x should begin ranks 6–10 and 14–16: multi-device authorization, edit leases, delta transfer, pairing, connectivity and granular peer permissions. Manual direct mode must continue working without a discovery or relay service.
 
 ### Desktop parity and operations
 
-Implement ranks 11–13, 17 and 18 for files-on-demand usability, Nautilus integration, transfer policies and observability.
+In parallel, evaluate ranks 11–13, 17 and 18 for files-on-demand usability, Nautilus integration, transfer policies and observability. Per-file offline state and Nautilus integration are the highest-value desktop follow-ups.
 
 ### Portability
 

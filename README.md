@@ -6,7 +6,7 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature suggestions and top-20 roadmap](docs/ROADMAP.md)**
+🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature status and top-20 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
 ## Community and development
 
@@ -17,7 +17,11 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.7.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.8.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+
+### 0.8.0 release highlights
+
+This release adds the safety and privacy layer around synchronization: recoverable local versions and recycled deletions, pre-transfer mass-change protection, user-directed integrity repair, a conflict review center, and client-side encrypted vaults. Existing 0.7.0 account, peer, folder, and streaming configurations remain readable; the new job safeguards default to enabled. See the [changelog](CHANGELOG.md) for the version-by-version summary and the [roadmap](docs/ROADMAP.md) for shipped versus planned capabilities.
 
 ## What works
 
@@ -30,6 +34,11 @@ Version 0.7.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 - OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
+- per-job local version history and recycle recovery with configurable retention and one-click restore
+- ransomware and mass-change protection that dry-runs established jobs, pauses suspicious rewrite/deletion bursts, and requires review before retry
+- on-demand integrity audits with selected-path repair from either the local or cloud/peer side
+- a conflict review center for choosing the authoritative version instead of silently overwriting differences
+- client-side encrypted cloud vaults layered over an existing cloud account, including content, filename, and directory-name encryption
 - rename and folder-move tracking to avoid unnecessary duplicate transfers
 - download-only and upload-only mirror modes
 - visual, lazy-loading cloud folder tree with multi-folder selective synchronization
@@ -64,7 +73,7 @@ Version 0.7.0 targets Ubuntu 26.04. The installer resolves desktop dependencies 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.7.0_all.deb
+sudo apt install ./tuxdrive_0.8.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -82,13 +91,13 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.7.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.8.0_all.deb`.
 
-The current suite contains 53 automated tests covering transfer-engine bootstrap, configuration safety, synchronization commands, streaming, OAuth/provider setup, Proton 2FA, encrypted peer authentication, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for the detailed test catalogue, safety invariants, manual release matrix and current coverage boundaries.
+The current suite contains 56 automated tests covering transfer-engine bootstrap, configuration safety, recovery/version history, mass-change protection, integrity auditing, synchronization commands, streaming, provider setup, Proton 2FA, encrypted peer authentication, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for the detailed test catalogue, safety invariants, manual release matrix and current coverage boundaries.
 
 ## Suggestions and roadmap
 
-The prioritized [feature suggestions and top-20 roadmap](docs/ROADMAP.md) focuses on recoverable cloud synchronization and private peer collaboration. The first proposed additions are local version history, ransomware/mass-change protection, integrity auditing and a conflict review center. Community discussion should use the feature-request issue form so design, security and test requirements remain reviewable.
+The prioritized [feature suggestions and top-20 roadmap](docs/ROADMAP.md) focuses on recoverable cloud synchronization and private peer collaboration. Version 0.8.0 completes its first safety group: local history, mass-change protection, integrity repair, conflict review, and encrypted cloud vaults. Community discussion should use the feature-request issue form so design, security and test requirements remain reviewable.
 
 ## Update from the app
 
@@ -131,13 +140,15 @@ Do not commit client secrets, access tokens, refresh tokens, or an rclone config
 - OAuth tokens remain in rclone's protected config (normally `~/.config/rclone/rclone.conf`).
 - Operational logs live under `~/.cache/tuxdrive/logs` and do not contain a config dump.
 - First two-way synchronization merges both sides and prefers the newer version for an initial same-path collision. Later unresolved conflicts retain renamed copies.
-- Every synchronization enforces a configurable maximum deletion count.
+- Every synchronization enforces a configurable maximum deletion count. Established jobs also perform a non-destructive preview and pause suspicious mass changes.
+- Local recovery data is stored under `~/.local/share/tuxdrive/recovery`; retention is configured per job. Cloud-side version backups are stored in the job remote's `.tuxdrive-versions` area.
+- Encrypted vault passwords are protected in rclone's private configuration. They are not recoverable by TuxDrive; keep them in a password manager.
 
 Back up important data before introducing any new synchronization tool. A mirror or bidirectional sync intentionally propagates changes and, within the configured safety ceiling, deletions.
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.4.4 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.8.0 does not yet provide Nautilus per-file badges/context menus, a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

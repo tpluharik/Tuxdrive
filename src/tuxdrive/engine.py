@@ -17,6 +17,7 @@ from .bootstrap import install_rclone, resolve_rclone
 from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
 from .config import cache_home
 from .models import ConflictPolicy, SyncJob, SyncMode
+from .recovery import MassChangeGuard, RecoveryManager
 
 
 @dataclass(slots=True)
@@ -30,6 +31,7 @@ class JobResult:
     blocked_path: str = ""
     incremental: bool = False
     mount_lost: bool = False
+    mass_change_blocked: bool = False
 
 
 class SyncEngine:
@@ -40,6 +42,7 @@ class SyncEngine:
         self._monitors: dict[str, ChangeMonitor] = {}
         self._intentional_unmounts: set[str] = set()
         self._protected_patterns: dict[str, tuple[str, ...]] = {}
+        self.recovery = RecoveryManager()
         self._lock = threading.RLock()
 
     @property
@@ -102,6 +105,7 @@ class SyncEngine:
             *job.exclude_patterns,
             *self._protected_patterns.get(job.id, ()),
             *TRANSIENT_PATTERNS,
+            "/.tuxdrive-versions/**",
         ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
@@ -110,20 +114,38 @@ class SyncEngine:
         if dry_run:
             common.append("--dry-run")
 
+        if job.version_history:
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            local_history = self.recovery.root / job.id / "rclone" / stamp
+            remote_root = job.remote_spec.split(":", 1)[0] + ":"
+            remote_history = (
+                f"{remote_root}.tuxdrive-versions/{job.id}/{stamp}"
+            )
+
         if job.mode is SyncMode.TWO_WAY:
             command = [self.rclone_path, "bisync", local, job.remote_spec]
             command.extend(["--resilient", "--recover", "--conflict-loser", "pathname"])
             command.extend(self._conflict_flags(job.conflict_policy))
             workdir = cache_home() / "tuxdrive" / "bisync" / job.id
             command.extend(["--workdir", str(workdir)])
+            if job.version_history:
+                command.extend([
+                    "--backup-dir1", str(local_history),
+                    "--backup-dir2", remote_history,
+                    "--suffix", f".{stamp}.tuxdrive-version",
+                    "--suffix-keep-extension",
+                    "--conflict-suffix", "{DateOnly}-tuxdrive-conflict",
+                ])
             if not job.initialized:
                 command.extend(["--resync", "--resync-mode", "newer"])
             return [*command, *common]
 
         if job.mode is SyncMode.DOWNLOAD_ONLY:
-            return [self.rclone_path, "sync", job.remote_spec, local, *common]
+            history = ["--backup-dir", str(local_history)] if job.version_history else []
+            return [self.rclone_path, "sync", job.remote_spec, local, *history, *common]
         if job.mode is SyncMode.UPLOAD_ONLY:
-            return [self.rclone_path, "sync", local, job.remote_spec, *common]
+            history = ["--backup-dir", remote_history] if job.version_history else []
+            return [self.rclone_path, "sync", local, job.remote_spec, *history, *common]
         if job.mode is SyncMode.VIRTUAL_DRIVE:
             return self.mount_command(job)
         raise ValueError(f"Unsupported sync mode: {job.mode}")
@@ -443,6 +465,16 @@ class SyncEngine:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         completed = 0
         try:
+            total_files = sum(1 for item in job.local.rglob("*") if item.is_file())
+            decision = MassChangeGuard.assess(job, changes, total_files)
+            if decision.blocked:
+                callback(JobResult(
+                    job.id, False,
+                    f"Protection paused synchronization: {decision.reason}",
+                    log_path, incremental=True, mass_change_blocked=True,
+                ))
+                return False
+            self.recovery.archive_incoming_changes(job, changes)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"\n[{datetime.now(timezone.utc).isoformat()}] Incremental callback: {len(changes)} path(s)\n")
                 for change in changes:
@@ -507,6 +539,25 @@ class SyncEngine:
             if resolved is None:
                 resolved = install_rclone()
             self.rclone_path = resolved
+            if job.ransomware_protection and job.initialized and not dry_run:
+                preview_path = log_path.with_name(log_path.stem + "-safety-preview.log")
+                preview_command = self.command_for_job(job, dry_run=True)
+                with preview_path.open("w", encoding="utf-8") as preview:
+                    preview_process = subprocess.run(
+                        preview_command, stdout=preview, stderr=subprocess.STDOUT,
+                        text=True, timeout=3600, check=False,
+                    )
+                if preview_process.returncode != 0:
+                    raise RuntimeError("the safety preview could not be completed; the real sync was not started")
+                total_files = sum(1 for item in job.local.rglob("*") if item.is_file())
+                decision = MassChangeGuard.assess_log(job, preview_path, total_files)
+                if decision.blocked:
+                    callback(JobResult(
+                        job.id, False,
+                        f"Protection paused synchronization: {decision.reason}",
+                        preview_path, mass_change_blocked=True,
+                    ))
+                    return
             command = self.command_for_job(job, dry_run=dry_run)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(

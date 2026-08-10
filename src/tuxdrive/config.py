@@ -18,6 +18,11 @@ def cache_home() -> Path:
     return Path(root) if root else Path.home() / ".cache"
 
 
+def data_home() -> Path:
+    root = os.environ.get("XDG_DATA_HOME")
+    return Path(root) if root else Path.home() / ".local" / "share"
+
+
 class ConfigStore:
     def __init__(self, path: Path | None = None) -> None:
         self.path = path or config_home() / "tuxdrive" / "config.json"

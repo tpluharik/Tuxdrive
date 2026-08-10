@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.7.0 on Ubuntu 26.04: installation, provider authorization, direct encrypted peer sharing, cloud locations, selective synchronization, real-time callbacks, exceptions, streaming drives, tray controls, updates, logs, and recovery.
+This guide covers TuxDrive 0.8.0 on Ubuntu 26.04: installation, provider authorization, direct encrypted peer sharing, selective synchronization, streaming drives, local version recovery, mass-change protection, integrity repair, conflict review, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.7.0 on Ubuntu 26.04: installation, provider authori
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.7.0_all.deb
+sudo apt install ./tuxdrive_0.8.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -146,6 +146,10 @@ Select **Add folder**. Choose the account, drive/location, and one or more cloud
 - **Real-time callbacks** — watches local saves (about two seconds) and polls cloud changes (about 30 seconds), transferring only changed paths.
 - **Conflict handling** — keep both, newer wins, local wins, or cloud wins.
 - **Maximum deletions** — safety ceiling for one synchronization run.
+- **Local version history** — retains replaced/deleted content for recovery; enabled by default.
+- **Version retention** — number of days local recovery entries are retained.
+- **Ransomware protection** — previews established jobs and pauses suspicious change bursts.
+- **Mass-change path/percentage limits** — job-specific thresholds that trigger the safety pause.
 - **Bandwidth limit** — rclone notation such as `10M`.
 - **Google security warning** — unsafe opt-in for files Google marks as malware/spam. Leave disabled unless the file is trusted.
 - **Synchronization exceptions** — clickable rules; add a pattern or remove it with the minus button.
@@ -158,6 +162,9 @@ Each job offers:
 - **Stop** — cancel the active transfer.
 - **Open folder** — open the local folder in Files.
 - **Share link** — create a provider link and copy it to the clipboard.
+- **History** — inspect and restore local versions or recycled files.
+- **Verify** — compare both sides and repair reviewed paths from the chosen authority.
+- **Conflicts** — open the conflict-focused review center.
 - **Edit** — change the mode, paths, selection, interval, conflict handling, and rules.
 - **View log** — open the directory containing transfer logs.
 - **Trash button** — remove the job configuration without deleting local or cloud files.
@@ -236,7 +243,39 @@ When Google blocks a file as suspected malware or spam, TuxDrive shows an intera
 
 To remove an exception, choose **Edit**, find **Synchronization exceptions**, and click the minus button beside the rule.
 
-## 9. Tray and settings
+## 9. Recovery, protection, verification, and vaults
+
+![Safety and encrypted vault controls](assets/07-safety-vault.svg)
+
+### Local version history and recycle recovery
+
+Each normal sync job enables **Local version history** by default. Before an incoming cloud/peer replacement or deletion changes an existing local file, TuxDrive copies the current version into its private recovery area. Full bisync runs also direct replaced versions into dated backup directories on both sides. Set **Version retention (days)** in **Edit**; expired local entries are pruned after incoming changes.
+
+Select **History** on a job to see the file, saved time, reason, and size. Select an entry and choose **Restore selected**. If a current file exists, it is archived before restoration, and TuxDrive queues synchronization. Local recovery files live under `~/.local/share/tuxdrive/recovery`. The cloud-side `.tuxdrive-versions` folder is application data and should not be selected as a second sync root.
+
+### Ransomware and mass-change protection
+
+For an initialized job, TuxDrive performs a non-destructive dry run before a scheduled or manual full sync. It pauses instead of propagating changes when the unique changed-path count, changed percentage, deletion burst, or known ransomware-like filename suffix crosses the job's configured threshold. Real-time callback batches pass through the same gate.
+
+When protection pauses a job, the enable switch is turned off and the preview log is retained. Review the activity and job log, disconnect a compromised computer if necessary, restore files from **History**, and run **Verify**. Re-enable the job only after the source of the changes is understood. Thresholds are safeguards, not malware detection; they do not replace endpoint security or independent backups.
+
+### Integrity audit and repair
+
+Select **Verify** to compare the local tree with its cloud or peer tree. The audit uses available hashes; encrypted vaults use downloaded content verification because ciphertext hashes cannot be compared directly. It reports content differences, local-only paths, remote-only paths, and verification errors without changing files.
+
+Tick only reviewed findings, then choose **Use local versions** or **Use cloud/peer versions**. TuxDrive asks for confirmation and repairs only those paths. Affected local content is archived where possible. Run **Verify** again after repair; a completed transfer is not itself proof that every byte now matches.
+
+### Conflict review center
+
+Select **Conflicts** to show content mismatches requiring an authoritative side. Choose the reviewed items, then use the local or cloud/peer versions. Keep-both synchronization still creates dated `tuxdrive-conflict` copies when automatic resolution is disabled; inspect those alongside the center before removing either copy.
+
+### Encrypted cloud vaults
+
+Connect the underlying cloud account first. Select **Connect account → Create encrypted vault**, choose that account, and enter a new dedicated folder such as `TuxDriveEncrypted`. Choose filename encryption, enter a strong password twice, and optionally add a filename salt. TuxDrive creates a client-side crypt remote: file bodies, and by default file and directory names, are encrypted before upload. The new vault then works with the same visual folder selection, sync, streaming, history, and audit controls.
+
+Never point a vault at a folder containing ordinary unencrypted files, never edit ciphertext through the underlying account, and do not configure both the vault and its backing folder as sync jobs. TuxDrive cannot recover the vault password or salt. Store both in a password manager and test recovery with non-critical data before relying on the vault.
+
+## 10. Tray and settings
 
 ![Tray controls, settings, and logs](assets/06-tray-logs.svg)
 
@@ -256,7 +295,7 @@ Settings control:
 
 Closing the main window hides it; synchronization continues in the tray. Use **Quit** to stop the application and unmount streaming drives.
 
-## 10. Logs and diagnostics
+## 11. Logs and diagnostics
 
 | Location | Purpose |
 |---|---|
@@ -273,7 +312,7 @@ tuxdrive --diagnostics
 
 The expandable **Live activity log** shows recent application and transfer messages directly in the UI.
 
-## 11. Troubleshooting
+## 12. Troubleshooting
 
 ### Streaming folder is empty
 
@@ -283,7 +322,7 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.7.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.8.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
 ### Proton Drive says username and password are required
 
@@ -311,9 +350,9 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.7.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.8.0_all.deb`.
 
-## 12. Data safety
+## 13. Data safety
 
 - Back up important data before introducing any bidirectional synchronization tool.
 - Review conflict and maximum-deletion settings before the first run.

@@ -34,6 +34,7 @@ class Provider(str, Enum):
     PROTON_DRIVE = "proton_drive"
     NEXTCLOUD = "nextcloud"
     PEER = "peer"
+    VAULT = "vault"
 
     @property
     def label(self) -> str:
@@ -47,6 +48,7 @@ class Provider(str, Enum):
             self.PROTON_DRIVE: "Proton Drive",
             self.NEXTCLOUD: "Nextcloud",
             self.PEER: "Peer-to-peer",
+            self.VAULT: "Encrypted vault",
         }[self]
 
     @property
@@ -61,12 +63,15 @@ class Provider(str, Enum):
             self.PROTON_DRIVE: "protondrive",
             self.NEXTCLOUD: "webdav",
             self.PEER: "sftp",
+            self.VAULT: "crypt",
         }[self]
 
     @property
     def icon_name(self) -> str:
         if self is self.PEER:
             return "network-workgroup-symbolic"
+        if self is self.VAULT:
+            return "changes-prevent-symbolic"
         return f"tuxdrive-{self.value.replace('_', '-')}"
 
     @property
@@ -81,6 +86,7 @@ class Provider(str, Enum):
             self.PROTON_DRIVE: "proton",
             self.NEXTCLOUD: "nextcloud",
             self.PEER: "peer",
+            self.VAULT: "vault",
         }[self]
 
     @property
@@ -132,6 +138,7 @@ class Provider(str, Enum):
             self.PROTON_DRIVE: "https://drive.proton.me/",
             self.NEXTCLOUD: "",
             self.PEER: "",
+            self.VAULT: "",
         }[self]
 
 
@@ -167,6 +174,8 @@ class Account:
     peer_host: str = ""
     peer_port: int = 2022
     peer_host_key: str = ""
+    vault_base_remote: str = ""
+    vault_base_path: str = ""
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Account":
@@ -178,6 +187,8 @@ class Account:
             peer_host=value.get("peer_host", ""),
             peer_port=int(value.get("peer_port", 2022)),
             peer_host_key=value.get("peer_host_key", ""),
+            vault_base_remote=value.get("vault_base_remote", ""),
+            vault_base_path=value.get("vault_base_path", ""),
         )
 
 
@@ -215,6 +226,11 @@ class SyncJob:
     bandwidth_limit: str = ""
     acknowledge_google_abuse: bool = False
     realtime_sync: bool = True
+    version_history: bool = True
+    version_retention_days: int = 30
+    ransomware_protection: bool = True
+    mass_change_limit: int = 200
+    mass_change_percent: int = 25
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None

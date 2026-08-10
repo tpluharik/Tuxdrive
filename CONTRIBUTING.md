@@ -43,7 +43,7 @@ PYTHONPATH=src python3 -m compileall -q src
 6. Update documentation when controls, configuration, packaging, or user-visible behaviour changes.
 7. Open a pull request and complete the checklist.
 
-The [testing guide](docs/TESTING.md) describes the current 53-test suite, release matrix, safety invariants and known coverage gaps.
+The [testing guide](docs/TESTING.md) describes the current 56-test suite, release matrix, safety invariants and known coverage gaps. Recovery, integrity, mass-change, conflict-resolution, or encryption changes must include focused safety tests and document authoritative-side and rollback behavior.
 
 ## Pull-request expectations
 

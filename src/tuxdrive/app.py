@@ -53,6 +53,7 @@ from .models import (
     paths_overlap, safe_streaming_overlap,
 )
 from .peer import PeerError, PeerInvitation, PeerManager, normalize_public_key, validate_host, validate_port
+from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .updater import UpdateManager, UpdateRelease
 
@@ -663,6 +664,16 @@ class SyncJobDialog(Gtk.Dialog):
         )
         self.max_delete = Gtk.SpinButton.new_with_range(0, 100000, 10)
         self.max_delete.set_value(existing.max_delete if existing else 100)
+        self.version_history = Gtk.CheckButton(label="Keep replaced and deleted files in local version history")
+        self.version_history.set_active(existing.version_history if existing else True)
+        self.retention = Gtk.SpinButton.new_with_range(1, 3650, 1)
+        self.retention.set_value(existing.version_retention_days if existing else 30)
+        self.ransomware = Gtk.CheckButton(label="Pause suspicious deletion, encryption, or mass-change bursts")
+        self.ransomware.set_active(existing.ransomware_protection if existing else True)
+        self.mass_limit = Gtk.SpinButton.new_with_range(10, 1000000, 10)
+        self.mass_limit.set_value(existing.mass_change_limit if existing else 200)
+        self.mass_percent = Gtk.SpinButton.new_with_range(1, 100, 1)
+        self.mass_percent.set_value(existing.mass_change_percent if existing else 25)
         self.bandwidth = Gtk.Entry()
         self.bandwidth.set_placeholder_text("Optional, e.g. 10M")
         self.bandwidth.set_text(existing.bandwidth_limit if existing else "")
@@ -691,6 +702,11 @@ class SyncJobDialog(Gtk.Dialog):
             ("Real-time callbacks", self.realtime_sync),
             ("Conflict handling", self.conflict),
             ("Maximum deletions per run", self.max_delete),
+            ("Local version history", self.version_history),
+            ("Version retention (days)", self.retention),
+            ("Ransomware protection", self.ransomware),
+            ("Mass-change path limit", self.mass_limit),
+            ("Mass-change percentage", self.mass_percent),
             ("Bandwidth limit", self.bandwidth),
             ("Google security warning", self.acknowledge_abuse),
             ("Synchronization exceptions", self.excludes),
@@ -726,6 +742,11 @@ class SyncJobDialog(Gtk.Dialog):
                 realtime_sync=self.realtime_sync.get_active(),
                 conflict_policy=ConflictPolicy(self.conflict.get_active_id()),
                 max_delete=self.max_delete.get_value_as_int(),
+                version_history=self.version_history.get_active(),
+                version_retention_days=self.retention.get_value_as_int(),
+                ransomware_protection=self.ransomware.get_active(),
+                mass_change_limit=self.mass_limit.get_value_as_int(),
+                mass_change_percent=self.mass_percent.get_value_as_int(),
                 bandwidth_limit=self.bandwidth.get_text().strip(),
                 acknowledge_google_abuse=self.acknowledge_abuse.get_active(),
                 exclude_patterns=excluded,
@@ -828,6 +849,163 @@ class SyncJobDialog(Gtk.Dialog):
     def _selected_location_name(self) -> str:
         location = self.locations.get(self.location.get_active_id())
         return location.name if location else "Cloud drive"
+
+
+class RecoveryHistoryDialog(Gtk.Dialog):
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication", job: SyncJob) -> None:
+        super().__init__(title=f"Version history · {job.name}", transient_for=parent, modal=True)
+        self.set_default_size(760, 480)
+        self.controller, self.job = controller, job
+        area = self.get_content_area()
+        area.set_border_width(16)
+        self.store = Gtk.ListStore(str, str, str, str, object)
+        view = Gtk.TreeView(model=self.store)
+        for index, title in enumerate(("File", "Saved", "Reason", "Size")):
+            view.append_column(Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=index))
+        for entry in controller.engine.recovery.entries(job.id):
+            self.store.append([entry.relative_path, entry.created_at[:19].replace("T", " "), entry.reason, str(entry.size), entry])
+        self.view = view
+        scroll = Gtk.ScrolledWindow()
+        scroll.add(view)
+        area.pack_start(Gtk.Label(label="Select a saved version to restore it locally. The current file is archived first.", xalign=0), False, False, 8)
+        area.pack_start(scroll, True, True, 0)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.add_button("Restore selected", Gtk.ResponseType.OK)
+        self.connect("response", self._response)
+        self.show_all()
+
+    def _response(self, dialog: Gtk.Dialog, response: int) -> None:
+        if response != Gtk.ResponseType.OK:
+            dialog.destroy()
+            return
+        model, selected = self.view.get_selection().get_selected()
+        if selected:
+            entry = model[selected][4]
+            try:
+                self.controller.engine.recovery.restore(self.job, entry)
+                self.job.last_status = f"Restored {entry.relative_path}; synchronization queued"
+                self.controller.save()
+                self.controller.run_job(self.job)
+            except SafetyError as exc:
+                self.get_transient_for().message(str(exc), Gtk.MessageType.ERROR)
+        dialog.destroy()
+
+
+class IntegrityDialog(Gtk.Dialog):
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication", job: SyncJob, conflicts_only: bool = False) -> None:
+        super().__init__(title=("Conflict review center" if conflicts_only else "Integrity audit and repair"), transient_for=parent, modal=True)
+        self.set_default_size(800, 520)
+        self.controller, self.job, self.conflicts_only = controller, job, conflicts_only
+        area = self.get_content_area()
+        area.set_border_width(16)
+        self.status = Gtk.Label(label="Comparing local and remote content…", xalign=0)
+        area.pack_start(self.status, False, False, 8)
+        self.store = Gtk.ListStore(bool, str, str, object)
+        view = Gtk.TreeView(model=self.store)
+        toggle = Gtk.CellRendererToggle()
+        toggle.connect("toggled", lambda _cell, path: self.store.set_value(self.store.get_iter(path), 0, not self.store[path][0]))
+        view.append_column(Gtk.TreeViewColumn("Repair", toggle, active=0))
+        view.append_column(Gtk.TreeViewColumn("Path", Gtk.CellRendererText(), text=1))
+        view.append_column(Gtk.TreeViewColumn("Finding", Gtk.CellRendererText(), text=2))
+        scroll = Gtk.ScrolledWindow()
+        scroll.add(view)
+        area.pack_start(scroll, True, True, 0)
+        self.local_button = self.add_button("Use local versions", 1)
+        self.remote_button = self.add_button("Use cloud/peer versions", 2)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.local_button.set_sensitive(False)
+        self.remote_button.set_sensitive(False)
+        self.connect("response", self._response)
+        self.show_all()
+        account = next((item for item in controller.config.accounts if item.remote == job.account_remote), None)
+        auditor = IntegrityAuditor(controller.engine.rclone_path, controller.engine.recovery)
+        _run_thread(auditor.audit, self._loaded, job, bool(account and account.provider is Provider.VAULT))
+
+    def _loaded(self, issues: list[AuditIssue] | None, error: Exception | None) -> bool:
+        if error:
+            self.status.set_text(f"Audit failed safely: {error}")
+            return False
+        visible = [item for item in (issues or []) if not self.conflicts_only or item.symbol == "*"]
+        for issue in visible:
+            self.store.append([True, issue.path, issue.description, issue])
+        self.status.set_text(f"{len(visible)} conflict(s) found." if self.conflicts_only else f"Audit complete: {len(visible)} difference(s) require review.")
+        self.local_button.set_sensitive(bool(visible))
+        self.remote_button.set_sensitive(bool(visible))
+        return False
+
+    def _response(self, dialog: Gtk.Dialog, response: int) -> None:
+        if response not in (1, 2):
+            dialog.destroy()
+            return
+        issues = [row[3] for row in self.store if row[0]]
+        if not issues:
+            return
+        winner = "local" if response == 1 else "remote"
+        confirm = Gtk.MessageDialog(transient_for=self, modal=True, message_type=Gtk.MessageType.WARNING, buttons=Gtk.ButtonsType.OK_CANCEL, text=f"Repair {len(issues)} item(s) using {winner} as the authoritative side?")
+        accepted = confirm.run() == Gtk.ResponseType.OK
+        confirm.destroy()
+        if not accepted:
+            return
+        auditor = IntegrityAuditor(self.controller.engine.rclone_path, self.controller.engine.recovery)
+        _run_thread(auditor.repair, self._repaired, self.job, issues, winner)
+
+    def _repaired(self, count: int | None, error: Exception | None) -> bool:
+        if error:
+            self.status.set_text(f"Repair stopped safely: {error}")
+        else:
+            self.status.set_text(f"Repair complete: {count} item(s). Run Verify again to confirm integrity.")
+            self.local_button.set_sensitive(False)
+            self.remote_button.set_sensitive(False)
+        return False
+
+
+class VaultDialog(Gtk.Dialog):
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication") -> None:
+        super().__init__(title="Create encrypted cloud vault", transient_for=parent, modal=True)
+        self.controller = controller
+        area = self.get_content_area()
+        area.set_border_width(20)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
+        area.pack_start(grid, True, True, 0)
+        self.remote, self.name, self.folder = Gtk.Entry(), Gtk.Entry(), Gtk.Entry()
+        self.remote.set_text(f"vault-{uuid.uuid4().hex[:6]}")
+        self.name.set_text("Encrypted vault")
+        self.folder.set_text("TuxDriveEncrypted")
+        self.base = Gtk.ComboBoxText()
+        bases = [item for item in controller.config.accounts if item.provider not in {Provider.PEER, Provider.VAULT}]
+        for item in bases:
+            self.base.append(item.remote, f"{item.display_name} · {item.provider.label}")
+        if bases:
+            self.base.set_active(0)
+        self.password, self.confirm, self.salt = Gtk.Entry(), Gtk.Entry(), Gtk.Entry()
+        for entry in (self.password, self.confirm, self.salt):
+            entry.set_visibility(False)
+        self.mode = Gtk.ComboBoxText()
+        for value, label in (("standard", "Encrypt file and folder names"), ("obfuscate", "Obfuscate names"), ("off", "Keep names visible")):
+            self.mode.append(value, label)
+        self.mode.set_active_id("standard")
+        rows = (("Vault key", self.remote), ("Display name", self.name), ("Storage account", self.base), ("Dedicated encrypted folder", self.folder), ("Vault password", self.password), ("Confirm password", self.confirm), ("Optional filename salt", self.salt), ("Filename protection", self.mode))
+        for row, (label, widget) in enumerate(rows):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        warning = Gtk.Label(label="Keep the password and optional salt in a password manager. TuxDrive cannot recover them. Never point a vault at a folder containing unencrypted files.", xalign=0)
+        warning.set_line_wrap(True)
+        grid.attach(warning, 0, len(rows), 2, 1)
+        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        self.add_button("Create vault", Gtk.ResponseType.OK)
+        self.show_all()
+
+    def create(self) -> Account:
+        if self.password.get_text() != self.confirm.get_text():
+            raise RcloneError("The vault passwords do not match")
+        base = self.base.get_active_id()
+        folder = self.folder.get_text().strip().strip("/")
+        if not base or not folder or ".." in Path(folder).parts:
+            raise RcloneError("Choose a storage account and a safe dedicated folder")
+        remote = self.remote.get_text().strip()
+        spec = f"{base}:{folder}"
+        self.controller.rclone.create_crypt_remote(remote, spec, self.password.get_text(), self.salt.get_text(), self.mode.get_active_id())
+        return Account(remote=remote, provider=Provider.VAULT, display_name=self.name.get_text().strip() or "Encrypted vault", vault_base_remote=base, vault_base_path=folder)
 
 
 class PeerSharingDialog(Gtk.Dialog):
@@ -1409,10 +1587,18 @@ class MainWindow(Gtk.ApplicationWindow):
         rename_button.connect("clicked", self._rename_job, job)
         share_button = Gtk.Button(label="Share link")
         share_button.connect("clicked", self._share_job, job)
+        history_button = Gtk.Button(label="History")
+        history_button.set_tooltip_text("Restore locally retained versions and recycled files")
+        history_button.connect("clicked", lambda _button: RecoveryHistoryDialog(self, self.controller, job))
+        verify_button = Gtk.Button(label="Verify")
+        verify_button.set_tooltip_text("Compare content and repair selected integrity differences")
+        verify_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job))
+        conflicts_button = Gtk.Button(label="Conflicts")
+        conflicts_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job, True))
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
         remove.set_tooltip_text("Remove synchronization")
         remove.connect("clicked", self._remove_job, job)
-        for widget in (sync, cancel, open_button, share_button, rename_button, edit_button, log_button):
+        for widget in (sync, cancel, open_button, share_button, history_button, verify_button, conflicts_button, rename_button, edit_button, log_button):
             actions.pack_start(widget, False, False, 0)
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
@@ -1428,7 +1614,7 @@ class MainWindow(Gtk.ApplicationWindow):
         prompt.set_markup("<span size='large' weight='bold'>Choose a storage provider</span>\n<small>All providers support selective folder sync and files-on-demand mounting.</small>")
         area.pack_start(prompt, False, False, 8)
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
-        providers = [provider for provider in Provider if provider is not Provider.PEER]
+        providers = [provider for provider in Provider if provider not in {Provider.PEER, Provider.VAULT}]
         for index, provider in enumerate(providers, start=1):
             button = Gtk.Button(label=provider.label)
             button.set_image(Gtk.Image.new_from_icon_name(provider.icon_name, Gtk.IconSize.DND))
@@ -1437,6 +1623,12 @@ class MainWindow(Gtk.ApplicationWindow):
             button.connect("clicked", lambda _button, response=index: dialog.response(response))
             grid.attach(button, (index - 1) % 2, (index - 1) // 2, 1, 1)
         area.pack_start(grid, True, True, 8)
+        vault_response = len(providers) + 1
+        vault = Gtk.Button(label="Create encrypted vault on a connected account")
+        vault.set_image(Gtk.Image.new_from_icon_name(Provider.VAULT.icon_name, Gtk.IconSize.DND))
+        vault.set_always_show_image(True)
+        vault.connect("clicked", lambda _button: dialog.response(vault_response))
+        area.pack_start(vault, False, False, 8)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.show_all()
         response = dialog.run()
@@ -1444,6 +1636,14 @@ class MainWindow(Gtk.ApplicationWindow):
         if 1 <= response <= len(providers):
             provider = providers[response - 1]
             OAuthWizard(self, self.controller.rclone, provider, self.controller.add_account)
+        elif response == vault_response:
+            vault_dialog = VaultDialog(self, self.controller)
+            if vault_dialog.run() == Gtk.ResponseType.OK:
+                try:
+                    self.controller.add_account(vault_dialog.create())
+                except (RcloneError, OSError) as exc:
+                    self.message(f"Vault creation failed safely: {exc}", Gtk.MessageType.ERROR)
+            vault_dialog.destroy()
 
     def _add_job(self, _button: Gtk.Widget) -> None:
         if not self.controller.config.accounts:
@@ -1591,12 +1791,17 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         if account.provider.home_url:
             webbrowser.open(account.provider.home_url)
+        elif account.provider is Provider.VAULT:
+            self.message("Encrypted vaults have no unencrypted provider website. Open the backing account only to inspect ciphertext.")
         else:
             self.message("This Nextcloud account uses its configured server URL.")
 
     def _reconnect(self, _item: Gtk.MenuItem, account: Account) -> None:
         if account.provider is Provider.PEER:
             self._show_peer_sharing(_item)
+            return
+        if account.provider is Provider.VAULT:
+            self.message("Vault keys cannot be refreshed or recovered. Create a new vault to change its encryption credentials.", Gtk.MessageType.WARNING)
             return
         if not account.provider.browser_oauth:
             OAuthWizard(
@@ -1988,6 +2193,10 @@ class TuxDriveApplication(Gtk.Application):
             job.initialized = False
             job.enabled = False
             job.last_status = f"{result.message} Automatic sync paused; recovery sync required."
+            job.last_error = job.last_status
+        if result.mass_change_blocked:
+            job.enabled = False
+            job.last_status = f"{result.message} Review the log, then re-enable the job to approve a later retry."
             job.last_error = job.last_status
         if result.success and job.mode is not SyncMode.VIRTUAL_DRIVE:
             job.initialized = True
