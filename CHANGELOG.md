@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.10.0 — Nautilus desktop integration
+
+- Added a native Nautilus 4 extension for Ubuntu 26.04.
+- Added a TuxDrive context submenu on configured local folders and their contents.
+- Added safe **Show in TuxDrive**, **Synchronize this TuxDrive folder now**, and **Open TuxDrive activity logs** actions.
+- Added Nautilus status metadata and synchronized/error emblems for configured paths.
+- Routed actions through the running TuxDrive application so Nautilus never starts a competing transfer engine; startup-time requests wait for runtime readiness.
+- Added extension packaging, dependency resolution, documentation, and automated coverage.
+
 ## 0.9.0 — multi-peer collaboration, leases, and local pairing
 
 - Added multiple named authorized devices per shared folder, including enable/disable controls and immediate public-key revocation when the share is saved.

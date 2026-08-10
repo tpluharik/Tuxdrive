@@ -1,6 +1,6 @@
 {
-  "version": "0.9.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.9.0_all.deb",
-  "sha256": "a99338d693ff51ca78c4f6cc37cbd30108df565e05c6039f3e041e902f14c7c9",
-  "notes": "Adds multi-peer shared folders, named device authorization and revocation, cooperative safe file leases, LAN discovery, and completely local QR invitation pairing."
+  "version": "0.10.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.10.0_all.deb",
+  "sha256": "a4def17ef51329a01b1bdd05b18426d646e4be2d134533904faad381902ae161",
+  "notes": "Adds native Nautilus 4 status metadata, synchronized/error emblems, and safe context actions routed through the single running TuxDrive application."
 }

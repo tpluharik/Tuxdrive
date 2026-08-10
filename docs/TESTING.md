@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.9.0 suite contains **61 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.10.0 suite contains **62 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -21,7 +21,7 @@ The TuxDrive 0.9.0 suite contains **61 automated tests**. Tests use temporary di
 | `test_config.py` | 2 | Round-trip persistence of accounts, jobs and peer shares; private `0600` permissions; invalid configuration quarantine. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
 | `test_engine.py` | 16 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
-| `test_packaging.py` | 6 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion and OpenSSH key-generator dependency. |
+| `test_packaging.py` | 7 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, and Nautilus extension dependency/layout/action routing. |
 | `test_peer.py` | 9 | Invitation v1/v2 parsing, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_rclone.py` | 14 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
@@ -46,14 +46,15 @@ The TuxDrive 0.9.0 suite contains **61 automated tests**. Tests use temporary di
 - Multiple enabled public keys are written to the authenticated endpoint; revoked/disabled keys are omitted.
 - A foreign unexpired edit lease blocks acquisition instead of allowing an overwrite.
 - LAN/QR invitations preserve the pinned host key and lease duration; protocol-v1 invitations remain importable.
+- Nautilus actions route through the single application instance, and startup-time sync requests wait for runtime readiness.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.9.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.9.0_all.deb
-sha256sum dist/tuxdrive_0.9.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.10.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.10.0_all.deb
+sha256sum dist/tuxdrive_0.10.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -72,6 +73,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
 | Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
 | LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
+| Nautilus integration | Restart Nautilus, confirm the submenu appears only within configured local jobs, invoke show/sync/log actions with TuxDrive both running and stopped, verify only one application engine runs, and confirm streaming jobs do not expose a full-sync action. |
 | Internet peer sharing | Routed/VPN connection or explicit port forwarding; verify that no intermediary storage is used. |
 | Update | No-update result, valid update, corrupted package rejection and cancelled PolicyKit prompt. |
 | Diagnostics | Startup log, application log, per-job log and crash-log paths contain useful information without secrets. |

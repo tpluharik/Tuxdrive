@@ -60,6 +60,18 @@ class PackagingTests(unittest.TestCase):
             self.assertTrue(Path(f"packaging/tuxdrive-{provider}.svg").exists())
         self.assertIn("dropbox box pcloud mega proton-drive nextcloud", build_script)
 
+    def test_nautilus_extension_is_packaged_with_safe_app_actions(self):
+        control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
+        build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
+        extension = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")
+        app = Path("src/tuxdrive/app.py").read_text(encoding="utf-8")
+        self.assertIn("python3-nautilus", control)
+        self.assertIn("usr/share/nautilus-python/extensions", build_script)
+        self.assertIn('gi.require_version("Nautilus", "4.0")', extension)
+        self.assertIn('group.activate_action(action, parameter)', extension)
+        self.assertIn('(\"sync-path\", self._nautilus_sync_path)', app)
+        self.assertIn("_pending_nautilus_paths", app)
+
 
 if __name__ == "__main__":
     unittest.main()

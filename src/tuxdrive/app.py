@@ -2284,6 +2284,7 @@ class TuxDriveApplication(Gtk.Application):
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False
+        self._pending_nautilus_paths: list[str] = []
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
 
@@ -2295,6 +2296,14 @@ class TuxDriveApplication(Gtk.Application):
         GLib.timeout_add_seconds(30, self._scheduler_tick)
         self.configure_autostart()
         self._create_indicator()
+        for name, callback in (
+            ("show-path", self._nautilus_show_path),
+            ("sync-path", self._nautilus_sync_path),
+            ("open-logs", self._nautilus_open_logs),
+        ):
+            action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
+            action.connect("activate", callback)
+            self.add_action(action)
 
     def do_activate(self) -> None:
         if self.window is None:
@@ -2307,6 +2316,52 @@ class TuxDriveApplication(Gtk.Application):
             self.window.present()
         self.background = False
         LOGGER.info("Application activated; window_visible=%s", self.window.get_visible())
+
+    def _job_for_local_path(self, value: str) -> SyncJob | None:
+        try:
+            selected = Path(value).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError):
+            return None
+        matches: list[tuple[int, SyncJob]] = []
+        for job in self.config.jobs:
+            try:
+                selected.relative_to(job.local.resolve(strict=False))
+                matches.append((len(job.local.parts), job))
+            except (OSError, RuntimeError, ValueError):
+                continue
+        return max(matches, default=(0, None), key=lambda item: item[0])[1]
+
+    def _nautilus_show_path(self, _action: Gio.SimpleAction, parameter: GLib.Variant) -> None:
+        self.activate()
+        value = parameter.get_string()
+        job = self._job_for_local_path(value)
+        if self.window:
+            self.window.message(
+                f"{job.name}: {job.last_status}" if job else "That path is not part of an enabled TuxDrive folder.",
+                Gtk.MessageType.INFO if job else Gtk.MessageType.WARNING,
+            )
+
+    def _nautilus_sync_path(self, _action: Gio.SimpleAction, parameter: GLib.Variant) -> None:
+        value = parameter.get_string()
+        self.activate()
+        if not self._runtime_ready_once:
+            self._pending_nautilus_paths.append(value)
+            if self.window:
+                self.window.message("Preparing TuxDrive, then synchronization will start…")
+            return
+        job = self._job_for_local_path(value)
+        if not job or not job.enabled:
+            if self.window:
+                self.window.message("That path is not part of an enabled TuxDrive folder.", Gtk.MessageType.WARNING)
+            return
+        if job.mode is SyncMode.VIRTUAL_DRIVE:
+            if self.window:
+                self.window.message("This is a files-on-demand drive; opening a file streams its content.")
+            return
+        self.run_job(job)
+
+    def _nautilus_open_logs(self, _action: Gio.SimpleAction, _parameter: GLib.Variant) -> None:
+        MainWindow._open_path(log_directory())
 
     def add_account(self, account: Account) -> None:
         self.config.accounts = [item for item in self.config.accounts if item.remote != account.remote]
@@ -2583,6 +2638,13 @@ class TuxDriveApplication(Gtk.Application):
                     self.run_job(job, quiet=True)
                 elif job.enabled and job.initialized and job.realtime_sync:
                     self.start_callbacks(job)
+            pending, self._pending_nautilus_paths = self._pending_nautilus_paths, []
+            started_jobs: set[str] = set()
+            for value in pending:
+                job = self._job_for_local_path(value)
+                if job and job.id not in started_jobs and job.enabled and job.mode is not SyncMode.VIRTUAL_DRIVE:
+                    started_jobs.add(job.id)
+                    self.run_job(job)
         return False
 
     @staticmethod

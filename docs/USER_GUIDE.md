@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.9.0 on Ubuntu 26.04: installation, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.10.0 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.9.0 on Ubuntu 26.04: installation, cloud providers,
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.9.0_all.deb
+sudo apt install ./tuxdrive_0.10.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -190,6 +190,22 @@ Each job offers:
 
 Status icons and labels change for idle/connected, synchronizing, paused, and error states. The account icon summarizes all jobs belonging to that account.
 
+### Nautilus integration
+
+Version 0.10.0 installs a native extension for Ubuntu Files (Nautilus 4). Right-click a configured synchronization folder, a subfolder, a file inside it, or the empty background of that folder and open the **TuxDrive** submenu:
+
+- **Show in TuxDrive** opens the application and displays the containing job's current status.
+- **Synchronize this TuxDrive folder now** starts the containing normal synchronization job using the same conflict, deletion, ransomware, exception, and lease protections as the main window. Multiple selected files must belong to the same job.
+- **Open TuxDrive activity logs** opens the diagnostic log directory.
+
+Configured paths expose TuxDrive status metadata and a synchronized/error emblem to Nautilus. Files-on-demand drives show their streaming status; their content is still fetched by opening the file, so the explicit synchronization action is intentionally omitted.
+
+The extension sends requests to TuxDrive's single application instance. If TuxDrive is closed, it starts in the background and waits for the verified transfer runtime before starting a requested job. It never runs a second independent transfer engine inside Nautilus.
+
+After first installation or upgrade, close and reopen Files. If the submenu does not appear, run `nautilus -q` once and reopen Files. Non-local URIs, unconfigured folders, and disabled jobs do not receive synchronization actions.
+
+![TuxDrive actions and status inside Nautilus](assets/09-nautilus-integration.svg)
+
 ## 6. Incremental synchronization
 
 When **Sync saved file changes immediately** is enabled:
@@ -340,7 +356,7 @@ The expandable **Live activity log** shows recent application and transfer messa
 4. Open **View log** and look for FUSE, mount, authentication, or unsupported-flag errors.
 5. Disconnect and select **Start streaming** again.
 
-Version 0.9.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
+Version 0.10.0 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash and waits up to 45 seconds for large cloud trees. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
 ### Proton Drive says username and password are required
 
@@ -368,7 +384,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.9.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.10.0_all.deb`.
 
 ## 13. Data safety
 
