@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.17.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted profile migration, adaptive cloud-provider controls, Nautilus integration, multi-peer sharing, selective synchronization, streaming, recovery, encrypted vaults, and diagnostics. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.18.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including searchable in-app documentation, four UI languages, local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted migration, Nautilus integration, multi-peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
@@ -15,7 +15,7 @@ Version 0.16.0 is the minimum supported security baseline. Upgrade older install
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.17.0_all.deb
+sudo apt install ./tuxdrive_0.18.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -33,6 +33,14 @@ The main window contains:
 7. **Compact enable switch** — pause or resume an individual job without enlarging the row under high-DPI GTK themes.
 8. **Live activity log** — current application and transfer activity.
 9. **Settings** — startup, notification, and minimized-start preferences.
+10. **Language flag** — switch English, German, French or Spanish immediately; the choice is retained for future starts.
+11. **Help (`?`)** — open searchable offline documentation with function descriptions and practical how-to guides.
+
+### In-app documentation and language
+
+Select **?** in the top bar. Choose a chapter on the left or type a word in the search field; matching titles and bodies remain visible. The documentation is installed with TuxDrive, works offline, and does not send search terms anywhere. It covers all major user functions and safety boundaries in 18 chapters.
+
+Select the flag next to **?** and choose **🇬🇧 English**, **🇩🇪 Deutsch**, **🇫🇷 Français**, or **🇪🇸 Español**. TuxDrive saves the language in `~/.config/tuxdrive/config.json` and rebuilds only the visible window; background synchronization, mounts and peer listeners continue. Main navigation, account/job actions and the full help center change language. Provider-generated OAuth questions, raw rclone errors, logs and some advanced dialogs remain in their technical source language to preserve diagnostic accuracy.
 
 The black-and-white penguin identifies TuxDrive itself. Each cloud service uses its provider icon while connected and in the account chooser; blue sync and red error badges show changing activity.
 
@@ -502,7 +510,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.17.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.18.0_all.deb`.
 
 ## 13. Data safety
 
@@ -514,8 +522,8 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.17.0_all.deb`.
 
 ### Security upgrade checklist for 0.16.0
 
-1. Install `tuxdrive_0.17.0_all.deb` and restart TuxDrive and Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.17.0 and no signature or expiry error.
+1. Install `tuxdrive_0.18.0_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.18.0 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.18.0 — in-app documentation and multilingual interface
+
+- Added an offline, searchable Help Center with 18 chapters covering every primary cloud, streaming, recovery, peer, privacy, collaboration, migration, update and diagnostics workflow.
+- Added persistent English, German, French and Spanish language selection from a flag menu in the top bar.
+- Localized primary navigation, account and synchronized-folder actions without restarting or interrupting background transfers.
+- Documented practical user HOWTOs in the app and repository, including safety boundaries and troubleshooting guidance.
+- Added localization fallback, translated-help completeness and packaging regression tests.
+
 ## 0.17.0 — local-first collaborative documents
 
 - Added an operation-based CRDT for offline multi-peer Markdown/plain-text editing with deterministic convergence and explicit interoperable checkpoints.

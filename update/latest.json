@@ -1,8 +1,8 @@
 {
-  "version": "0.17.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.17.0_all.deb",
-  "sha256": "96fb5edf9b88fd8eca7ec4cf89e624b25d0bec8fadf597a45433ad0b0c4cb595",
-  "notes": "Local-first collaborative editing, structured ODT/ODS checkpoints, encrypted presence, and Debian-only adaptive packaging",
-  "expires_at": "2027-02-06T18:05:20.569198+00:00",
-  "signature": "FdbCErKqU+EVP9V2kpdOqwnMRdmD2Xifl4QRRHZFXWmKWPMYrnsrmmdmeV8qa0SbFspbd0kO1QjIOnXUS2o/CA=="
+  "version": "0.18.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.18.0_all.deb",
+  "sha256": "76d0edf16d0ae0a4fc00cc982edade5643f8135f27885b99f8c197c9163a1006",
+  "notes": "Searchable in-app documentation and English, German, French and Spanish interface",
+  "expires_at": "2027-02-06T18:39:24.448409+00:00",
+  "signature": "74ZwBoqvE8RNHLD/Y1BQBkhBUXOgjf/9hCEusYvBd17jSSrwaOtm1Ij8+Lulvlks3S++PFD67Nrx/y0a7huKDw=="
 }

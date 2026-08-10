@@ -55,6 +55,8 @@ from .audit import AuditTimeline
 from .capabilities import CAPABILITIES, capabilities_for
 from .collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, document_capability
 from .config import ConfigStore, cache_home
+from .help_content import topics as help_topics
+from .i18n import LANGUAGES, LANGUAGE_CODES, get_language, set_language, tr
 from .engine import JobResult, SyncEngine
 from .models import (
     Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, Provider, SyncJob, SyncMode,
@@ -2206,6 +2208,81 @@ class OperationsDashboard(Gtk.Dialog):
         return self._tree(("Provider", "Streaming", "Polling", "Hashes", "Moves", "Share links", "Versions", "Notes"), rows)
 
 
+class HelpCenterDialog(Gtk.Dialog):
+    """Searchable offline documentation in the selected UI language."""
+
+    def __init__(self, parent: Gtk.Window) -> None:
+        super().__init__(title=tr("documentation"), transient_for=parent, modal=False)
+        self.set_icon_name("tuxdrive")
+        self.set_default_size(900, 700)
+        self._topics = help_topics(get_language())
+        area = self.get_content_area()
+        area.set_border_width(16)
+        area.set_spacing(10)
+        title = Gtk.Label(xalign=0)
+        title.set_markup(f"<span size='x-large' weight='bold'>{GLib.markup_escape_text(tr('documentation'))}</span>\n<small>{GLib.markup_escape_text(tr('documentation_intro'))}</small>")
+        area.pack_start(title, False, False, 0)
+        self.search = Gtk.SearchEntry()
+        self.search.set_placeholder_text(tr("search_help"))
+        self.search.connect("search-changed", self._filter)
+        area.pack_start(self.search, False, False, 0)
+        split = Gtk.Paned.new(Gtk.Orientation.HORIZONTAL)
+        self.topic_list = Gtk.ListBox()
+        self.topic_list.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.topic_list.connect("row-selected", self._selected)
+        topic_scroll = Gtk.ScrolledWindow()
+        topic_scroll.set_size_request(280, -1)
+        topic_scroll.add(self.topic_list)
+        split.pack1(topic_scroll, False, False)
+        self.body = Gtk.TextView()
+        self.body.set_editable(False)
+        self.body.set_cursor_visible(False)
+        self.body.set_wrap_mode(Gtk.WrapMode.WORD)
+        self.body.set_left_margin(18)
+        self.body.set_right_margin(18)
+        self.body.set_top_margin(18)
+        body_scroll = Gtk.ScrolledWindow()
+        body_scroll.add(self.body)
+        split.pack2(body_scroll, True, False)
+        area.pack_start(split, True, True, 0)
+        self.add_button(tr("close"), Gtk.ResponseType.CLOSE)
+        self.connect("response", lambda dialog, _response: dialog.destroy())
+        self._populate(self._topics)
+        self.show_all()
+
+    def _populate(self, selected) -> None:
+        for child in self.topic_list.get_children():
+            self.topic_list.remove(child)
+        for topic in selected:
+            row = Gtk.ListBoxRow()
+            row.topic = topic
+            label = Gtk.Label(label=topic.title, xalign=0)
+            label.set_line_wrap(True)
+            label.set_margin_start(8)
+            label.set_margin_end(8)
+            label.set_margin_top(7)
+            label.set_margin_bottom(7)
+            row.add(label)
+            self.topic_list.add(row)
+        self.topic_list.show_all()
+        rows = self.topic_list.get_children()
+        if rows:
+            self.topic_list.select_row(rows[0])
+        else:
+            self.body.get_buffer().set_text(tr("all_topics"))
+
+    def _filter(self, _entry: Gtk.SearchEntry) -> None:
+        query = self.search.get_text().casefold().strip()
+        selected = tuple(topic for topic in self._topics if not query or query in f"{topic.title}\n{topic.body}".casefold())
+        self._populate(selected)
+
+    def _selected(self, _list: Gtk.ListBox, row: Gtk.ListBoxRow | None) -> None:
+        if not row:
+            return
+        topic = row.topic
+        self.body.get_buffer().set_text(f"{topic.title}\n\n{topic.body}")
+
+
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, application: "TuxDriveApplication") -> None:
         super().__init__(application=application, title="TuxDrive")
@@ -2214,28 +2291,39 @@ class MainWindow(Gtk.ApplicationWindow):
         self.set_icon_name("tuxdrive")
         self.connect("delete-event", self._hide_instead_of_close)
 
-        header = Gtk.HeaderBar(title="TuxDrive", subtitle="Cloud sync, streaming, and encrypted peer sharing")
+        header = Gtk.HeaderBar(title="TuxDrive", subtitle=tr("subtitle"))
         header.set_show_close_button(True)
         self.set_titlebar(header)
         brand = Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.LARGE_TOOLBAR)
         brand.set_tooltip_text("TuxDrive")
         header.pack_start(brand)
         add_account = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
-        add_account.set_tooltip_text("Connect cloud account")
+        add_account.set_tooltip_text(tr("connect_cloud"))
         add_account.connect("clicked", self._choose_provider)
         header.pack_start(add_account)
         peers = Gtk.Button.new_from_icon_name("network-workgroup-symbolic", Gtk.IconSize.BUTTON)
-        peers.set_tooltip_text("Peer-to-peer shared folders")
+        peers.set_tooltip_text(tr("peer_folders"))
         peers.connect("clicked", self._show_peer_sharing)
         header.pack_start(peers)
         health = Gtk.Button.new_from_icon_name("view-statistics-symbolic", Gtk.IconSize.BUTTON)
-        health.set_tooltip_text("Sync health, peer audit timeline, and provider capabilities")
+        health.set_tooltip_text(tr("health"))
         health.connect("clicked", lambda _button: OperationsDashboard(self, self.controller))
         header.pack_start(health)
         settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.BUTTON)
-        settings.set_tooltip_text("Settings")
+        settings.set_tooltip_text(tr("settings"))
         settings.connect("clicked", self._show_settings)
         header.pack_end(settings)
+        help_button = Gtk.Button.new_from_icon_name("help-browser-symbolic", Gtk.IconSize.BUTTON)
+        help_button.set_tooltip_text(tr("help"))
+        help_button.connect("clicked", lambda _button: HelpCenterDialog(self))
+        header.pack_end(help_button)
+        self.language = Gtk.ComboBoxText()
+        self.language.set_tooltip_text(tr("language"))
+        for language in LANGUAGES:
+            self.language.append(language.code, f"{language.flag} {language.name}")
+        self.language.set_active_id(get_language())
+        self.language.connect("changed", self._language_changed)
+        header.pack_end(self.language)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
         self.add(root)
@@ -2247,12 +2335,12 @@ class MainWindow(Gtk.ApplicationWindow):
         sidebar.set_border_width(16)
         sidebar.get_style_context().add_class("sidebar")
         account_label = Gtk.Label(xalign=0)
-        account_label.set_markup("<b>Cloud accounts</b>")
+        account_label.set_markup(f"<b>{GLib.markup_escape_text(tr('cloud_accounts'))}</b>")
         sidebar.pack_start(account_label, False, False, 0)
         self.account_list = Gtk.ListBox()
         self.account_list.set_selection_mode(Gtk.SelectionMode.NONE)
         sidebar.pack_start(self.account_list, False, False, 0)
-        connect_button = Gtk.Button(label="Connect account")
+        connect_button = Gtk.Button(label=tr("connect_account"))
         connect_button.connect("clicked", self._choose_provider)
         sidebar.pack_start(connect_button, False, False, 0)
         content.pack_start(sidebar, False, False, 0)
@@ -2261,9 +2349,9 @@ class MainWindow(Gtk.ApplicationWindow):
         main.set_border_width(20)
         heading_row = Gtk.Box(spacing=10)
         heading = Gtk.Label(xalign=0)
-        heading.set_markup("<span size='large' weight='bold'>Synchronized folders</span>")
+        heading.set_markup(f"<span size='large' weight='bold'>{GLib.markup_escape_text(tr('synced_folders'))}</span>")
         heading_row.pack_start(heading, True, True, 0)
-        add_job = Gtk.Button(label="Add folder")
+        add_job = Gtk.Button(label=tr("add_folder"))
         add_job.connect("clicked", self._add_job)
         heading_row.pack_end(add_job, False, False, 0)
         main.pack_start(heading_row, False, False, 0)
@@ -2274,7 +2362,7 @@ class MainWindow(Gtk.ApplicationWindow):
         scroll.add(self.job_list)
         main.pack_start(scroll, True, True, 0)
 
-        activity = Gtk.Expander(label="Live activity log")
+        activity = Gtk.Expander(label=tr("live_log"))
         activity.set_expanded(True)
         self.activity_view = Gtk.TextView()
         self.activity_view.set_editable(False)
@@ -2306,6 +2394,11 @@ class MainWindow(Gtk.ApplicationWindow):
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self.refresh()
 
+    def _language_changed(self, combo: Gtk.ComboBoxText) -> None:
+        code = combo.get_active_id() or "en"
+        if code != get_language():
+            self.controller.change_language(code)
+
     def refresh(self) -> None:
         for child in self.account_list.get_children():
             self.account_list.remove(child)
@@ -2317,11 +2410,11 @@ class MainWindow(Gtk.ApplicationWindow):
                 job for job in self.controller.config.jobs if job.account_remote == account.remote
             ]
             if any(job.id in self.controller.engine.running_jobs for job in account_jobs):
-                account_state = "Synchronizing"
+                account_state = tr("synchronizing")
             elif any(job.last_error for job in account_jobs):
-                account_state = "Needs attention"
+                account_state = tr("attention")
             else:
-                account_state = "Connected"
+                account_state = tr("connected")
             icon = Gtk.Image.new_from_icon_name(account.provider.icon_name, Gtk.IconSize.DND)
             icon.set_tooltip_text(f"{account.provider.label} · {account_state}")
             text = Gtk.Label(xalign=0)
@@ -2332,11 +2425,11 @@ class MainWindow(Gtk.ApplicationWindow):
             menu = Gtk.MenuButton()
             menu.set_image(Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON))
             popup = Gtk.Menu()
-            online = Gtk.MenuItem(label="Peer settings" if account.provider is Provider.PEER else "Open online")
+            online = Gtk.MenuItem(label=tr("peer_settings") if account.provider is Provider.PEER else tr("open_online"))
             online.connect("activate", self._open_online, account)
-            reconnect = Gtk.MenuItem(label="Reconnect / refresh credentials")
+            reconnect = Gtk.MenuItem(label=tr("reconnect"))
             reconnect.connect("activate", self._reconnect, account)
-            remove = Gtk.MenuItem(label="Remove account")
+            remove = Gtk.MenuItem(label=tr("remove_account"))
             remove.connect("activate", self._remove_account, account)
             popup.append(online)
             popup.append(reconnect)
@@ -2353,7 +2446,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.job_list.remove(child)
         if not self.controller.config.jobs:
             empty = Gtk.Label(
-                label="Connect an account, then add a synchronized folder or virtual drive."
+                label=tr("empty_jobs")
             )
             empty.set_margin_top(60)
             empty.get_style_context().add_class("dim-label")
@@ -2372,7 +2465,7 @@ class MainWindow(Gtk.ApplicationWindow):
         top = Gtk.Box(spacing=12)
         icon_name = account.provider.icon_name if account else "folder-remote-symbolic"
         job_icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND)
-        job_icon.set_tooltip_text(account.provider.label if account else "Cloud storage")
+        job_icon.set_tooltip_text(account.provider.label if account else tr("cloud_storage"))
         top.pack_start(job_icon, False, False, 0)
         labels = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title = Gtk.Label(xalign=0)
@@ -2399,19 +2492,19 @@ class MainWindow(Gtk.ApplicationWindow):
         toggle.set_vexpand(False)
         toggle.set_valign(Gtk.Align.CENTER)
         toggle.set_halign(Gtk.Align.END)
-        toggle.set_tooltip_text("Enable automatic synchronization")
+        toggle.set_tooltip_text(tr("automatic_sync"))
         toggle.connect("notify::active", self._toggle_job, job)
         top.pack_end(toggle, False, False, 0)
         outer.pack_start(top, False, False, 0)
         actions = Gtk.Box(spacing=8)
         sync = Gtk.Button(label=(
-            "Open drive" if mounted else
-            "Start streaming" if job.mode is SyncMode.VIRTUAL_DRIVE else
-            "Sync now"
+            tr("open_drive") if mounted else
+            tr("start_streaming") if job.mode is SyncMode.VIRTUAL_DRIVE else
+            tr("sync_now")
         ))
         if job.mode is SyncMode.VIRTUAL_DRIVE:
             sync.set_tooltip_text(
-                "Show cloud files immediately; download content only when a file is opened"
+                tr("stream_hint")
             )
         sync.connect(
             "clicked",
@@ -2422,33 +2515,33 @@ class MainWindow(Gtk.ApplicationWindow):
             ),
         )
         cancel = Gtk.Button(
-            label="Disconnect" if job.mode is SyncMode.VIRTUAL_DRIVE else "Stop"
+            label=tr("disconnect") if job.mode is SyncMode.VIRTUAL_DRIVE else tr("stop")
         )
         cancel.connect("clicked", lambda _button: self.controller.stop_job(job))
-        open_button = Gtk.Button(label="Open folder")
+        open_button = Gtk.Button(label=tr("open_folder"))
         open_button.connect("clicked", lambda _button: self._open_path(job.local))
-        log_button = Gtk.Button(label="View log")
+        log_button = Gtk.Button(label=tr("view_log"))
         log_button.connect("clicked", lambda _button: self._open_path(cache_home() / "tuxdrive" / "logs"))
-        edit_button = Gtk.Button(label="Edit")
+        edit_button = Gtk.Button(label=tr("edit"))
         edit_button.connect("clicked", self._edit_job, job)
-        rename_button = Gtk.Button(label="Rename")
+        rename_button = Gtk.Button(label=tr("rename"))
         rename_button.set_tooltip_text("Change only the name displayed in TuxDrive")
         rename_button.connect("clicked", self._rename_job, job)
-        share_button = Gtk.Button(label="Share link")
+        share_button = Gtk.Button(label=tr("share_link"))
         share_button.connect("clicked", self._share_job, job)
         share_button.set_sensitive(bool(account and capabilities_for(account.provider).share_links))
         if not share_button.get_sensitive():
             share_button.set_tooltip_text("This provider does not expose a safe share-link capability")
-        history_button = Gtk.Button(label="History")
+        history_button = Gtk.Button(label=tr("history"))
         history_button.set_tooltip_text("Restore locally retained versions and recycled files")
         history_button.connect("clicked", lambda _button: RecoveryHistoryDialog(self, self.controller, job))
-        verify_button = Gtk.Button(label="Verify")
+        verify_button = Gtk.Button(label=tr("verify"))
         verify_button.set_tooltip_text("Compare content and repair selected integrity differences")
         verify_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job))
-        conflicts_button = Gtk.Button(label="Conflicts")
+        conflicts_button = Gtk.Button(label=tr("conflicts"))
         conflicts_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job, True))
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
-        remove.set_tooltip_text("Remove synchronization")
+        remove.set_tooltip_text(tr("remove_sync"))
         remove.connect("clicked", self._remove_job, job)
         for widget in (sync, cancel, open_button, share_button, history_button, verify_button, conflicts_button, rename_button, edit_button, log_button):
             actions.pack_start(widget, False, False, 0)
@@ -2458,12 +2551,12 @@ class MainWindow(Gtk.ApplicationWindow):
         return row
 
     def _choose_provider(self, _button: Gtk.Widget) -> None:
-        dialog = Gtk.Dialog(title="Connect cloud storage", transient_for=self, modal=True)
+        dialog = Gtk.Dialog(title=tr("choose_provider"), transient_for=self, modal=True)
         dialog.set_default_size(560, 360)
         area = dialog.get_content_area()
         area.set_border_width(24)
         prompt = Gtk.Label(xalign=0)
-        prompt.set_markup("<span size='large' weight='bold'>Choose a storage provider</span>\n<small>All providers support selective folder sync and files-on-demand mounting.</small>")
+        prompt.set_markup(f"<span size='large' weight='bold'>{GLib.markup_escape_text(tr('choose_provider_heading'))}</span>\n<small>{GLib.markup_escape_text(tr('provider_hint'))}</small>")
         area.pack_start(prompt, False, False, 8)
         grid = Gtk.Grid(column_spacing=12, row_spacing=12, column_homogeneous=True)
         providers = [provider for provider in Provider if provider not in {Provider.PEER, Provider.VAULT}]
@@ -2476,12 +2569,12 @@ class MainWindow(Gtk.ApplicationWindow):
             grid.attach(button, (index - 1) % 2, (index - 1) // 2, 1, 1)
         area.pack_start(grid, True, True, 8)
         vault_response = len(providers) + 1
-        vault = Gtk.Button(label="Create encrypted vault on a connected account")
+        vault = Gtk.Button(label=tr("create_vault"))
         vault.set_image(Gtk.Image.new_from_icon_name(Provider.VAULT.icon_name, Gtk.IconSize.DND))
         vault.set_always_show_image(True)
         vault.connect("clicked", lambda _button: dialog.response(vault_response))
         area.pack_start(vault, False, False, 8)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button(tr("cancel"), Gtk.ResponseType.CANCEL)
         dialog.show_all()
         response = dialog.run()
         dialog.destroy()
@@ -3001,6 +3094,7 @@ class TuxDriveApplication(Gtk.Application):
             self.config = self.store.load()
         except RuntimeError:
             self.config = AppConfig()
+        set_language(self.config.settings.language)
         self.rclone = RcloneClient(self.config.settings.rclone_path)
         self.engine = SyncEngine(self.config.settings.rclone_path)
         self.audit = AuditTimeline()
@@ -3015,6 +3109,20 @@ class TuxDriveApplication(Gtk.Application):
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
+
+    def change_language(self, code: str) -> None:
+        if code not in LANGUAGE_CODES:
+            code = "en"
+        set_language(code)
+        self.config.settings.language = code
+        self.save()
+        previous = self.window
+        self.window = MainWindow(self)
+        if previous is not None:
+            previous.destroy()
+        self.window.show_all()
+        self.window.present()
+        LOGGER.info("UI language changed to %s", code)
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
@@ -3048,7 +3156,7 @@ class TuxDriveApplication(Gtk.Application):
     def do_activate(self) -> None:
         if self.window is None:
             self.window = MainWindow(self)
-            self.window.message("Preparing the cloud transfer engine…")
+            self.window.message(tr("preparing"))
             _run_thread(self._load_runtime, self._runtime_loaded)
         tray_available = self.indicator is not None
         if not (tray_available and (self.background or self.config.settings.start_minimized)):
@@ -3593,7 +3701,7 @@ class TuxDriveApplication(Gtk.Application):
         self.save()
         if self.window:
             self.window.refresh()
-            self.window.message("TuxDrive loaded and is running in the tray.")
+            self.window.message(tr("loaded"))
         profile_accounts = [item for item in self.config.accounts if item.provider.browser_oauth]
         if profile_accounts:
             preferred = self.config.settings.profile_remote

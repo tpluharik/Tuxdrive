@@ -7,9 +7,9 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.17.0
+## Current baseline: 0.18.0
 
-Version 0.17.0 adds the first local-first collaboration implementation while retaining the 0.16.0 security baseline. Ranks 35 and 38 are implemented for Markdown/text; ranks 36 and 37 provide guarded research adapters and safe binary-format fallbacks. Per-key hostile-client authorization remains part of rank 20's server/agent work.
+Version 0.18.0 adds a complete searchable in-app user guide and persistent English/German/French/Spanish primary UI localization. It retains the 0.17.0 collaboration and 0.16.0 security baseline. Per-key hostile-client authorization remains part of rank 20's server/agent work.
 
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on the headless peer agent, protocol versioning, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing, isolated per-role service endpoints and a published threat model. Tor transport and secure-workspace primitives should follow only after that foundation is externally reviewable. No planned item should be read as available until its status changes to a shipped version.
 

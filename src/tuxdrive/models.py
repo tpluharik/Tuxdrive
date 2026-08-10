@@ -378,6 +378,7 @@ class AppSettings:
     start_minimized: bool = False
     rclone_path: str = "rclone"
     nautilus_integration: bool = True
+    language: str = "en"
     network_policy: str = "maximum"
     allow_metered_networks: bool = True
     pause_below_battery_percent: int = 0
