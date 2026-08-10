@@ -19,7 +19,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.18.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It adds searchable offline user documentation and a persistent English, German, French and Spanish flag selector while retaining the 0.17.0 collaboration and 0.16.0 security baseline.
+Version 0.18.1 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It provides searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization. Arabic and Hebrew text renders right-to-left while the established interface layout remains unchanged.
 
 ### 0.16.0 security baseline
 
@@ -27,7 +27,7 @@ Version 0.18.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and ar
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls were introduced in 0.15.1 and remain enforced in 0.18.0:
+The following controls were introduced in 0.15.1 and remain enforced in 0.18.1:
 
 - Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -139,7 +139,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.18.0_all.deb
+sudo apt install ./tuxdrive_0.18.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -157,7 +157,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.18.0_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.18.1_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -169,9 +169,9 @@ ODT paragraphs/styles/comments/tracked-change markers and ODS cells/formulas are
 
 Select the **?** button in the top bar to open the searchable offline documentation center. Its 18 chapters describe accounts and OAuth, visual folder selection, synchronization modes, streaming/offline files, every job action, exceptions, recovery, integrity/conflicts, peer/Tor sharing, collaborative editing, encrypted migration, Nautilus, updates, transfer policies, diagnostics and safe removal. Each chapter includes practical user steps.
 
-The flag selector in the top bar switches **English**, **German**, **French**, or **Spanish** immediately and stores the choice in the private user configuration. It localizes the main navigation, common job/account actions and the complete documentation center. Provider and rclone diagnostic messages can remain in their source language so technical evidence is not mistranslated.
+The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 117 automated tests, including full four-language help-topic parity and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 117 automated tests, including six-language help parity, RTL directionality and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 

@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.18.1 — Arabic and Hebrew localization
+
+- Added complete Arabic and Hebrew primary-interface translations and all 18 offline documentation chapters.
+- Added explicit right-to-left rendering for Arabic/Hebrew labels, help search, topic titles and documentation bodies while retaining the established application layout and control positions.
+- Extended localization parity and directionality regression tests to all six supported languages.
+
 ## 0.18.0 — in-app documentation and multilingual interface
 
 - Added an offline, searchable Help Center with 18 chapters covering every primary cloud, streaming, recovery, peer, privacy, collaboration, migration, update and diagnostics workflow.

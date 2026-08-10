@@ -1,14 +1,14 @@
 import unittest
 
 from tuxdrive.help_content import topics
-from tuxdrive.i18n import LANGUAGES, get_language, set_language, tr
+from tuxdrive.i18n import LANGUAGES, get_language, is_rtl, set_language, tr
 
 
 class LocalizationAndHelpTests(unittest.TestCase):
     def tearDown(self):
         set_language("en")
 
-    def test_four_languages_have_matching_complete_help_topics(self):
+    def test_six_languages_have_matching_complete_help_topics(self):
         expected = [item.key for item in topics("en")]
         self.assertEqual(len(expected), 18)
         for language in LANGUAGES:
@@ -18,10 +18,13 @@ class LocalizationAndHelpTests(unittest.TestCase):
 
     def test_translations_switch_and_unknown_language_falls_back(self):
         values = set()
-        for code in ("en", "de", "fr", "es"):
+        for code in ("en", "de", "fr", "es", "ar", "he"):
             set_language(code)
             values.add(tr("settings"))
-        self.assertEqual(len(values), 4)
+        self.assertEqual(len(values), 6)
+        self.assertTrue(is_rtl("ar"))
+        self.assertTrue(is_rtl("he"))
+        self.assertFalse(is_rtl("en"))
         self.assertEqual(set_language("unsupported"), "en")
         self.assertEqual(get_language(), "en")
         self.assertEqual(tr("missing-key"), "missing-key")

@@ -56,7 +56,7 @@ from .capabilities import CAPABILITIES, capabilities_for
 from .collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, document_capability
 from .config import ConfigStore, cache_home
 from .help_content import topics as help_topics
-from .i18n import LANGUAGES, LANGUAGE_CODES, get_language, set_language, tr
+from .i18n import LANGUAGES, LANGUAGE_CODES, get_language, is_rtl, set_language, tr
 from .engine import JobResult, SyncEngine
 from .models import (
     Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, Provider, SyncJob, SyncMode,
@@ -2216,13 +2216,17 @@ class HelpCenterDialog(Gtk.Dialog):
         self.set_icon_name("tuxdrive")
         self.set_default_size(900, 700)
         self._topics = help_topics(get_language())
+        self._rtl = is_rtl()
+        text_direction = Gtk.TextDirection.RTL if self._rtl else Gtk.TextDirection.LTR
         area = self.get_content_area()
         area.set_border_width(16)
         area.set_spacing(10)
-        title = Gtk.Label(xalign=0)
+        title = Gtk.Label(xalign=1 if self._rtl else 0)
+        title.set_direction(text_direction)
         title.set_markup(f"<span size='x-large' weight='bold'>{GLib.markup_escape_text(tr('documentation'))}</span>\n<small>{GLib.markup_escape_text(tr('documentation_intro'))}</small>")
         area.pack_start(title, False, False, 0)
         self.search = Gtk.SearchEntry()
+        self.search.set_direction(text_direction)
         self.search.set_placeholder_text(tr("search_help"))
         self.search.connect("search-changed", self._filter)
         area.pack_start(self.search, False, False, 0)
@@ -2235,6 +2239,7 @@ class HelpCenterDialog(Gtk.Dialog):
         topic_scroll.add(self.topic_list)
         split.pack1(topic_scroll, False, False)
         self.body = Gtk.TextView()
+        self.body.set_direction(text_direction)
         self.body.set_editable(False)
         self.body.set_cursor_visible(False)
         self.body.set_wrap_mode(Gtk.WrapMode.WORD)
@@ -2256,7 +2261,8 @@ class HelpCenterDialog(Gtk.Dialog):
         for topic in selected:
             row = Gtk.ListBoxRow()
             row.topic = topic
-            label = Gtk.Label(label=topic.title, xalign=0)
+            label = Gtk.Label(label=topic.title, xalign=1 if self._rtl else 0)
+            label.set_direction(Gtk.TextDirection.RTL if self._rtl else Gtk.TextDirection.LTR)
             label.set_line_wrap(True)
             label.set_margin_start(8)
             label.set_margin_end(8)

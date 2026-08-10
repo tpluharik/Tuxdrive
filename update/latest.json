@@ -1,8 +1,8 @@
 {
-  "version": "0.18.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.18.0_all.deb",
-  "sha256": "76d0edf16d0ae0a4fc00cc982edade5643f8135f27885b99f8c197c9163a1006",
-  "notes": "Searchable in-app documentation and English, German, French and Spanish interface",
-  "expires_at": "2027-02-06T18:39:24.448409+00:00",
-  "signature": "74ZwBoqvE8RNHLD/Y1BQBkhBUXOgjf/9hCEusYvBd17jSSrwaOtm1Ij8+Lulvlks3S++PFD67Nrx/y0a7huKDw=="
+  "version": "0.18.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.18.1_all.deb",
+  "sha256": "2204a4cfcad1e73a681fe868e68ed33389d6e5113c6dcdae7327ddcf6ec019bd",
+  "notes": "Arabic and Hebrew localization with right-to-left text and unchanged interface layout",
+  "expires_at": "2027-02-06T19:06:07.771771+00:00",
+  "signature": "Ty4jyRhQft+Rk62oIVjUpQ2YTGIVJbQxPRf8JXV5PFpHmJY+nKObma2VSJwWowOI4/RB7fhEakY4uIDtkffyAg=="
 }

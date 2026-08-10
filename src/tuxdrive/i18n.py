@@ -13,6 +13,7 @@ class Language:
     code: str
     flag: str
     name: str
+    rtl: bool = False
 
 
 LANGUAGES = (
@@ -20,6 +21,8 @@ LANGUAGES = (
     Language("de", "🇩🇪", "Deutsch"),
     Language("fr", "🇫🇷", "Français"),
     Language("es", "🇪🇸", "Español"),
+    Language("ar", "🇸🇦", "العربية", True),
+    Language("he", "🇮🇱", "עברית", True),
 )
 LANGUAGE_CODES = {item.code for item in LANGUAGES}
 
@@ -116,6 +119,52 @@ _STRINGS = {
         "search_help": "Buscar en la documentación…", "all_topics": "Todos los temas", "close": "Cerrar",
         "preparing": "Preparando el motor de transferencia…", "loaded": "TuxDrive se está ejecutando en la bandeja.",
     },
+    "ar": {
+        "subtitle": "مزامنة سحابية وبث ملفات ومشاركة مشفرة بين الأجهزة",
+        "connect_cloud": "ربط حساب سحابي", "peer_folders": "مجلدات مشتركة بين الأجهزة",
+        "health": "حالة المزامنة وسجل الأجهزة وإمكانات المزود", "settings": "الإعدادات",
+        "help": "دليل المستخدم والإرشادات", "language": "اللغة",
+        "cloud_accounts": "الحسابات السحابية", "connect_account": "ربط حساب",
+        "synced_folders": "المجلدات المتزامنة", "add_folder": "إضافة مجلد", "live_log": "سجل النشاط المباشر",
+        "connected": "متصل", "synchronizing": "تجري المزامنة", "attention": "يتطلب الانتباه",
+        "peer_settings": "إعدادات الجهاز", "open_online": "فتح عبر الإنترنت", "reconnect": "إعادة الربط وتحديث بيانات الاعتماد",
+        "remove_account": "إزالة الحساب", "empty_jobs": "اربط حسابًا ثم أضف مجلدًا متزامنًا أو محركًا افتراضيًا.",
+        "automatic_sync": "تفعيل المزامنة التلقائية", "open_drive": "فتح المحرك",
+        "start_streaming": "بدء البث", "sync_now": "مزامنة الآن", "disconnect": "قطع الاتصال", "stop": "إيقاف",
+        "open_folder": "فتح المجلد", "share_link": "مشاركة رابط", "history": "السجل", "verify": "تحقق",
+        "conflicts": "التعارضات", "rename": "إعادة تسمية", "edit": "تحرير", "view_log": "عرض السجل",
+        "remove_sync": "إزالة المزامنة", "cloud_storage": "التخزين السحابي",
+        "stream_hint": "إظهار الملفات السحابية فورًا وتنزيل المحتوى عند فتح الملف فقط",
+        "choose_provider": "ربط تخزين سحابي", "choose_provider_heading": "اختر مزود التخزين",
+        "provider_hint": "جميع المزودين يدعمون اختيار المجلدات والملفات عند الطلب.",
+        "create_vault": "إنشاء خزنة مشفرة في حساب متصل", "cancel": "إلغاء",
+        "documentation": "دليل مستخدم TuxDrive", "documentation_intro": "الوظائف وإرشادات التشغيل الآمن والخطوات العملية",
+        "search_help": "البحث في الدليل…", "all_topics": "جميع المواضيع", "close": "إغلاق",
+        "preparing": "جارٍ إعداد محرك النقل السحابي…", "loaded": "يعمل TuxDrive الآن في شريط النظام.",
+    },
+    "he": {
+        "subtitle": "סנכרון ענן, הזרמת קבצים ושיתוף עמיתים מוצפן",
+        "connect_cloud": "חיבור חשבון ענן", "peer_folders": "תיקיות משותפות בין עמיתים",
+        "health": "מצב סנכרון, יומן עמיתים ויכולות ספק", "settings": "הגדרות",
+        "help": "תיעוד משתמש ומדריכים", "language": "שפה",
+        "cloud_accounts": "חשבונות ענן", "connect_account": "חיבור חשבון",
+        "synced_folders": "תיקיות מסונכרנות", "add_folder": "הוספת תיקייה", "live_log": "יומן פעילות חי",
+        "connected": "מחובר", "synchronizing": "מסנכרן", "attention": "נדרשת תשומת לב",
+        "peer_settings": "הגדרות עמית", "open_online": "פתיחה בענן", "reconnect": "חיבור מחדש ורענון הרשאות",
+        "remove_account": "הסרת חשבון", "empty_jobs": "חברו חשבון ולאחר מכן הוסיפו תיקייה מסונכרנת או כונן וירטואלי.",
+        "automatic_sync": "הפעלת סנכרון אוטומטי", "open_drive": "פתיחת כונן",
+        "start_streaming": "התחלת הזרמה", "sync_now": "סנכרון עכשיו", "disconnect": "ניתוק", "stop": "עצירה",
+        "open_folder": "פתיחת תיקייה", "share_link": "שיתוף קישור", "history": "היסטוריה", "verify": "אימות",
+        "conflicts": "התנגשויות", "rename": "שינוי שם", "edit": "עריכה", "view_log": "הצגת יומן",
+        "remove_sync": "הסרת סנכרון", "cloud_storage": "אחסון ענן",
+        "stream_hint": "הצגת מבנה הענן מיד והורדת תוכן רק בעת פתיחת הקובץ",
+        "choose_provider": "חיבור אחסון ענן", "choose_provider_heading": "בחירת ספק אחסון",
+        "provider_hint": "כל הספקים תומכים בבחירת תיקיות ובקבצים לפי דרישה.",
+        "create_vault": "יצירת כספת מוצפנת בחשבון מחובר", "cancel": "ביטול",
+        "documentation": "תיעוד המשתמש של TuxDrive", "documentation_intro": "תכונות, הנחיות להפעלה בטוחה ומדריכים מעשיים",
+        "search_help": "חיפוש בתיעוד…", "all_topics": "כל הנושאים", "close": "סגירה",
+        "preparing": "מכין את מנוע העברת הענן…", "loaded": "TuxDrive פועל באזור ההודעות.",
+    },
 }
 
 _current = "en"
@@ -129,6 +178,11 @@ def set_language(code: str) -> str:
 
 def get_language() -> str:
     return _current
+
+
+def is_rtl(code: str | None = None) -> bool:
+    selected = code or _current
+    return any(item.code == selected and item.rtl for item in LANGUAGES)
 
 
 def tr(key: str, **values: object) -> str:
