@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [{name = "TuxDrive contributors"}]
-dependencies = []
+dependencies = ["cryptography>=41"]
 
 [project.scripts]
 tuxdrive = "tuxdrive.app:main"

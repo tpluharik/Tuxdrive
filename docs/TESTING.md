@@ -7,9 +7,12 @@ TuxDrive treats synchronization, deletion propagation, authentication, mounting,
 From the repository root:
 
 ```bash
+python3 -m pip install .
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
+
+The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Ubuntu installations receive the same runtime through the `.deb` package's `python3-cryptography` dependency.
 
 The TuxDrive 0.14.0 suite contains **89 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
