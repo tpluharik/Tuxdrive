@@ -11,7 +11,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.12.0 suite contains **75 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.13.0 suite contains **83 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -51,14 +51,19 @@ The TuxDrive 0.12.0 suite contains **75 automated tests**. Tests use temporary d
 - Nautilus actions route through the single application instance, and startup-time sync requests wait for runtime readiness.
 - Peer delta blocks are individually BLAKE2-verified, the reconstructed file is SHA-256-verified, and replacement is atomic.
 - Transfer policy defaults remain unrestricted; controlled mode defers jobs on configured battery, metered-network, and schedule conditions.
+- Protocol-v4 peer invitations preserve roles, drop scope and expiry while legacy protocols remain importable.
+- Expired one-time drops are rejected before a remote is saved.
+- Read-only, send-only and receive-only jobs reject incremental changes from the prohibited direction; read-only copies do not delete local extras.
+- Every provider has a capability record and unsupported peer streaming/unsafe Proton sharing controls are rejected by the adaptive model.
+- Audit events are written with mode `0600`, can be filtered by job and ignore malformed historical lines safely.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.12.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.12.0_all.deb
-sha256sum dist/tuxdrive_0.12.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.13.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.13.0_all.deb
+sha256sum dist/tuxdrive_0.13.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -77,6 +82,11 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Offline availability | Pin individual streamed files/folders, disconnect networking, open pinned content, free local space, restart the mount, and confirm rules persist. |
 | Block delta | Change one block in a multi-gigabyte peer file, verify reduced transmitted bytes in logs, corrupt a queued block, and confirm the receiver rejects it without replacing the destination. |
 | Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
+| Peer roles | Exercise each role in both directions, including local/remote deletion. Verify an all-receive endpoint is server read-only and document that mixed-role enforcement requires paired TuxDrive clients or separate service endpoints. |
+| One-time drop | Test expiry before connection, inbox isolation, first-file consumption, current-session completion, reconnect rejection and host restart persistence. Confirm ordinary jobs exclude `.tuxdrive-drops`. |
+| Audit timeline | Produce success, failure, policy, peer, delta and drop events; verify local-only storage, permissions, compaction, path sensitivity and malformed-line recovery. |
+| Capability UI | Change among all providers and confirm unsupported modes/actions disappear or disable while server-specific caveats remain visible. |
+| Sync health | Verify running, mounted, paused, callback, last-run and error states against actual job behavior, then reopen to refresh the snapshot. |
 | Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
 | LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
 | Nautilus integration | Test enabled and disabled settings after restarting Nautilus; confirm menus/badges disappear when disabled and streaming items expose pin/free-space actions when enabled. |

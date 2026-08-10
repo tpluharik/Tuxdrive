@@ -21,7 +21,7 @@ from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
 from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
 from .config import cache_home
-from .models import ConflictPolicy, SyncJob, SyncMode
+from .models import ConflictPolicy, PeerRole, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
@@ -67,6 +67,11 @@ class SyncEngine:
             return {
                 job_id for job_id, process in self._mounts.items() if process.poll() is None
             }
+
+    @property
+    def callback_jobs(self) -> set[str]:
+        with self._lock:
+            return set(self._monitors)
 
     def configure_jobs(self, jobs: list[SyncJob]) -> None:
         protected: dict[str, list[str]] = {}
@@ -119,6 +124,7 @@ class SyncEngine:
             "/.tuxdrive-versions/**",
             "/.tuxdrive-leases/**",
             "/.tuxdrive-delta/**",
+            "/.tuxdrive-drops/**",
         ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
@@ -155,7 +161,8 @@ class SyncEngine:
 
         if job.mode is SyncMode.DOWNLOAD_ONLY:
             history = ["--backup-dir", str(local_history)] if job.version_history else []
-            return [self.rclone_path, "sync", job.remote_spec, local, *history, *common]
+            action = "copy" if job.peer_role is PeerRole.READ_ONLY else "sync"
+            return [self.rclone_path, action, job.remote_spec, local, *history, *common]
         if job.mode is SyncMode.UPLOAD_ONLY:
             history = ["--backup-dir", remote_history] if job.version_history else []
             return [self.rclone_path, "sync", local, job.remote_spec, *history, *common]
@@ -617,6 +624,10 @@ class SyncEngine:
         if not relative or ".." in Path(relative).parts:
             raise RuntimeError(f"unsafe incremental path: {change.path}")
         if is_transient_path(relative):
+            return None
+        if change.side == "local" and job.peer_role in {PeerRole.READ_ONLY, PeerRole.RECEIVE_ONLY}:
+            return None
+        if change.side == "remote" and job.peer_role is PeerRole.SEND_ONLY:
             return None
         local = str(job.local / relative)
         remote = f"{job.remote_spec.rstrip('/')}/{relative}"

@@ -165,6 +165,31 @@ class ConflictPolicy(str, Enum):
     CLOUD_WINS = "cloud_wins"
 
 
+class PeerRole(str, Enum):
+    READ_WRITE = "read_write"
+    READ_ONLY = "read_only"
+    SEND_ONLY = "send_only"
+    RECEIVE_ONLY = "receive_only"
+
+    @property
+    def label(self) -> str:
+        return {
+            self.READ_WRITE: "Read and write",
+            self.READ_ONLY: "Read-only",
+            self.SEND_ONLY: "Send-only",
+            self.RECEIVE_ONLY: "Receive-only",
+        }[self]
+
+    @property
+    def sync_mode(self) -> SyncMode:
+        return {
+            self.READ_WRITE: SyncMode.TWO_WAY,
+            self.READ_ONLY: SyncMode.DOWNLOAD_ONLY,
+            self.SEND_ONLY: SyncMode.UPLOAD_ONLY,
+            self.RECEIVE_ONLY: SyncMode.DOWNLOAD_ONLY,
+        }[self]
+
+
 @dataclass(slots=True)
 class Account:
     remote: str
@@ -197,12 +222,38 @@ class AuthorizedPeer:
     name: str
     public_key: str
     enabled: bool = True
+    role: PeerRole = PeerRole.READ_WRITE
     added_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AuthorizedPeer":
+        value = dict(value)
+        value["role"] = PeerRole(value.get("role", PeerRole.READ_WRITE.value))
         allowed = set(cls.__dataclass_fields__)
         return cls(**{key: item for key, item in value.items() if key in allowed})
+
+
+@dataclass(slots=True)
+class OneTimeDrop:
+    name: str
+    public_key: str
+    inbox_path: str
+    expires_at: str
+    id: str = field(default_factory=lambda: uuid4().hex)
+    consumed: bool = False
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "OneTimeDrop":
+        allowed = set(cls.__dataclass_fields__)
+        return cls(**{key: item for key, item in value.items() if key in allowed})
+
+    @property
+    def active(self) -> bool:
+        try:
+            return not self.consumed and datetime.fromisoformat(self.expires_at) > datetime.now(timezone.utc)
+        except (TypeError, ValueError):
+            return False
 
 
 @dataclass(slots=True)
@@ -223,6 +274,7 @@ class PeerShare:
     relay_user: str = ""
     relay_ssh_port: int = 22
     relay_public_port: int = 0
+    one_time_drops: list[OneTimeDrop] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "PeerShare":
@@ -232,6 +284,7 @@ class PeerShare:
         if legacy and not peers:
             peers = [AuthorizedPeer("Legacy peer", legacy)]
         data["authorized_peers"] = peers
+        data["one_time_drops"] = [OneTimeDrop.from_dict(item) for item in data.get("one_time_drops", [])]
         allowed = set(cls.__dataclass_fields__)
         return cls(**{key: item for key, item in data.items() if key in allowed})
 
@@ -240,6 +293,7 @@ class PeerShare:
         keys = [item.public_key for item in self.authorized_peers if item.enabled]
         if self.allowed_peer_key and self.allowed_peer_key not in keys:
             keys.append(self.allowed_peer_key)
+        keys.extend(item.public_key for item in self.one_time_drops if item.active)
         return keys
 
 
@@ -269,6 +323,8 @@ class SyncJob:
     peer_lease_minutes: int = 10
     block_delta_transfer: bool = True
     peer_delta: bool = False
+    peer_role: PeerRole = PeerRole.READ_WRITE
+    one_time_drop_id: str = ""
     offline_paths: list[str] = field(default_factory=list)
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
@@ -293,6 +349,7 @@ class SyncJob:
         data["conflict_policy"] = ConflictPolicy(
             data.get("conflict_policy", ConflictPolicy.KEEP_BOTH.value)
         )
+        data["peer_role"] = PeerRole(data.get("peer_role", PeerRole.READ_WRITE.value))
         allowed = set(cls.__dataclass_fields__)
         return cls(**{key: item for key, item in data.items() if key in allowed})
 

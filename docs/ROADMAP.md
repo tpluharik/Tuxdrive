@@ -5,11 +5,11 @@ This document records completed safety work and proposes future work. Suggestion
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
 
-## Current baseline: 0.12.0
+## Current baseline: 0.13.0
 
-Version 0.12.0 is the current documented and packaged release. It adds verified peer block-delta transactions, automatic NAT mapping, an optional encrypted no-storage reverse relay, per-file streamed-content pin/free-space controls, a default-on optional Nautilus integration, and opt-in network/battery/schedule policies. Ranks 1–13 are implemented; continued work focuses on adaptive provider capabilities, health visibility and peer roles.
+Version 0.13.0 is the current documented and packaged release. It adds directional peer roles, a private audit timeline, expiring inbox-scoped file drops, a conservative provider capability matrix with adaptive controls, and a consolidated sync-health view. Ranks 1–18 are implemented; continued work focuses on secure migration, a headless/cross-platform peer agent, richer health metrics and hard enforcement for mixed-role generic SFTP clients.
 
-The next recommended development milestone is **1.0.0 — operational hardening**, focusing on granular peer roles, audit visibility, hydration progress, relay deployment guidance, large-tree delta stress testing and adaptive provider capabilities. No planned item should be read as available until its status changes to a shipped version.
+The next recommended development milestone is **1.0.0 — operational hardening**, focusing on encrypted device migration, a headless peer agent, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing and isolated per-role service endpoints. No planned item should be read as available until its status changes to a shipped version.
 
 ## Prioritization principles
 
@@ -37,11 +37,11 @@ The next recommended development milestone is **1.0.0 — operational hardening*
 | 11 | Per-file offline availability controls | Cloud | Completed 0.12.0 | Streaming files/folders expose **Always keep available offline** and **Free local space** in Nautilus; persistent rules hydrate VFS content and prevent normal age eviction. Hydration progress remains a future UI refinement. |
 | 12 | Nautilus integration | Cloud | Phase 3 completed 0.12.0 | Live state emblems, safe sync/web/log actions and per-item streaming availability controls are shipped. Integration is optional in Settings and enabled by default. |
 | 13 | Network, battery and schedule policies | Both | Completed 0.12.0 | Settings can defer transfers on metered networks, below a battery threshold, or outside a daily window. Default **Maximum usage** applies no limits. |
-| 14 | Read-only, send-only and receive-only peer roles | Peer | Medium | Give each authorized device explicit folder permissions. Enforce the direction both in TuxDrive jobs and at the served endpoint rather than relying only on user discipline. |
-| 15 | Peer activity and audit timeline | Peer | Medium | Record which authenticated device uploaded, replaced, moved or deleted each path, with retention controls and secret-safe export. This is essential for collaborative troubleshooting. |
-| 16 | One-time encrypted file drop | Peer | Medium | Generate an expiring, single-purpose invitation allowing a peer to upload selected files into a controlled inbox without exposing the rest of the shared folder. |
-| 17 | Provider capability matrix and adaptive UI | Cloud | Medium | Detect whether each backend supports hashes, polling, server-side copy/move, versions, sharing and quotas; show only safe controls and explain fallbacks. |
-| 18 | Sync health dashboard | Both | Medium | Display pending files, last successful verification, transferred bytes, current rate, retry queue, cache use, peer reachability and provider throttling in one view. |
+| 14 | Read-only, send-only and receive-only peer roles | Peer | Completed 0.13.0 | Protocol-v4 invitations persist directional roles; full and incremental jobs enforce them. All-receive endpoints add server-side read-only enforcement; separate endpoints remain recommended for hostile generic clients in mixed-role shares. |
+| 15 | Peer activity and audit timeline | Peer | Phase 1 completed 0.13.0 | A private, permission-restricted, compacted JSONL timeline and GTK view record peer/sync lifecycle, failures, delta application and drop events. Device-attributed SFTP operation parsing and export/retention controls remain future refinements. |
+| 16 | One-time encrypted file drop | Peer | Completed 0.13.0 | Expiring protocol-v4 invitations scope an upload-only sender to a random hidden inbox; ordinary jobs exclude inboxes and the host persists consumption after the first received file. |
+| 17 | Provider capability matrix and adaptive UI | Cloud | Phase 1 completed 0.13.0 | All providers declare conservative streaming, polling, hash, move, version and sharing capabilities. Job modes and share actions adapt accordingly; live server capability probes remain future work. |
+| 18 | Sync health dashboard | Both | Phase 1 completed 0.13.0 | A consolidated GTK view reports job state, mode/role, mount/callback status, last run/error, audit events and the provider matrix. Byte-rate, cache and retry-depth telemetry remain future refinements. |
 | 19 | Encrypted configuration backup and device migration | Both | Medium | Export selected jobs, filters and public metadata in a password-protected bundle. Private identities and OAuth credentials should be opt-in, strongly encrypted and clearly separated. |
 | 20 | Headless and cross-platform peer agent | Peer | Strategic | Provide a minimal daemon for Ubuntu Server and later interoperable desktop peers on Windows/macOS, using the same invitation, key-pinning and folder-policy model. |
 
@@ -53,11 +53,11 @@ Ranks 1–5 shipped in 0.8.0. Continue hardening them with live-provider, large-
 
 ### Private collaboration
 
-Versions 0.9.0 and 0.12.0 delivered multi-peer authorization, leases, LAN/QR pairing, verified block deltas and optional NAT/relay connectivity. Next prioritize granular roles, audit timelines and multi-peer/delta stress testing. Manual direct mode must continue working without discovery or relay services.
+Versions 0.9.0–0.13.0 delivered multi-peer authorization, leases, LAN/QR pairing, verified block deltas, optional NAT/relay connectivity, directional roles, audit visibility and expiring file drops. Next prioritize isolated role endpoints, attributed operation parsing and multi-peer/delta stress testing. Manual direct mode must continue working without discovery or relay services.
 
 ### Desktop parity and operations
 
-Versions 0.10.0–0.12.0 delivered live Nautilus integration, per-file offline rules and transfer policies. Next evaluate ranks 17 and 18 for provider-adaptive controls, hydration progress, cache accounting and consolidated health observability.
+Versions 0.10.0–0.13.0 delivered live Nautilus integration, per-file offline rules, transfer policies, adaptive provider controls and baseline health observability. Next add hydration progress, throughput, cache accounting, retry depth and live backend capability probes.
 
 ### Portability
 

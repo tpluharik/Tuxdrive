@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from tuxdrive.engine import SyncEngine
 from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
 from tuxdrive.models import (
-    ConflictPolicy, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
+    ConflictPolicy, PeerRole, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
 )
 
 
@@ -66,6 +66,16 @@ class SyncEngineCommandTests(unittest.TestCase):
         )
         self.assertEqual(self.engine.command_for_job(download)[2:4], ["one:Docs", "/data/One"])
         self.assertEqual(self.engine.command_for_job(upload)[2:4], ["/data/One", "one:Docs"])
+
+    def test_peer_roles_constrain_full_and_incremental_direction(self):
+        read_only = SyncJob(account_remote="peer", local_path="/data/Peer", mode=SyncMode.DOWNLOAD_ONLY, peer_role=PeerRole.READ_ONLY)
+        receive = SyncJob(account_remote="peer", local_path="/data/Peer", mode=SyncMode.DOWNLOAD_ONLY, peer_role=PeerRole.RECEIVE_ONLY)
+        send = SyncJob(account_remote="peer", local_path="/data/Peer", mode=SyncMode.UPLOAD_ONLY, peer_role=PeerRole.SEND_ONLY)
+        self.assertEqual(self.engine.command_for_job(read_only)[1], "copy")
+        self.assertEqual(self.engine.command_for_job(receive)[1], "sync")
+        self.assertIsNone(self.engine._incremental_command(read_only, FileChange("local.txt", "local", False)))
+        self.assertIsNone(self.engine._incremental_command(send, FileChange("remote.txt", "remote", False)))
+        self.assertEqual(self.engine._incremental_command(send, FileChange("local.txt", "local", False))[1], "copyto")
 
     def test_virtual_drive_uses_full_vfs_cache(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(

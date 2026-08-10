@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.models import AuthorizedPeer, PeerShare, SyncJob
+from tuxdrive.models import AuthorizedPeer, PeerRole, PeerShare, SyncJob
 from tuxdrive.peer import (
     DiscoveredPeer, FileLease, PeerError, PeerInvitation, PeerLeaseManager,
     PeerManager, key_fingerprint, normalize_public_key, validate_port,
@@ -22,7 +22,29 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(decoded.host, "198.51.100.20")
         self.assertEqual(decoded.port, 22022)
         self.assertEqual(decoded.host_key, KEY)
-        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 3)
+        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 4)
+
+    def test_role_and_one_time_drop_scope_round_trip(self):
+        encoded = PeerInvitation(
+            "Drop", "198.51.100.20", 22022, KEY,
+            role=PeerRole.SEND_ONLY,
+            remote_path=".tuxdrive-drops/drop-1",
+            one_time_drop_id="drop-1",
+            expires_at="2999-01-01T00:00:00+00:00",
+        ).encode()
+        decoded = PeerInvitation.decode(encoded)
+        decoded.assert_usable()
+        self.assertEqual(decoded.role, PeerRole.SEND_ONLY)
+        self.assertEqual(decoded.remote_path, ".tuxdrive-drops/drop-1")
+        self.assertEqual(decoded.one_time_drop_id, "drop-1")
+
+    def test_expired_file_drop_is_rejected(self):
+        invitation = PeerInvitation(
+            "Old drop", "198.51.100.20", 22022, KEY,
+            role=PeerRole.SEND_ONLY, expires_at="2000-01-01T00:00:00+00:00",
+        )
+        with self.assertRaises(PeerError):
+            invitation.assert_usable()
 
     def test_invitation_preserves_optional_no_storage_relay(self):
         encoded = PeerInvitation(

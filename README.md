@@ -17,7 +17,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.12.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.13.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
 
 ### 0.9.0 release highlights
 
@@ -37,6 +37,10 @@ Version 0.10.3 removes an exact GI minor-version pin that blocked the extension 
 
 Version 0.12.0 adds verified block-level delta transactions for direct peer updates, automatic UPnP/NAT-PMP traversal, an optional SSH reverse-tunnel relay that forwards encrypted bytes without storing file content, per-file streaming availability controls in Nautilus, an optional default-on Nautilus integration flag, and metered-network/battery/schedule policies. Policy mode defaults to **Maximum usage**, preserving unrestricted behavior until the user explicitly enables controls.
 
+### 0.13.0 controlled collaboration and operational visibility
+
+Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invitations; expiring upload-only encrypted file drops; a private local peer/sync audit timeline; a provider capability matrix that adapts mode and sharing controls; and a consolidated health dashboard showing running, mounted, callback, last-run and failure state. Existing peer invitations/configurations migrate to read/write behavior.
+
 ## What works
 
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
@@ -47,6 +51,11 @@ Version 0.12.0 adds verified block-level delta transactions for direct peer upda
 - block-level peer delta transactions with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and full-file fallback on the first transfer
 - automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
 - multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and one authenticated endpoint per folder
+- per-device read/write, read-only, send-only and receive-only peer roles carried by protocol-v4 invitations and enforced by TuxDrive transfer direction
+- expiring, inbox-scoped, upload-only encrypted file-drop invitations that retire after the first received file
+- a private append-only peer and synchronization audit timeline with job, result, peer, path, and bounded diagnostic detail
+- an operations dashboard showing sync/mount/callback health, recent failures, peer access mode, audit events, and provider capabilities
+- a provider capability matrix for streaming, polling, hashes, server moves, share links and versions; unsupported modes/actions are disabled with an explanation
 - cooperative expiring edit leases that pause peer synchronization instead of overwriting a file another device is actively editing
 - optional LAN multicast discovery with host-key fingerprint confirmation and no central discovery service
 - offline QR invitation display and QR-image import; no online QR service receives pairing data
@@ -98,7 +107,7 @@ Version 0.12.0 adds verified block-level delta transactions for direct peer upda
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.12.0_all.deb
+sudo apt install ./tuxdrive_0.13.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -116,9 +125,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.12.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.13.0_all.deb`.
 
-The current suite contains 75 automated tests covering block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, integrity auditing, synchronization, streaming and stale-mount recovery, provider setup and private online URLs, Proton 2FA, multi-peer authorization, edit leases, LAN/QR/NAT/relay behavior, optional Nautilus actions/offline controls, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 83 automated tests covering peer-role direction, expiring file-drop invitations, private audit persistence, adaptive provider capabilities, block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, synchronization, streaming, provider setup, Proton 2FA, LAN/QR/NAT/relay behavior, Nautilus integration, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -173,7 +182,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.12.0 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation, context menus, and persistent per-file/per-folder offline availability controls. It does not provide a kernel-level placeholder API identical to Windows Cloud Files, Office coauthoring hooks, or a standalone graphical cloud-file content browser. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.13.0 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation, context menus, persistent per-file/per-folder offline availability controls, adaptive provider controls and an operational dashboard. It does not provide a kernel-level placeholder API identical to Windows Cloud Files or Office coauthoring hooks. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

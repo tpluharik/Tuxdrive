@@ -20,7 +20,8 @@ from uuid import uuid4
 
 from .bootstrap import install_rclone, resolve_rclone
 from .config import cache_home, config_home
-from .models import PeerShare, SyncJob
+from .audit import AuditTimeline
+from .models import OneTimeDrop, PeerRole, PeerShare, SyncJob
 
 
 class PeerError(RuntimeError):
@@ -42,11 +43,15 @@ class PeerInvitation:
     lease_minutes: int = 10
     relay_host: str = ""
     relay_port: int = 0
+    role: PeerRole = PeerRole.READ_WRITE
+    remote_path: str = ""
+    one_time_drop_id: str = ""
+    expires_at: str = ""
 
     def encode(self) -> str:
         return json.dumps(
             {
-                "tuxdrive_peer": 3,
+                "tuxdrive_peer": 4,
                 "name": self.name,
                 "host": self.host,
                 "port": self.port,
@@ -55,6 +60,10 @@ class PeerInvitation:
                 "lease_minutes": self.lease_minutes,
                 "relay_host": self.relay_host,
                 "relay_port": self.relay_port,
+                "role": self.role.value,
+                "remote_path": self.remote_path,
+                "one_time_drop_id": self.one_time_drop_id,
+                "expires_at": self.expires_at,
             },
             indent=2,
         )
@@ -63,7 +72,7 @@ class PeerInvitation:
     def decode(cls, value: str) -> "PeerInvitation":
         try:
             data = json.loads(value)
-            if data.get("tuxdrive_peer") not in (1, 2, 3):
+            if data.get("tuxdrive_peer") not in (1, 2, 3, 4):
                 raise ValueError
             invitation = cls(
                 name=str(data.get("name") or "Peer folder"),
@@ -74,10 +83,22 @@ class PeerInvitation:
                 lease_minutes=max(1, min(1440, int(data.get("lease_minutes", 10)))),
                 relay_host=validate_host(str(data["relay_host"])) if data.get("relay_host") else "",
                 relay_port=validate_port(int(data["relay_port"])) if data.get("relay_port") else 0,
+                role=PeerRole(data.get("role", PeerRole.READ_WRITE.value)),
+                remote_path=str(data.get("remote_path") or "").strip("/"),
+                one_time_drop_id=str(data.get("one_time_drop_id") or ""),
+                expires_at=str(data.get("expires_at") or ""),
             )
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PeerError("The peer invitation is incomplete or invalid") from exc
         return invitation
+
+    def assert_usable(self) -> None:
+        if self.expires_at:
+            try:
+                if datetime.fromisoformat(self.expires_at) <= datetime.now(timezone.utc):
+                    raise PeerError("This one-time file-drop invitation has expired")
+            except (TypeError, ValueError) as exc:
+                raise PeerError("The invitation expiry is invalid") from exc
 
 
 def validate_host(value: str) -> str:
@@ -305,7 +326,7 @@ class PeerLeaseManager:
 class PeerManager:
     """Runs direct, mutually authenticated SFTP shares between TuxDrive peers."""
 
-    def __init__(self, rclone_path: str = "rclone", root: Path | None = None) -> None:
+    def __init__(self, rclone_path: str = "rclone", root: Path | None = None, audit: AuditTimeline | None = None) -> None:
         self.rclone_path = rclone_path
         self.root = root or config_home() / "tuxdrive" / "peer"
         self._servers: dict[str, subprocess.Popen[str]] = {}
@@ -313,6 +334,7 @@ class PeerManager:
         self._logs: dict[str, object] = {}
         self._tunnels: dict[str, subprocess.Popen[str]] = {}
         self._lock = threading.RLock()
+        self.audit = audit or AuditTimeline()
         self.discovery = LanDiscovery(self._discovery_invitations)
 
     @property
@@ -334,7 +356,7 @@ class PeerManager:
         _private, public = self._ensure_keypair(self.root / "hosts" / share.id)
         return normalize_public_key(public.read_text(encoding="utf-8"))
 
-    def invitation(self, share: PeerShare) -> str:
+    def invitation(self, share: PeerShare, role: PeerRole = PeerRole.READ_WRITE) -> str:
         return PeerInvitation(
             share.name,
             validate_host(share.advertised_host),
@@ -344,6 +366,17 @@ class PeerManager:
             share.lease_minutes,
             share.relay_host,
             share.relay_public_port,
+            role,
+        ).encode()
+
+    def one_time_invitation(self, share: PeerShare, drop: OneTimeDrop) -> str:
+        if not drop.active:
+            raise PeerError("This one-time drop has expired or was already consumed")
+        return PeerInvitation(
+            drop.name, validate_host(share.advertised_host), validate_port(share.port),
+            self.host_public_key(share), share.id, share.lease_minutes,
+            share.relay_host, share.relay_public_port, PeerRole.SEND_ONLY,
+            drop.inbox_path, drop.id, drop.expires_at,
         ).encode()
 
     def start(self, share: PeerShare) -> None:
@@ -351,7 +384,16 @@ class PeerManager:
         if not folder.is_dir():
             raise PeerError("Select an existing local folder to share")
         port = validate_port(int(share.port))
-        allowed_keys = list(dict.fromkeys(normalize_public_key(value) for value in share.active_peer_keys))
+        consumed = self.root / "drop-consumed"
+        active_peers = [item for item in share.authorized_peers if item.enabled]
+        allowed_keys = [item.public_key for item in active_peers]
+        if share.allowed_peer_key:
+            allowed_keys.append(share.allowed_peer_key)
+        allowed_keys.extend(
+            item.public_key for item in share.one_time_drops
+            if item.active and not (consumed / item.id).exists()
+        )
+        allowed_keys = list(dict.fromkeys(normalize_public_key(value) for value in allowed_keys))
         if not allowed_keys:
             raise PeerError("Authorize at least one peer device before starting the share")
         validate_host(share.advertised_host)
@@ -369,17 +411,24 @@ class PeerManager:
                 return
             log = log_path.open("a", encoding="utf-8")
             try:
+                read_only = bool(active_peers) and all(
+                    item.role in {PeerRole.READ_ONLY, PeerRole.RECEIVE_ONLY}
+                    for item in active_peers
+                ) and not any(item.active for item in share.one_time_drops)
+                command = [
+                    rclone, "serve", "sftp", f":local:{folder}",
+                    "--addr", f":{port}",
+                    "--authorized-keys", str(authorized),
+                    "--key", str(host_private),
+                    "--dir-cache-time", "10s",
+                    "--log-level", "INFO",
+                    "--stats", "10s",
+                    "--stats-one-line",
+                ]
+                if read_only:
+                    command.append("--read-only")
                 process = subprocess.Popen(
-                    [
-                        rclone, "serve", "sftp", f":local:{folder}",
-                        "--addr", f":{port}",
-                        "--authorized-keys", str(authorized),
-                        "--key", str(host_private),
-                        "--dir-cache-time", "10s",
-                        "--log-level", "INFO",
-                        "--stats", "10s",
-                        "--stats-one-line",
-                    ],
+                    command,
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     text=True,
@@ -393,6 +442,7 @@ class PeerManager:
             self._logs[share.id] = log
         threading.Thread(target=self._watch, args=(share.id, process), daemon=True).start()
         threading.Thread(target=self._delta_watch, args=(share, process), daemon=True, name=f"peer-delta-{share.id[:8]}").start()
+        threading.Thread(target=self._drop_watch, args=(share, process), daemon=True, name=f"peer-drop-{share.id[:8]}").start()
         if share.nat_traversal:
             self._open_nat_mapping(port)
         if share.relay_host and share.relay_user and share.relay_public_port:
@@ -567,13 +617,34 @@ class PeerManager:
                     instruction = transaction / "instruction.json"
                     if instruction.is_file():
                         try:
-                            self._apply_delta_transaction(Path(share.local_path).expanduser(), transaction)
+                            changed_path = self._apply_delta_transaction(Path(share.local_path).expanduser(), transaction)
+                            self.audit.record("peer", "block delta applied", "success", path=changed_path, detail=share.name)
                         except (OSError, ValueError, KeyError, json.JSONDecodeError):
                             continue
-            time.sleep(1)
+            time.sleep(1.0)
+
+    def _drop_watch(self, share: PeerShare, process: subprocess.Popen[str]) -> None:
+        root = Path(share.local_path).expanduser()
+        markers = self.root / "drop-consumed"
+        markers.mkdir(parents=True, exist_ok=True, mode=0o700)
+        while process.poll() is None:
+            for drop in share.one_time_drops:
+                marker = markers / drop.id
+                inbox = root / drop.inbox_path
+                if marker.exists() or not drop.active or not inbox.is_dir():
+                    continue
+                try:
+                    uploaded = next((item for item in inbox.rglob("*") if item.is_file()), None)
+                except OSError:
+                    uploaded = None
+                if uploaded:
+                    marker.touch(mode=0o600, exist_ok=True)
+                    drop.consumed = True
+                    self.audit.record("peer", "one-time drop consumed", "success", peer=drop.name, path=drop.inbox_path, detail=uploaded.name)
+            time.sleep(1.0)
 
     @staticmethod
-    def _apply_delta_transaction(root: Path, transaction: Path) -> None:
+    def _apply_delta_transaction(root: Path, transaction: Path) -> str:
         value = json.loads((transaction / "instruction.json").read_text(encoding="utf-8"))
         relative = Path(str(value["path"]))
         if relative.is_absolute() or ".." in relative.parts or not relative.parts:
@@ -603,6 +674,7 @@ class PeerManager:
                 raise ValueError("delta file integrity failure")
             os.replace(temporary, target)
             shutil.rmtree(transaction)
+            return relative.as_posix()
         finally:
             temporary.unlink(missing_ok=True)
 

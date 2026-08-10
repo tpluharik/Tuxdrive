@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.12.0 on Ubuntu 26.04: installation, Nautilus integration, cloud providers, multi-peer encrypted sharing, cooperative edit leases, LAN/QR pairing, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.13.0 on Ubuntu 26.04: installation, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.12.0 on Ubuntu 26.04: installation, Nautilus integr
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.12.0_all.deb
+sudo apt install ./tuxdrive_0.13.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -134,6 +134,29 @@ Peer jobs enable cooperative edit leases by default. Before an incremental local
 
 Leases reduce accidental simultaneous overwrites between TuxDrive peers, but they are advisory application locks: they do not prevent another program, a non-TuxDrive SFTP client, or a malicious authorized device from writing. A crash may leave a record until expiry; the timeout prevents permanent lockout. Use an application-specific collaboration system for databases or real-time coauthoring.
 
+### Directional peer roles
+
+Each named authorized device can be assigned one role before its invitation is copied:
+
+| Role | Paired TuxDrive behavior |
+|---|---|
+| **Read and write** | Two-way synchronization with the normal conflict, lease and deletion protections. |
+| **Read-only** | Copies new/changed host content locally without deleting local extras or uploading changes. |
+| **Send-only** | Uploads the device's selected local folder; it does not download host changes. |
+| **Receive-only** | Mirrors host content locally, including allowed deletions; it never uploads local changes. |
+
+Select the device row before choosing **Copy invitation** or **Show invitation QR**. Protocol-v4 invitations carry the selected role, and the receiving job locks its direction accordingly. If every enabled device on an endpoint is read-only/receive-only, the SFTP server is also launched in read-only mode. With mixed roles, direction is enforced by paired TuxDrive clients; because the underlying interoperable SFTP service cannot assign a different filesystem policy to every key on one port, do not give a role-limited key to a generic SFTP client. Use separate shares/ports where hostile-client enforcement is required.
+
+### One-time encrypted file drop
+
+Select a saved/running share, enter the sender's device name and public identity key, choose an expiry from 1–168 hours, then select **Create one-time file drop**. TuxDrive creates a random hidden inbox, restarts authorization, and copies an upload-only invitation. The sender loads the invitation, chooses a local folder, and sends it over the same encrypted, host-key-pinned SFTP transport.
+
+The invitation exposes only its inbox path, expires at the encoded UTC time, and is retired locally after a successful send. The host detects the first received file and permanently records a consumed marker so the temporary key is omitted after restart. Ordinary synchronization excludes `.tuxdrive-drops`, preventing inbox data from appearing in other peer jobs. A connection already authenticated when the first file arrives may finish its current transfer; one-time means one upload session, not a one-packet limit.
+
+### Peer and synchronization audit timeline
+
+The chart button in the title bar opens **Sync health and audit**. Its audit page records job starts, completions, failures, policy deferrals, verified peer connections, block-delta application, and one-time-drop creation/consumption. Records are stored locally in `~/.local/share/tuxdrive/audit.jsonl` with user-only permissions, capped by automatic compaction, and never contain credentials or private keys. Paths and peer display names are operational metadata; protect the local user account if those names are sensitive.
+
 ### Network and security limitations
 
 - The sharing computer must remain running and TuxDrive must remain active.
@@ -149,6 +172,8 @@ Leases reduce accidental simultaneous overwrites between TuxDrive peers, but the
 ## 4. Add synchronized folders
 
 Select **Add folder**. Choose the account, drive/location, and one or more cloud folders in the tree.
+
+The **Provider capabilities** row updates when the account changes. It explains whether the backend supports streaming, change polling, hashes and safe share links. Unsupported modes are omitted and unsafe actions such as share-link creation are disabled. Capabilities are conservative TuxDrive defaults; Nextcloud and organizational provider configurations can vary, so live validation and the scheduled reconciliation safety net remain important.
 
 ![Selective synchronization dialog](assets/03-sync-setup.svg)
 
@@ -199,6 +224,10 @@ Each job offers:
 - **Switch** — enable or pause automatic operation.
 
 Status icons and labels change for idle/connected, synchronizing, paused, and error states. The account icon summarizes all jobs belonging to that account.
+
+### Sync health dashboard
+
+Select the chart icon in the title bar. **Sync health** shows each job's current running/mounted/error/paused state, mode, peer access role, callback-monitor state, last run, and latest detail. **Audit timeline** shows recent structured operational events. **Provider capabilities** compares all ten TuxDrive backends across streaming, polling, hashes, server moves and share links. Reopen the dashboard to refresh its point-in-time snapshot.
 
 ### Nautilus integration
 
@@ -418,7 +447,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.12.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.13.0_all.deb`.
 
 ## 13. Data safety
 

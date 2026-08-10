@@ -2,6 +2,17 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.13.0 — controlled peer access and operational visibility
+
+- Added read/write, read-only, send-only and receive-only roles to named peer devices and protocol-v4 invitations, with migration-safe read/write defaults.
+- Enforced role direction in complete and incremental synchronization; all-receive endpoints also launch the SFTP service in server-side read-only mode.
+- Added expiring, upload-only encrypted file-drop invitations scoped to random hidden inboxes, with persistent first-file consumption markers.
+- Added a private permission-restricted audit timeline for synchronization, policy, peer, block-delta and file-drop events.
+- Added a provider capability matrix covering streaming, polling, hashes, server moves, versions and safe share links.
+- Made job modes and share-link controls adapt to conservative provider capabilities and explain fallbacks in the folder dialog.
+- Added a three-page operations dashboard for job/mount/callback health, audit events and provider capabilities.
+- Expanded migration, role, expiry, direction, audit and capability regression coverage and updated the installer/documentation.
+
 ## 0.12.0 — efficient peer transfer, connectivity and desktop policies
 
 - Added verified 4 MiB block-level delta transactions for direct peer callback updates, with BLAKE2 block checks, final SHA-256 verification and atomic receiver replacement.

@@ -11,7 +11,7 @@ import threading
 import tempfile
 import uuid
 import webbrowser
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Callable
 
@@ -48,10 +48,12 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
         subprocess.run(["zenity", "--error", "--title=TuxDrive startup failure", f"--text={message}"], check=False)
     raise SystemExit(2) from exc
 
+from .audit import AuditTimeline
+from .capabilities import CAPABILITIES, capabilities_for
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import (
-    Account, AppConfig, AuthorizedPeer, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode,
+    Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, Provider, SyncJob, SyncMode,
     paths_overlap, safe_streaming_overlap,
 )
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
@@ -645,6 +647,10 @@ class SyncJobDialog(Gtk.Dialog):
         for mode in SyncMode:
             self.mode.append(mode.value, mode.label)
         self.mode.set_active_id((existing.mode if existing else SyncMode.TWO_WAY).value)
+        self.capability_note = Gtk.Label(xalign=0)
+        self.capability_note.set_line_wrap(True)
+        self.capability_note.get_style_context().add_class("dim-label")
+        self._refresh_capabilities(existing.mode if existing else SyncMode.TWO_WAY)
         self.interval = Gtk.SpinButton.new_with_range(1, 1440, 1)
         self.interval.set_value(existing.interval_minutes if existing else 5)
         self.realtime_sync = Gtk.CheckButton(
@@ -657,6 +663,7 @@ class SyncJobDialog(Gtk.Dialog):
         self.block_delta = Gtk.CheckButton(label="Use block-level delta planning for changed files")
         self.block_delta.set_active(existing.block_delta_transfer if existing else True)
         self.block_delta.set_tooltip_text("Direct peer jobs exchange content-addressed changed blocks; cloud backends use their native transfer capabilities.")
+        self._refresh_capabilities(existing.mode if existing else SyncMode.TWO_WAY)
         self.conflict = Gtk.ComboBoxText()
         for policy, label in (
             (ConflictPolicy.KEEP_BOTH, "Keep both copies"),
@@ -704,6 +711,7 @@ class SyncJobDialog(Gtk.Dialog):
             ("Local folder / mount point", self.local),
             ("Cloud folders to synchronize", self.folder_tree),
             ("Mode", self.mode),
+            ("Provider capabilities", self.capability_note),
             ("Sync interval (minutes)", self.interval),
             ("Real-time callbacks", self.realtime_sync),
             ("Block-level delta transfer", self.block_delta),
@@ -771,6 +779,8 @@ class SyncJobDialog(Gtk.Dialog):
             value.last_status = self.existing.last_status
             value.last_error = self.existing.last_error
             value.offline_paths = list(self.existing.offline_paths)
+            value.peer_role = self.existing.peer_role
+            value.one_time_drop_id = self.existing.one_time_drop_id
             return [value]
         return values
 
@@ -778,6 +788,33 @@ class SyncJobDialog(Gtk.Dialog):
         remote = combo.get_active_id()
         if remote:
             self._load_locations()
+            if hasattr(self, "mode"):
+                self._refresh_capabilities()
+
+    def _refresh_capabilities(self, preferred: SyncMode | None = None) -> None:
+        remote = self.account.get_active_id()
+        account = next((item for item in self.accounts if item.remote == remote), None)
+        if not account:
+            return
+        capabilities = capabilities_for(account.provider)
+        selected = preferred or SyncMode(self.mode.get_active_id() or SyncMode.TWO_WAY.value)
+        self.mode.remove_all()
+        for mode in SyncMode:
+            if capabilities.supports_mode(mode):
+                self.mode.append(mode.value, mode.label)
+        if not capabilities.supports_mode(selected):
+            selected = SyncMode.TWO_WAY
+        self.mode.set_active_id(selected.value)
+        features = [
+            "streaming" if capabilities.streaming else "no streaming",
+            "change polling" if capabilities.polling else "scheduled scans",
+            "hash verification" if capabilities.hashes else "size/time verification",
+            "share links" if capabilities.share_links else "no share links",
+            "versions" if capabilities.versions else "no provider versions",
+        ]
+        self.capability_note.set_text(f"{account.provider.label}: {', '.join(features)}. {capabilities.notes}".strip())
+        if hasattr(self, "block_delta"):
+            self.block_delta.set_sensitive(account.provider is Provider.PEER)
 
     def _load_locations(self) -> None:
         remote = self.account.get_active_id()
@@ -1096,13 +1133,14 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_host.set_placeholder_text("Public/LAN IP or DNS name")
         self.share_port = Gtk.SpinButton.new_with_range(1024, 65535, 1)
         self.share_port.set_value(2022)
-        self.peer_store = Gtk.ListStore(bool, str, str)
+        self.peer_store = Gtk.ListStore(bool, str, str, str)
         peer_view = Gtk.TreeView(model=self.peer_store)
         enabled = Gtk.CellRendererToggle()
         enabled.connect("toggled", lambda _cell, path: self.peer_store.set_value(self.peer_store.get_iter(path), 0, not self.peer_store[path][0]))
         peer_view.append_column(Gtk.TreeViewColumn("Enabled", enabled, active=0))
         peer_view.append_column(Gtk.TreeViewColumn("Device", Gtk.CellRendererText(), text=1))
         peer_view.append_column(Gtk.TreeViewColumn("Public key", Gtk.CellRendererText(), text=2))
+        peer_view.append_column(Gtk.TreeViewColumn("Role", Gtk.CellRendererText(), text=3))
         self.peer_view = peer_view
         peer_scroll = Gtk.ScrolledWindow()
         peer_scroll.set_min_content_height(115)
@@ -1111,14 +1149,22 @@ class PeerSharingDialog(Gtk.Dialog):
         self.peer_name.set_placeholder_text("Device name")
         self.share_peer_key = Gtk.Entry()
         self.share_peer_key.set_placeholder_text("Peer’s ssh-ed25519 public key")
+        self.peer_role = Gtk.ComboBoxText()
+        for role in PeerRole:
+            self.peer_role.append(role.value, role.label)
+        self.peer_role.set_active_id(PeerRole.READ_WRITE.value)
         peer_add = Gtk.Button(label="Authorize device")
         peer_add.connect("clicked", self._add_authorized_peer)
         peer_remove = Gtk.Button(label="Revoke selected")
         peer_remove.connect("clicked", self._remove_authorized_peer)
+        peer_set_role = Gtk.Button(label="Set selected role")
+        peer_set_role.connect("clicked", self._set_authorized_peer_role)
         peer_editor = Gtk.Box(spacing=6)
         peer_editor.pack_start(self.peer_name, False, False, 0)
         peer_editor.pack_start(self.share_peer_key, True, True, 0)
+        peer_editor.pack_start(self.peer_role, False, False, 0)
         peer_editor.pack_start(peer_add, False, False, 0)
+        peer_editor.pack_start(peer_set_role, False, False, 0)
         peer_editor.pack_start(peer_remove, False, False, 0)
         peer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         peer_box.pack_start(peer_scroll, True, True, 0)
@@ -1137,6 +1183,8 @@ class PeerSharingDialog(Gtk.Dialog):
         self.relay_ssh_port.set_value(22)
         self.relay_public_port = Gtk.SpinButton.new_with_range(0, 65535, 1)
         self.relay_public_port.set_value(0)
+        self.drop_expiry = Gtk.SpinButton.new_with_range(1, 168, 1)
+        self.drop_expiry.set_value(24)
         grid = Gtk.Grid(column_spacing=12, row_spacing=9)
         self._row(grid, 0, "Saved share", self.share_choice)
         self._row(grid, 1, "Display name", self.share_name)
@@ -1170,9 +1218,14 @@ class PeerSharingDialog(Gtk.Dialog):
         invitation.connect("clicked", self._copy_invitation)
         qr = Gtk.Button(label="Show invitation QR")
         qr.connect("clicked", self._show_invitation_qr)
+        file_drop = Gtk.Button(label="Create one-time file drop")
+        file_drop.set_tooltip_text("Uses the device name/public key fields and creates an expiring upload-only inbox")
+        file_drop.connect("clicked", self._create_file_drop)
         delete = Gtk.Button(label="Delete")
         delete.connect("clicked", self._delete_share)
-        for button in (save, stop, invitation, qr, delete):
+        buttons.pack_start(Gtk.Label(label="Drop expires (hours):"), False, False, 0)
+        buttons.pack_start(self.drop_expiry, False, False, 0)
+        for button in (save, stop, invitation, qr, file_drop, delete):
             buttons.pack_start(button, False, False, 0)
         page.pack_start(buttons, False, False, 0)
         return page
@@ -1266,7 +1319,7 @@ class PeerSharingDialog(Gtk.Dialog):
         if share:
             peers = share.authorized_peers or ([AuthorizedPeer("Legacy peer", share.allowed_peer_key)] if share.allowed_peer_key else [])
             for peer in peers:
-                self.peer_store.append([peer.enabled, peer.name, peer.public_key])
+                self.peer_store.append([peer.enabled, peer.name, peer.public_key, peer.role.label])
         self.peer_name.set_text("")
         self.share_peer_key.set_text("")
         self.share_discovery.set_active(share.lan_discovery if share else True)
@@ -1288,7 +1341,8 @@ class PeerSharingDialog(Gtk.Dialog):
             name = self.share_name.get_text().strip() or "Peer shared folder"
             advertised_host = validate_host(self.share_host.get_text())
             port = validate_port(self.share_port.get_value_as_int())
-            authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0]) for row in self.peer_store]
+            roles = {role.label: role for role in PeerRole}
+            authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0], role=roles.get(row[3], PeerRole.READ_WRITE)) for row in self.peer_store]
             if not any(item.enabled for item in authorized_peers):
                 raise PeerError("Authorize at least one enabled peer device")
             if share is None:
@@ -1324,10 +1378,38 @@ class PeerSharingDialog(Gtk.Dialog):
             key = normalize_public_key(self.share_peer_key.get_text())
             if any(row[2] == key for row in self.peer_store):
                 raise PeerError("That public key is already authorized")
-            self.peer_store.append([True, name, key])
+            role = PeerRole(self.peer_role.get_active_id() or PeerRole.READ_WRITE.value)
+            self.peer_store.append([True, name, key, role.label])
             self.peer_name.set_text("")
             self.share_peer_key.set_text("")
             self._set_status(f"{name} added. Save and start to apply authorization.", False)
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _selected_peer_role(self) -> PeerRole:
+        model, selected = self.peer_view.get_selection().get_selected()
+        if not selected:
+            return PeerRole.READ_WRITE
+        return next((role for role in PeerRole if role.label == model[selected][3]), PeerRole.READ_WRITE)
+
+    def _create_file_drop(self, _button: Gtk.Button) -> None:
+        share = self._selected_share()
+        if not share:
+            self._set_status("Save and start the shared folder first.", True)
+            return
+        try:
+            name = self.peer_name.get_text().strip() or "One-time sender"
+            key = normalize_public_key(self.share_peer_key.get_text())
+            expiry = datetime.now(timezone.utc) + timedelta(hours=self.drop_expiry.get_value_as_int())
+            drop = OneTimeDrop(name, key, f".tuxdrive-drops/{uuid.uuid4().hex}", expiry.isoformat())
+            share.one_time_drops.append(drop)
+            self.controller.peers.stop(share.id)
+            self.controller.peers.start(share)
+            invitation = self.controller.peers.one_time_invitation(share, drop)
+            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(invitation, -1)
+            self.controller.audit.record("peer", "one-time drop created", "success", peer=name, path=drop.inbox_path, detail=f"expires {drop.expires_at}")
+            self.controller.save()
+            self._set_status("Expiring upload-only invitation copied. It is revoked after the first received file.", False)
         except Exception as exc:
             self._set_status(str(exc), True)
 
@@ -1337,6 +1419,15 @@ class PeerSharingDialog(Gtk.Dialog):
             name = model[selected][1]
             model.remove(selected)
             self._set_status(f"{name} revoked. Save and start to apply immediately.", False)
+
+    def _set_authorized_peer_role(self, _button: Gtk.Button) -> None:
+        model, selected = self.peer_view.get_selection().get_selected()
+        if not selected:
+            self._set_status("Select an authorized device first.", True)
+            return
+        role = PeerRole(self.peer_role.get_active_id() or PeerRole.READ_WRITE.value)
+        model.set_value(selected, 3, role.label)
+        self._set_status(f"Role changed to {role.label}. Save and start, then issue a new invitation.", False)
 
     def _stop_share(self, _button: Gtk.Button) -> None:
         share = self._selected_share()
@@ -1355,9 +1446,10 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status("Save the shared folder first.", True)
             return
         try:
-            value = self.controller.peers.invitation(share)
+            role = self._selected_peer_role()
+            value = self.controller.peers.invitation(share, role)
             Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(value, -1)
-            self._set_status("Invitation copied. Send it through a trusted channel.", False)
+            self._set_status(f"{role.label} invitation copied. Send it through a trusted channel.", False)
         except Exception as exc:
             self._set_status(str(exc), True)
 
@@ -1367,7 +1459,7 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status("Save the shared folder first.", True)
             return
         try:
-            value = self.controller.peers.invitation(share)
+            value = self.controller.peers.invitation(share, self._selected_peer_role())
             encoder = shutil.which("qrencode")
             if not encoder:
                 raise PeerError("QR support is missing; reinstall the complete TuxDrive package")
@@ -1454,13 +1546,14 @@ class PeerSharingDialog(Gtk.Dialog):
         chooser.destroy()
 
     def _apply_invitation(self, invitation: PeerInvitation) -> None:
+        invitation.assert_usable()
         self.loaded_invitation = invitation
         self.connection_name.set_text(invitation.name)
         self.connection_host.set_text(invitation.host)
         self.connection_port.set_value(invitation.port)
         self.connection_host_key.set_text(invitation.host_key)
         self.connection_lease.set_value(invitation.lease_minutes)
-        self._set_status(f"Invitation loaded. Verify fingerprint {key_fingerprint(invitation.host_key)} before connecting.", False)
+        self._set_status(f"{invitation.role.label} invitation loaded. Verify fingerprint {key_fingerprint(invitation.host_key)} before connecting.", False)
 
     def _discover_lan(self, _button: Gtk.Button) -> None:
         self.discovery_store.clear()
@@ -1504,6 +1597,11 @@ class PeerSharingDialog(Gtk.Dialog):
             ):
                 invitation.relay_host = self.loaded_invitation.relay_host
                 invitation.relay_port = self.loaded_invitation.relay_port
+                invitation.role = self.loaded_invitation.role
+                invitation.remote_path = self.loaded_invitation.remote_path
+                invitation.one_time_drop_id = self.loaded_invitation.one_time_drop_id
+                invitation.expires_at = self.loaded_invitation.expires_at
+            invitation.assert_usable()
             account = self._selected_connection()
             remote = account.remote if account else "peer-" + datetime.now().strftime("%H%M%S")
             candidate = remote + "-verify"
@@ -1543,10 +1641,13 @@ class PeerSharingDialog(Gtk.Dialog):
                     local_path=folder,
                     name=invitation.name,
                     cloud_location_name="Direct encrypted peer",
-                    mode=SyncMode.TWO_WAY,
+                    remote_path=invitation.remote_path,
+                    mode=invitation.role.sync_mode,
                     peer_leases=True,
                     peer_lease_minutes=invitation.lease_minutes,
                     peer_delta=True,
+                    peer_role=invitation.role,
+                    one_time_drop_id=invitation.one_time_drop_id,
                 )
                 self.controller.config.jobs.append(job)
             else:
@@ -1558,6 +1659,10 @@ class PeerSharingDialog(Gtk.Dialog):
                     job.peer_leases = True
                     job.peer_lease_minutes = invitation.lease_minutes
                     job.peer_delta = True
+                    job.remote_path = invitation.remote_path
+                    job.mode = invitation.role.sync_mode
+                    job.peer_role = invitation.role
+                    job.one_time_drop_id = invitation.one_time_drop_id
             account.display_name = invitation.name
             account.peer_host = invitation.host
             account.peer_port = invitation.port
@@ -1569,7 +1674,8 @@ class PeerSharingDialog(Gtk.Dialog):
             if job:
                 self.controller.run_job(job)
             self._reload_connection_choices(remote)
-            self._set_status("Peer verified and synchronization started.", False)
+            self.controller.audit.record("peer", "connection verified", "success", job_id=job.id if job else "", peer=invitation.name, path=invitation.remote_path, detail=invitation.role.label)
+            self._set_status(f"Peer verified; {invitation.role.label.lower()} synchronization started.", False)
         except Exception as exc:
             self._set_status(str(exc), True)
 
@@ -1598,6 +1704,59 @@ class PeerSharingDialog(Gtk.Dialog):
         )
 
 
+class OperationsDashboard(Gtk.Dialog):
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication") -> None:
+        super().__init__(title="TuxDrive sync health and audit", transient_for=parent, modal=False)
+        self.set_default_size(920, 620)
+        self.set_icon_name("tuxdrive")
+        notebook = Gtk.Notebook()
+        notebook.append_page(self._health(controller), Gtk.Label(label="Sync health"))
+        notebook.append_page(self._audit(controller), Gtk.Label(label="Audit timeline"))
+        notebook.append_page(self._capabilities(), Gtk.Label(label="Provider capabilities"))
+        self.get_content_area().set_border_width(12)
+        self.get_content_area().pack_start(notebook, True, True, 0)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.connect("response", lambda dialog, _response: dialog.destroy())
+        self.show_all()
+
+    @staticmethod
+    def _tree(columns: tuple[str, ...], rows: list[tuple[str, ...]]) -> Gtk.Widget:
+        store = Gtk.ListStore(*([str] * len(columns)))
+        for row in rows:
+            store.append(list(row))
+        view = Gtk.TreeView(model=store)
+        for index, title in enumerate(columns):
+            renderer = Gtk.CellRendererText()
+            renderer.set_property("ellipsize", 3)
+            view.append_column(Gtk.TreeViewColumn(title, renderer, text=index))
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.add(view)
+        return scroll
+
+    def _health(self, controller: "TuxDriveApplication") -> Gtk.Widget:
+        rows = []
+        running, mounted, callbacks = controller.engine.running_jobs, controller.engine.mounted_jobs, controller.engine.callback_jobs
+        for job in controller.config.jobs:
+            state = "Synchronizing" if job.id in running else "Streaming" if job.id in mounted else "Error" if job.last_error else "Paused" if not job.enabled else "Healthy" if job.initialized else "Pending"
+            callback = "Active" if job.id in callbacks else "Inactive"
+            rows.append((job.name, state, job.mode.label, job.peer_role.label if job.peer_delta else "Cloud", callback, job.last_run or "Never", job.last_error or job.last_status))
+        return self._tree(("Folder", "State", "Mode", "Access", "Callbacks", "Last run", "Detail"), rows)
+
+    def _audit(self, controller: "TuxDriveApplication") -> Gtk.Widget:
+        rows = [
+            (event.timestamp, event.category, event.action, event.outcome, event.peer, event.path, event.detail)
+            for event in controller.audit.recent(500)
+        ]
+        return self._tree(("Time", "Category", "Action", "Result", "Peer", "Path", "Detail"), rows)
+
+    def _capabilities(self) -> Gtk.Widget:
+        rows = []
+        for provider, value in CAPABILITIES.items():
+            rows.append((provider.label, "Yes" if value.streaming else "No", "Yes" if value.polling else "No", "Yes" if value.hashes else "No", "Yes" if value.server_move else "No", "Yes" if value.share_links else "No", "Yes" if value.versions else "No", value.notes))
+        return self._tree(("Provider", "Streaming", "Polling", "Hashes", "Moves", "Share links", "Versions", "Notes"), rows)
+
+
 class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, application: "TuxDriveApplication") -> None:
         super().__init__(application=application, title="TuxDrive")
@@ -1620,6 +1779,10 @@ class MainWindow(Gtk.ApplicationWindow):
         peers.set_tooltip_text("Peer-to-peer shared folders")
         peers.connect("clicked", self._show_peer_sharing)
         header.pack_start(peers)
+        health = Gtk.Button.new_from_icon_name("view-statistics-symbolic", Gtk.IconSize.BUTTON)
+        health.set_tooltip_text("Sync health, peer audit timeline, and provider capabilities")
+        health.connect("clicked", lambda _button: OperationsDashboard(self, self.controller))
+        header.pack_start(health)
         settings = Gtk.Button.new_from_icon_name("emblem-system-symbolic", Gtk.IconSize.BUTTON)
         settings.set_tooltip_text("Settings")
         settings.connect("clicked", self._show_settings)
@@ -1824,6 +1987,10 @@ class MainWindow(Gtk.ApplicationWindow):
         rename_button.connect("clicked", self._rename_job, job)
         share_button = Gtk.Button(label="Share link")
         share_button.connect("clicked", self._share_job, job)
+        account = next((item for item in self.controller.config.accounts if item.remote == job.account_remote), None)
+        share_button.set_sensitive(bool(account and capabilities_for(account.provider).share_links))
+        if not share_button.get_sensitive():
+            share_button.set_tooltip_text("This provider does not expose a safe share-link capability")
         history_button = Gtk.Button(label="History")
         history_button.set_tooltip_text("Restore locally retained versions and recycled files")
         history_button.connect("clicked", lambda _button: RecoveryHistoryDialog(self, self.controller, job))
@@ -2385,7 +2552,8 @@ class TuxDriveApplication(Gtk.Application):
             self.config = AppConfig()
         self.rclone = RcloneClient(self.config.settings.rclone_path)
         self.engine = SyncEngine(self.config.settings.rclone_path)
-        self.peers = PeerManager(self.config.settings.rclone_path)
+        self.audit = AuditTimeline()
+        self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False
@@ -2675,6 +2843,7 @@ class TuxDriveApplication(Gtk.Application):
         if not decision.allowed:
             job.last_status = decision.reason
             LOGGER.info("Policy deferred job %s: %s", job.id, decision.reason)
+            self.audit.record("sync", "policy deferred", "paused", job_id=job.id, detail=decision.reason)
             self._publish_nautilus_state()
             if self.window and not quiet:
                 self.window.message(decision.reason, Gtk.MessageType.INFO)
@@ -2692,6 +2861,7 @@ class TuxDriveApplication(Gtk.Application):
             job.remote_spec,
             job.local_path,
         )
+        self.audit.record("sync", "job started", "running", job_id=job.id, path=job.remote_path, detail=job.mode.label)
         self._set_tray_state("syncing", job.name)
         self._last_started[job.id] = datetime.now(timezone.utc)
         self._nautilus_active_jobs.add(job.id)
@@ -2711,6 +2881,7 @@ class TuxDriveApplication(Gtk.Application):
         if stopped:
             self._nautilus_active_jobs.discard(job.id)
             job.last_status = "Stopped"
+            self.audit.record("sync", "job stopped", "success", job_id=job.id, detail=job.name)
             self.save()
             if self.window:
                 self.window.refresh()
@@ -2740,6 +2911,20 @@ class TuxDriveApplication(Gtk.Application):
             job.initialized = True
         self._set_tray_state("ready" if result.success else "error", result.message)
         LOGGER.info("Job %s finished: success=%s message=%s", job.id, result.success, result.message)
+        account = next((item for item in self.config.accounts if item.remote == job.account_remote), None)
+        self.audit.record(
+            "peer" if job.peer_delta else "sync",
+            "incremental transfer" if result.incremental else "synchronization",
+            "success" if result.success else "failed",
+            job_id=job.id,
+            peer=account.display_name if account and account.provider is Provider.PEER else "",
+            path=job.remote_path,
+            detail=result.message,
+        )
+        if result.success and job.one_time_drop_id:
+            job.enabled = False
+            job.last_status = "One-time file drop sent; invitation retired"
+            self.audit.record("peer", "one-time drop sent", "success", job_id=job.id, path=job.remote_path)
         self.save()
         if result.success and not result.incremental:
             self.start_callbacks(job)

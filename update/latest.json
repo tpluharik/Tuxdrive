@@ -1,6 +1,6 @@
 {
-  "version": "0.12.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.12.0_all.deb",
-  "sha256": "cdfdbfaa8a3e014848e23380cb9bb7bba362872c59562e407d44a59a62ca381c",
-  "notes": "Adds verified peer block-delta transfers, automatic NAT traversal with an optional no-storage relay, per-file offline controls, optional default-on Nautilus integration, and opt-in network, battery, and schedule policies."
+  "version": "0.13.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.13.0_all.deb",
+  "sha256": "41185a6b6d53aba54e626a580da69e36e3713f0808647f00360810ab1b5dc657",
+  "notes": "Adds directional peer roles, a private peer/sync audit timeline, expiring one-time encrypted file drops, an adaptive provider capability matrix, and a consolidated sync-health dashboard."
 }
