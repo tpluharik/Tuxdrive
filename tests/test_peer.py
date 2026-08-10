@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.models import AuthorizedPeer, PeerRole, PeerShare, SyncJob
+from tuxdrive.models import AuthorizedPeer, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from tuxdrive.peer import (
     DiscoveredPeer, FileLease, PeerError, PeerInvitation, PeerLeaseManager,
     PeerManager, key_fingerprint, normalize_public_key, validate_port,
@@ -22,7 +22,26 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(decoded.host, "198.51.100.20")
         self.assertEqual(decoded.port, 22022)
         self.assertEqual(decoded.host_key, KEY)
-        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 4)
+        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 5)
+
+    def test_onion_invitation_is_v3_and_never_contains_direct_fallback(self):
+        onion = "a" * 56 + ".onion"
+        encoded = PeerInvitation("Private", "hidden.invalid", 22022, KEY, transport="tor", onion_address=onion).encode()
+        decoded = PeerInvitation.decode(encoded)
+        self.assertEqual(decoded.transport, "tor")
+        self.assertEqual(decoded.onion_address, onion)
+        with self.assertRaises(PeerError):
+            PeerInvitation.decode(json.dumps({**json.loads(encoded), "onion_address": "invalid.onion"}))
+
+    def test_tor_only_share_fails_closed_when_tor_is_unavailable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare("Private", str(folder), "", 22022, authorized_peers=[AuthorizedPeer("Laptop", KEY)], transport_policy=PeerTransportPolicy.TOR_ONLY, onion_enabled=False)
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"):
+                manager = PeerManager(root=Path(temporary) / "peer")
+                with self.assertRaisesRegex(PeerError, "Tor-only"):
+                    manager.start(share)
 
     def test_role_and_one_time_drop_scope_round_trip(self):
         encoded = PeerInvitation(
@@ -167,7 +186,7 @@ class PeerSharingTests(unittest.TestCase):
             private.write_text("private", encoding="utf-8")
             private.with_suffix(".pub").write_text(KEY, encoding="utf-8")
             invitation = PeerInvitation("Project", "203.0.113.4", 22022, KEY)
-            with patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
+            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
                 "tuxdrive.peer.subprocess.run",
                 return_value=MagicMock(returncode=0, stdout="", stderr=""),
             ) as run:
@@ -176,6 +195,29 @@ class PeerSharingTests(unittest.TestCase):
             self.assertIn("key_file", command)
             self.assertEqual(command[command.index("key_file") + 1], str(private))
             self.assertEqual(command[command.index("host_keys") + 1], KEY)
+
+    def test_onion_connection_configures_only_onion_endpoint(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "peer"
+            root.mkdir()
+            private = root / "identity_ed25519"
+            private.write_text("private", encoding="utf-8")
+            private.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            onion = "a" * 56 + ".onion"
+            invitation = PeerInvitation("Private", onion, 22, KEY, transport="tor", onion_address=onion, onion_client_auth="A" * 52)
+            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
+                "tuxdrive.peer.shutil.which", side_effect=lambda value: f"/usr/bin/{value}"
+            ), patch("tuxdrive.peer.subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")) as run, patch.object(
+                PeerManager(root=root).tor.__class__, "install_client_credential"
+            ), patch.object(
+                PeerManager(root=root).tor.__class__, "start_client", return_value=root / "tor" / "torsocks.conf"
+            ):
+                manager = PeerManager(root=root)
+                manager.configure_connection("peer-private", invitation)
+            command = run.call_args.args[0]
+            self.assertEqual(command[command.index("host") + 1], onion)
+            self.assertNotIn("198.51.100.1", command)
+            self.assertIn("ssh", command)
 
 
 if __name__ == "__main__":

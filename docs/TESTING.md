@@ -14,7 +14,7 @@ PYTHONPATH=src python3 -m compileall -q src
 
 The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Ubuntu installations receive the same runtime through the `.deb` package's `python3-cryptography` dependency.
 
-The TuxDrive 0.14.0 suite contains **89 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.15.0 suite contains **96 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -43,7 +43,9 @@ The TuxDrive 0.14.0 suite contains **89 automated tests**. Tests use temporary d
 - Streaming folders may be protected children of synchronized folders, but unsafe overlaps are rejected.
 - Office lock files, editor temporary files and partial downloads are not synchronized.
 - Google malware/spam acknowledgement is opt-in and scoped to one job.
-- Peer invitations contain public connection material only; private keys never enter an invitation.
+- Peer invitations contain public SSH connection material only. A protocol-v5 Tor invitation may intentionally contain the receiving device's scoped Onion client secret and must be handled like a password; neither the host SSH identity nor the general TuxDrive identity private key enters it.
+- Tor-only policy rejects direct fallback, invalid Onion addresses are refused, client authorization is device-scoped/revocable, and Tor configuration/authorization files are private.
+- Bridge credentials remain out of subprocess arguments, invitations, and application audit/log messages.
 - A peer client pins the server host key and authenticates with its own private key.
 - Proton accounts are not accepted until an actual remote listing succeeds.
 - Update packages are not installed until their SHA-256 checksum matches the signed repository manifest value.
@@ -69,9 +71,9 @@ The TuxDrive 0.14.0 suite contains **89 automated tests**. Tests use temporary d
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.14.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.14.0_all.deb
-sha256sum dist/tuxdrive_0.14.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.15.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.15.0_all.deb
+sha256sum dist/tuxdrive_0.15.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -90,6 +92,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Offline availability | Pin individual streamed files/folders, disconnect networking, open pinned content, free local space, restart the mount, and confirm rules persist. |
 | Block delta | Change one block in a multi-gigabyte peer file, verify reduced transmitted bytes in logs, corrupt a queued block, and confirm the receiver rejects it without replacing the destination. |
 | Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
+| Tor transport | Validate persistent/ephemeral Onion addresses, two separately authorized clients, QR import, revoked and rotated client authorization, Tor restart semantics, service failure, SOCKS failure, Tor-only clearnet refusal, no-relay/no-IP rules, bridges in a filtered-network lab and confirmation that secrets are absent from logs/process listings. |
 | Peer roles | Exercise each role in both directions, including local/remote deletion. Verify an all-receive endpoint is server read-only and document that mixed-role enforcement requires paired TuxDrive clients or separate service endpoints. |
 | One-time drop | Test expiry before connection, inbox isolation, first-file consumption, current-session completion, reconnect rejection and host restart persistence. Confirm ordinary jobs exclude `.tuxdrive-drops`. |
 | Audit timeline | Produce success, failure, policy, peer, delta and drop events; verify local-only storage, permissions, compaction, path sensitivity and malformed-line recovery. |

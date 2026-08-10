@@ -17,7 +17,14 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.14.0 targets Ubuntu 26.04. The installer resolves desktop dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+Version 0.15.0 targets Ubuntu 26.04. The installer resolves desktop and optional privacy-transport dependencies automatically and TuxDrive securely downloads and verifies its pinned transfer engine on first launch if the system does not already provide a compatible one.
+
+### 0.15.0 private Onion workspaces
+
+- Publish a peer workspace as a persistent or ephemeral Tor v3 Onion Service without opening an inbound public port.
+- Issue and revoke a separate Onion client credential for each named device, carried by the existing offline invitation/QR workflow and protected again by pinned SSH identities.
+- Enforce direct-only or Tor-only operation plus no-relay, no-public-IP-discovery and never-provider-cloud restrictions. TuxDrive records a blocked audit event instead of silently switching transports.
+- Configure advanced bridge/pluggable-transport profiles without copying bridge material into invitations, command lines, or application logs.
 
 ### 0.9.0 release highlights
 
@@ -41,7 +48,7 @@ Version 0.12.0 adds verified block-level delta transactions for direct peer upda
 
 Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invitations; expiring upload-only encrypted file drops; a private local peer/sync audit timeline; a provider capability matrix that adapts mode and sharing controls; and a consolidated health dashboard showing running, mounted, callback, last-run and failure state. Existing peer invitations/configurations migrate to read/write behavior.
 
-### 0.14.0 encrypted profiles and device migration
+### 0.15.0 encrypted profiles and device migration
 
 TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new device, connect the same provider and restore from Settings. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its password never leaves the device. OAuth tokens and peer private keys remain excluded unless the user explicitly enables sensitive full-device migration.
 
@@ -113,7 +120,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.14.0_all.deb
+sudo apt install ./tuxdrive_0.15.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -131,7 +138,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.14.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.15.0_all.deb`.
 
 The current suite contains 89 automated tests covering encrypted profile round trips, password/tamper rejection, opt-in credential migration, peer-role direction, expiring file-drop invitations, private audit persistence, adaptive provider capabilities, block-delta integrity, transfer policies, transfer-engine bootstrap, configuration safety, recovery/version history, synchronization, streaming, provider setup, Proton 2FA, LAN/QR/NAT/relay behavior, Nautilus integration, packaging, diagnostics and verified updates. See [Testing and release verification](docs/TESTING.md) for details.
 

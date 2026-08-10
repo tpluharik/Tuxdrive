@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.15.0 — Tor transport and fail-closed workspace privacy
+
+- Added isolated Tor v3 Onion Services for peer workspaces with persistent or ephemeral service identity and no automatic clearnet fallback.
+- Added per-device Tor v3 client authorization, invitation/QR transfer, key rotation by re-issuance, revocation files, and Tor reload handling alongside existing SSH identity and host-key checks.
+- Added workspace transport policies for direct-only, Tor-only, no-relay, no-public-IP-discovery, and never-provider-cloud operation; violations stop or pause traffic and enter the private audit timeline.
+- Added bridge and pluggable-transport profiles stored only in private Tor configuration, excluded from invitations, subprocess arguments, and TuxDrive logs.
+- Added GTK peer-workspace controls, protocol-v5 invitations, migration-safe configuration fields, Tor/torsocks/obfs4 package dependencies, and automated security tests.
+
 ## 0.14.0 — encrypted TuxDrive Profiles and device migration
 
 - Added a TuxDrive Profile linked to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account; no TuxDrive-operated account server stores the profile.

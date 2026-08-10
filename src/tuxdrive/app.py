@@ -53,7 +53,7 @@ from .capabilities import CAPABILITIES, capabilities_for
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import (
-    Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, Provider, SyncJob, SyncMode,
+    Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, Provider, SyncJob, SyncMode,
     paths_overlap, safe_streaming_overlap,
 )
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
@@ -1176,6 +1176,23 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_lease_minutes.set_value(10)
         self.share_nat = Gtk.CheckButton(label="Automatically request UPnP/NAT-PMP port mapping")
         self.share_nat.set_active(True)
+        self.transport_policy = Gtk.ComboBoxText()
+        self.transport_policy.append(PeerTransportPolicy.AUTO.value, "Automatic (direct, then configured alternatives)")
+        self.transport_policy.append(PeerTransportPolicy.DIRECT_ONLY.value, "Direct only")
+        self.transport_policy.append(PeerTransportPolicy.TOR_ONLY.value, "Tor only (fail closed)")
+        self.transport_policy.set_active_id(PeerTransportPolicy.AUTO.value)
+        self.onion_enabled = Gtk.CheckButton(label="Publish a Tor v3 Onion Service")
+        self.onion_persistent = Gtk.CheckButton(label="Keep the Onion address across restarts")
+        self.onion_persistent.set_active(True)
+        self.onion_client_auth = Gtk.CheckButton(label="Require per-device Onion client authorization")
+        self.no_relay = Gtk.CheckButton(label="Never use a relay")
+        self.no_public_ip = Gtk.CheckButton(label="Do not discover or advertise a public IP")
+        self.never_cloud = Gtk.CheckButton(label="Never use provider cloud for this workspace")
+        self.never_cloud.set_active(True)
+        self.tor_bridges = Gtk.Entry()
+        self.tor_bridges.set_placeholder_text("Optional bridge line; kept out of invitations and logs")
+        self.tor_transport_plugin = Gtk.Entry()
+        self.tor_transport_plugin.set_placeholder_text("Optional, e.g. obfs4 exec /usr/bin/obfs4proxy")
         self.relay_host = Gtk.Entry()
         self.relay_host.set_placeholder_text("Optional SSH relay host (forwards ciphertext only)")
         self.relay_user = Gtk.Entry()
@@ -1200,6 +1217,15 @@ class PeerSharingDialog(Gtk.Dialog):
         self._row(grid, 10, "Relay SSH user", self.relay_user)
         self._row(grid, 11, "Relay SSH port", self.relay_ssh_port)
         self._row(grid, 12, "Relay public forwarding port", self.relay_public_port)
+        self._row(grid, 13, "Transport policy", self.transport_policy)
+        self._row(grid, 14, "Tor v3 service", self.onion_enabled)
+        self._row(grid, 15, "Onion identity", self.onion_persistent)
+        self._row(grid, 16, "Onion authorization", self.onion_client_auth)
+        self._row(grid, 17, "Fail-closed restrictions", self.no_relay)
+        self._row(grid, 18, "IP privacy", self.no_public_ip)
+        self._row(grid, 19, "Cloud isolation", self.never_cloud)
+        self._row(grid, 20, "Tor bridge profile", self.tor_bridges)
+        self._row(grid, 21, "Pluggable transport", self.tor_transport_plugin)
         page.pack_start(grid, False, False, 0)
         note = Gtk.Label(
             label=(
@@ -1330,6 +1356,15 @@ class PeerSharingDialog(Gtk.Dialog):
         self.relay_user.set_text(share.relay_user if share else "")
         self.relay_ssh_port.set_value(share.relay_ssh_port if share else 22)
         self.relay_public_port.set_value(share.relay_public_port if share else 0)
+        self.transport_policy.set_active_id(share.transport_policy.value if share else PeerTransportPolicy.AUTO.value)
+        self.onion_enabled.set_active(share.onion_enabled if share else False)
+        self.onion_persistent.set_active(share.onion_persistent if share else True)
+        self.onion_client_auth.set_active(share.onion_client_auth if share else False)
+        self.no_relay.set_active(share.no_relay if share else False)
+        self.no_public_ip.set_active(share.no_public_ip_discovery if share else False)
+        self.never_cloud.set_active(share.never_use_provider_cloud if share else True)
+        self.tor_bridges.set_text(share.tor_bridge_lines[0] if share and share.tor_bridge_lines else "")
+        self.tor_transport_plugin.set_text(share.tor_pluggable_transports[0] if share and share.tor_pluggable_transports else "")
         if share and Path(share.local_path).is_dir():
             self.share_folder.set_filename(str(Path(share.local_path).expanduser()))
 
@@ -1340,10 +1375,14 @@ class PeerSharingDialog(Gtk.Dialog):
                 raise PeerError("Select the local folder to share")
             share = self._selected_share()
             name = self.share_name.get_text().strip() or "Peer shared folder"
-            advertised_host = validate_host(self.share_host.get_text())
+            policy = PeerTransportPolicy(self.transport_policy.get_active_id() or PeerTransportPolicy.AUTO.value)
+            advertised_host = self.share_host.get_text().strip()
+            if not self.no_public_ip.get_active() and policy is not PeerTransportPolicy.TOR_ONLY:
+                advertised_host = validate_host(advertised_host)
             port = validate_port(self.share_port.get_value_as_int())
             roles = {role.label: role for role in PeerRole}
-            authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0], role=roles.get(row[3], PeerRole.READ_WRITE)) for row in self.peer_store]
+            previous_auth = {item.public_key: item.onion_client_public_key for item in (share.authorized_peers if share else [])}
+            authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0], role=roles.get(row[3], PeerRole.READ_WRITE), onion_client_public_key=previous_auth.get(row[2], "")) for row in self.peer_store]
             if not any(item.enabled for item in authorized_peers):
                 raise PeerError("Authorize at least one enabled peer device")
             if share is None:
@@ -1364,9 +1403,20 @@ class PeerSharingDialog(Gtk.Dialog):
             share.relay_user = self.relay_user.get_text().strip()
             share.relay_ssh_port = self.relay_ssh_port.get_value_as_int()
             share.relay_public_port = self.relay_public_port.get_value_as_int()
+            share.transport_policy = policy
+            share.onion_enabled = self.onion_enabled.get_active()
+            share.onion_persistent = self.onion_persistent.get_active()
+            share.onion_client_auth = self.onion_client_auth.get_active()
+            share.no_relay = self.no_relay.get_active()
+            share.no_public_ip_discovery = self.no_public_ip.get_active()
+            share.never_use_provider_cloud = self.never_cloud.get_active()
+            bridge = self.tor_bridges.get_text().strip()
+            share.tor_bridge_lines = [bridge] if bridge else []
+            plugin = self.tor_transport_plugin.get_text().strip()
+            share.tor_pluggable_transports = [plugin] if plugin else []
             share.enabled = True
             self.controller.peers.start(share)
-            share.last_status = f"Listening on TCP {share.port}"
+            share.last_status = f"Listening at {share.onion_address}" if share.onion_enabled else f"Listening on TCP {share.port}"
             self.controller.save()
             self._reload_share_choices(share.id)
             self._set_status("Direct encrypted share is running.", False)
@@ -1448,7 +1498,10 @@ class PeerSharingDialog(Gtk.Dialog):
             return
         try:
             role = self._selected_peer_role()
-            value = self.controller.peers.invitation(share, role)
+            model, selected = self.peer_view.get_selection().get_selected()
+            peer_name = model[selected][1] if selected else ""
+            value = self.controller.peers.invitation(share, role, peer_name)
+            self.controller.save()
             Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(value, -1)
             self._set_status(f"{role.label} invitation copied. Send it through a trusted channel.", False)
         except Exception as exc:
@@ -1460,7 +1513,10 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status("Save the shared folder first.", True)
             return
         try:
-            value = self.controller.peers.invitation(share, self._selected_peer_role())
+            model, selected = self.peer_view.get_selection().get_selected()
+            peer_name = model[selected][1] if selected else ""
+            value = self.controller.peers.invitation(share, self._selected_peer_role(), peer_name)
+            self.controller.save()
             encoder = shutil.which("qrencode")
             if not encoder:
                 raise PeerError("QR support is missing; reinstall the complete TuxDrive package")

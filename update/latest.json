@@ -1,6 +1,6 @@
 {
-  "version": "0.14.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.14.0_all.deb",
-  "sha256": "75945f22bf29417094ce463029d458534410ccf795e0804c02befa41564f7528",
-  "notes": "Adds locally encrypted, OAuth-provider-linked TuxDrive Profile backup, discovery, inspection, and safe device restore with explicit opt-in credential migration."
+  "version": "0.15.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.0_all.deb",
+  "sha256": "160d95d7e1ba9202931c30850d35afeac634182f5af882bfe36a97cce6d95638",
+  "notes": "Adds Tor v3 Onion peer workspaces, per-device client authorization and revocation, fail-closed transport/privacy policies, and bridge/pluggable-transport profiles."
 }

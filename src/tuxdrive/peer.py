@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import shlex
 from datetime import datetime, timedelta, timezone
 from dataclasses import dataclass
 from pathlib import Path
@@ -21,7 +22,8 @@ from uuid import uuid4
 from .bootstrap import install_rclone, resolve_rclone
 from .config import cache_home, config_home
 from .audit import AuditTimeline
-from .models import OneTimeDrop, PeerRole, PeerShare, SyncJob
+from .models import OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
+from .tor import ONION_V3, TorError, TorServiceManager, enforce_transport_policy
 
 
 class PeerError(RuntimeError):
@@ -47,11 +49,14 @@ class PeerInvitation:
     remote_path: str = ""
     one_time_drop_id: str = ""
     expires_at: str = ""
+    transport: str = "direct"
+    onion_address: str = ""
+    onion_client_auth: str = ""
 
     def encode(self) -> str:
         return json.dumps(
             {
-                "tuxdrive_peer": 4,
+                "tuxdrive_peer": 5,
                 "name": self.name,
                 "host": self.host,
                 "port": self.port,
@@ -64,6 +69,9 @@ class PeerInvitation:
                 "remote_path": self.remote_path,
                 "one_time_drop_id": self.one_time_drop_id,
                 "expires_at": self.expires_at,
+                "transport": self.transport,
+                "onion_address": self.onion_address,
+                "onion_client_auth": self.onion_client_auth,
             },
             indent=2,
         )
@@ -72,7 +80,7 @@ class PeerInvitation:
     def decode(cls, value: str) -> "PeerInvitation":
         try:
             data = json.loads(value)
-            if data.get("tuxdrive_peer") not in (1, 2, 3, 4):
+            if data.get("tuxdrive_peer") not in (1, 2, 3, 4, 5):
                 raise ValueError
             invitation = cls(
                 name=str(data.get("name") or "Peer folder"),
@@ -87,7 +95,14 @@ class PeerInvitation:
                 remote_path=str(data.get("remote_path") or "").strip("/"),
                 one_time_drop_id=str(data.get("one_time_drop_id") or ""),
                 expires_at=str(data.get("expires_at") or ""),
+                transport=str(data.get("transport") or "direct"),
+                onion_address=str(data.get("onion_address") or "").lower(),
+                onion_client_auth=str(data.get("onion_client_auth") or ""),
             )
+            if invitation.transport not in {"direct", "relay", "tor"}:
+                raise ValueError
+            if invitation.transport == "tor" and not ONION_V3.fullmatch(invitation.onion_address):
+                raise ValueError
         except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             raise PeerError("The peer invitation is incomplete or invalid") from exc
         return invitation
@@ -336,6 +351,7 @@ class PeerManager:
         self._lock = threading.RLock()
         self.audit = audit or AuditTimeline()
         self.discovery = LanDiscovery(self._discovery_invitations)
+        self.tor = TorServiceManager(self.root / "tor")
 
     @property
     def running_shares(self) -> set[str]:
@@ -356,10 +372,19 @@ class PeerManager:
         _private, public = self._ensure_keypair(self.root / "hosts" / share.id)
         return normalize_public_key(public.read_text(encoding="utf-8"))
 
-    def invitation(self, share: PeerShare, role: PeerRole = PeerRole.READ_WRITE) -> str:
+    def invitation(self, share: PeerShare, role: PeerRole = PeerRole.READ_WRITE, peer_name: str = "") -> str:
+        transport = "tor" if share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.onion_enabled else "direct"
+        enforce_transport_policy(share, transport)
+        client_auth = ""
+        if transport == "tor" and share.onion_client_auth:
+            peer = next((item for item in share.authorized_peers if item.name == peer_name and item.enabled), None)
+            if peer is None:
+                raise PeerError("Choose the authorized device that will receive this Onion invitation")
+            credential = self.tor.issue_client_credential(share, peer)
+            client_auth = credential.private_key
         return PeerInvitation(
             share.name,
-            validate_host(share.advertised_host),
+            share.onion_address if transport == "tor" else validate_host(share.advertised_host),
             validate_port(int(share.port)),
             self.host_public_key(share),
             share.id,
@@ -367,6 +392,9 @@ class PeerManager:
             share.relay_host,
             share.relay_public_port,
             role,
+            transport=transport,
+            onion_address=share.onion_address,
+            onion_client_auth=client_auth,
         ).encode()
 
     def one_time_invitation(self, share: PeerShare, drop: OneTimeDrop) -> str:
@@ -396,7 +424,10 @@ class PeerManager:
         allowed_keys = list(dict.fromkeys(normalize_public_key(value) for value in allowed_keys))
         if not allowed_keys:
             raise PeerError("Authorize at least one peer device before starting the share")
-        validate_host(share.advertised_host)
+        if not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
+            validate_host(share.advertised_host)
+        if share.transport_policy is PeerTransportPolicy.TOR_ONLY and not share.onion_enabled:
+            self._policy_violation(share, "Tor-only policy requires an enabled Onion Service")
         rclone = self._rclone()
         host_private, _host_public = self._ensure_keypair(self.root / "hosts" / share.id)
         authorized = self.root / "authorized" / f"{share.id}.keys"
@@ -443,9 +474,18 @@ class PeerManager:
         threading.Thread(target=self._watch, args=(share.id, process), daemon=True).start()
         threading.Thread(target=self._delta_watch, args=(share, process), daemon=True, name=f"peer-delta-{share.id[:8]}").start()
         threading.Thread(target=self._drop_watch, args=(share, process), daemon=True, name=f"peer-drop-{share.id[:8]}").start()
-        if share.nat_traversal:
+        if share.onion_enabled:
+            try:
+                address = self.tor.start(share, port)
+                self.audit.record("policy", "Onion Service published", "success", peer=share.name, detail=address)
+            except Exception as exc:
+                if share.transport_policy is PeerTransportPolicy.TOR_ONLY:
+                    self.stop(share.id)
+                self.audit.record("policy", "Onion Service unavailable", "blocked", peer=share.name, detail=str(exc))
+                raise
+        if share.nat_traversal and not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
             self._open_nat_mapping(port)
-        if share.relay_host and share.relay_user and share.relay_public_port:
+        if share.relay_host and share.relay_user and share.relay_public_port and not share.no_relay:
             try:
                 self._start_relay(share)
             except Exception:
@@ -455,6 +495,7 @@ class PeerManager:
                 raise
 
     def stop(self, share_id: str) -> bool:
+        self.tor.stop(share_id)
         tunnel = self._tunnels.pop(share_id, None)
         if tunnel and tunnel.poll() is None:
             try:
@@ -521,6 +562,7 @@ class PeerManager:
         self.discovery.stop()
         for share_id in list(self.running_shares):
             self.stop(share_id)
+        self.tor.shutdown()
 
     def start_discovery(self) -> None:
         self.discovery.start()
@@ -549,6 +591,11 @@ class PeerManager:
         if not key_file.is_file():
             raise PeerError("The private identity key is missing")
         rclone = self._rclone()
+        if invitation.transport == "tor":
+            if invitation.onion_client_auth:
+                self.tor.install_client_credential(invitation.onion_address, invitation.onion_client_auth)
+            self._configure_onion_connection(remote, invitation, key_file, rclone)
+            return
         endpoints = [(invitation.host, invitation.port)]
         if invitation.relay_host and invitation.relay_port:
             endpoints.append((invitation.relay_host, invitation.relay_port))
@@ -575,6 +622,34 @@ class PeerManager:
         if result is None or result.returncode:
             detail = "No peer endpoint was available" if result is None else (result.stderr or result.stdout).strip()[-600:]
             raise PeerError(detail)
+
+    def _configure_onion_connection(self, remote: str, invitation: PeerInvitation, key_file: Path, rclone: str) -> None:
+        torsocks = shutil.which("torsocks")
+        ssh = shutil.which("ssh")
+        if not torsocks or not ssh:
+            raise PeerError("Tor transport needs tor, torsocks and OpenSSH; no clearnet fallback was attempted")
+        try:
+            torsocks_config = self.tor.start_client(remote)
+        except TorError as exc:
+            raise PeerError(str(exc)) from exc
+        wrapper = self.root / "tor" / "ssh-over-tor"
+        wrapper.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        wrapper.write_text(f"#!/bin/sh\nexec torsocks -f {shlex.quote(str(torsocks_config))} ssh \"$@\"\n", encoding="utf-8")
+        os.chmod(wrapper, 0o700)
+        result = subprocess.run([
+            rclone, "config", "create", remote, "sftp",
+            "host", invitation.onion_address, "port", "22", "user", "tuxdrive-peer",
+            "key_file", str(key_file), "host_keys", invitation.host_key,
+            "ssh", str(wrapper), "shell_type", "none", "md5sum_command", "none",
+            "sha1sum_command", "none", "--non-interactive",
+        ], capture_output=True, text=True, timeout=30, check=False)
+        if result.returncode:
+            raise PeerError((result.stderr or result.stdout or "Could not configure Onion peer").strip()[-600:])
+        self.audit.record("peer", "Onion connection configured", "success", peer=invitation.name, detail=invitation.onion_address)
+
+    def _policy_violation(self, share: PeerShare, detail: str) -> None:
+        self.audit.record("policy", "transport blocked", "blocked", peer=share.name, detail=detail)
+        raise PeerError(f"Policy violation: {detail}")
 
     def _rclone(self) -> str:
         resolved = resolve_rclone(self.rclone_path)

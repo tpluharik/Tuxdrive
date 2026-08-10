@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.14.0 on Ubuntu 26.04: encrypted profile backup and device migration, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.15.0 on Ubuntu 26.04: Tor v3 private workspaces and fail-closed transport policy, encrypted profile backup and device migration, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.14.0 on Ubuntu 26.04: encrypted profile backup and 
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.14.0_all.deb
+sudo apt install ./tuxdrive_0.15.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -98,6 +98,22 @@ Changing the cloud location refreshes the visual folder tree. This prevents a re
 ## 3. Direct encrypted multi-peer sharing
 
 Select the network icon or open **Settings → Peer-to-peer sharing**. One sharing computer runs an authenticated SFTP endpoint backed by its selected folder. Any number of explicitly authorized TuxDrive devices can connect with their individual keys. File data travels directly between endpoints and is not stored by TuxDrive, GitHub, a discovery directory, or a cloud provider.
+
+### Tor v3 Onion workspaces
+
+On **Share a folder**, choose **Tor only (fail closed)** and enable **Publish a Tor v3 Onion Service**. A persistent service keeps its address across restarts; disabling persistence creates a disposable service identity. Tor-only startup fails visibly if Tor cannot publish the service, and TuxDrive does not retry over the public address, LAN, NAT mapping, or relay.
+
+Enable **Require per-device Onion client authorization** for private Onion discovery. TuxDrive creates a separate X25519 authorization credential for the selected named device when its invitation is copied or rendered as QR. The host stores only that device's public authorization material; the client secret is transferred in the invitation. Exchange it through an authenticated channel and treat the QR as a password. Re-issue to rotate. Revocation removes the device file and requests a Tor reload; allow for Tor reload/restart timing before assuming that an already established circuit has ended. SSH device authorization and pinned host verification still apply after Tor accepts the circuit.
+
+The restrictions are workspace-specific:
+
+- **Direct only** refuses Onion and relay endpoints.
+- **Tor only** refuses direct, LAN, NAT and relay fallback.
+- **Never use a relay** rejects configured forwarding relays.
+- **Do not discover or advertise a public IP** disables public addressing and router mapping.
+- **Never use provider cloud** records the workspace's isolation requirement and prevents it from being treated as a cloud-backed job.
+
+An incompatible transport produces a **blocked** event in the audit timeline. It never silently degrades. Bridge and pluggable-transport values are advanced censorship-resistance settings, not proof of anonymity. They are stored with mode `0600` in the isolated Tor instance and excluded from invitations and TuxDrive subprocess arguments/logs.
 
 ![Direct peer sharing setup](assets/05-peer-sharing.svg)
 
@@ -463,7 +479,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.14.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.15.0_all.deb`.
 
 ## 13. Data safety
 

@@ -180,6 +180,12 @@ class PeerRole(str, Enum):
             self.RECEIVE_ONLY: "Receive-only",
         }[self]
 
+
+class PeerTransportPolicy(str, Enum):
+    DIRECT_ONLY = "direct_only"
+    TOR_ONLY = "tor_only"
+    AUTO = "auto"
+
     @property
     def sync_mode(self) -> SyncMode:
         return {
@@ -224,6 +230,7 @@ class AuthorizedPeer:
     enabled: bool = True
     role: PeerRole = PeerRole.READ_WRITE
     added_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    onion_client_public_key: str = ""
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AuthorizedPeer":
@@ -275,6 +282,16 @@ class PeerShare:
     relay_ssh_port: int = 22
     relay_public_port: int = 0
     one_time_drops: list[OneTimeDrop] = field(default_factory=list)
+    transport_policy: PeerTransportPolicy = PeerTransportPolicy.AUTO
+    no_relay: bool = False
+    no_public_ip_discovery: bool = False
+    never_use_provider_cloud: bool = True
+    onion_enabled: bool = False
+    onion_persistent: bool = True
+    onion_address: str = ""
+    onion_client_auth: bool = False
+    tor_bridge_lines: list[str] = field(default_factory=list)
+    tor_pluggable_transports: list[str] = field(default_factory=list)
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "PeerShare":
@@ -285,6 +302,7 @@ class PeerShare:
             peers = [AuthorizedPeer("Legacy peer", legacy)]
         data["authorized_peers"] = peers
         data["one_time_drops"] = [OneTimeDrop.from_dict(item) for item in data.get("one_time_drops", [])]
+        data["transport_policy"] = PeerTransportPolicy(data.get("transport_policy", PeerTransportPolicy.AUTO.value))
         allowed = set(cls.__dataclass_fields__)
         return cls(**{key: item for key, item in data.items() if key in allowed})
 
