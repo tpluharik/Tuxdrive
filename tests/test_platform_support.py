@@ -14,9 +14,10 @@ class PlatformSupportTests(unittest.TestCase):
             source.write_text('ID=debian\nPRETTY_NAME="Debian GNU/Linux"\n', encoding="utf-8")
             self.assertEqual(_os_release(source)["ID"], "debian")
 
+    @patch("tuxdrive.platform_support.platform.system", return_value="Linux")
     @patch("tuxdrive.platform_support.platform.machine", return_value="x86_64")
     @patch("tuxdrive.platform_support.shutil.which", return_value="/usr/bin/tool")
-    def test_supported_host_report_is_machine_readable(self, _which, _machine):
+    def test_supported_linux_host_report_is_machine_readable(self, _which, _machine, _system):
         report = inspect_host()
         self.assertTrue(report["architecture_supported"])
         self.assertTrue(report["required_ready"])
