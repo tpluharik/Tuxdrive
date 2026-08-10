@@ -6,7 +6,7 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature status and top-20 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
+🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
 ## Community and development
 
@@ -137,7 +137,7 @@ The current suite contains 89 automated tests covering encrypted profile round t
 
 ## Suggestions and roadmap
 
-The [feature status and top-20 roadmap](docs/ROADMAP.md) records the safety foundation shipped in 0.8.0 and the multi-peer, lease, LAN-discovery, and QR-pairing work shipped in 0.9.0. Community discussion should use the feature-request issue form.
+The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety and synchronization work plus the proposed path toward optional Tor/onion transport, reviewed group security, self-hosted encrypted services and local-first multi-peer document collaboration—described as a long-term “Signal for files and cooperation” direction rather than a current security claim. Community discussion should use the feature-request issue form.
 
 ## Update from the app
 
