@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import tempfile
@@ -18,7 +19,8 @@ import zipfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
+from xml.etree import ElementTree as OutputET
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -27,6 +29,15 @@ ROOT = "ROOT"
 OFFICE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
 TEXT = "urn:oasis:names:tc:opendocument:xmlns:text:1.0"
 TABLE = "urn:oasis:names:tc:opendocument:xmlns:table:1.0"
+MAX_OPERATION_FILES = 250_000
+MAX_OPERATION_FILE_SIZE = 16 * 1024
+MAX_OPERATIONS = 250_000
+MAX_ARCHIVE_ENTRIES = 4_096
+MAX_ARCHIVE_COMPRESSED_SIZE = 128 * 1024 * 1024
+MAX_ARCHIVE_EXPANDED_SIZE = 512 * 1024 * 1024
+MAX_ARCHIVE_ENTRY_SIZE = 128 * 1024 * 1024
+MAX_COMPRESSION_RATIO = 200
+MAX_CONTENT_XML_SIZE = 64 * 1024 * 1024
 
 
 class CollaborationError(RuntimeError):
@@ -66,11 +77,27 @@ class TextOperation:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "TextOperation":
+        if not isinstance(raw, dict) or set(raw) - set(cls.__dataclass_fields__):
+            raise CollaborationError("Invalid collaborative text operation fields")
         operation = cls(**raw)
         if operation.kind not in {"insert", "delete"}:
             raise CollaborationError("Unknown collaborative text operation")
+        if not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", operation.operation_id):
+            raise CollaborationError("Invalid collaborative operation identifier")
+        if not re.fullmatch(r"[A-Za-z0-9_.-]{1,48}", operation.actor):
+            raise CollaborationError("Invalid collaborative actor")
+        if not isinstance(operation.counter, int) or isinstance(operation.counter, bool) or not 0 < operation.counter <= MAX_OPERATIONS:
+            raise CollaborationError("Invalid collaborative operation counter")
+        if operation.after != ROOT and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", operation.after):
+            raise CollaborationError("Invalid collaborative operation parent")
+        if operation.target and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,96}", operation.target):
+            raise CollaborationError("Invalid collaborative operation target")
+        if not isinstance(operation.timestamp, (int, float)) or not math.isfinite(float(operation.timestamp)) or abs(float(operation.timestamp)) > 10**12:
+            raise CollaborationError("Invalid collaborative operation timestamp")
         if operation.kind == "insert" and len(operation.value) != 1:
             raise CollaborationError("Insert operations must contain exactly one character")
+        if operation.kind == "delete" and operation.value:
+            raise CollaborationError("Delete operations cannot contain text")
         return operation
 
 
@@ -93,6 +120,8 @@ class TextCRDT:
             if previous and previous != operation:
                 raise CollaborationError(f"Conflicting operation identifier: {operation.operation_id}")
             self.operations[operation.operation_id] = operation
+            if len(self.operations) > MAX_OPERATIONS:
+                raise CollaborationError("Collaborative document exceeds the operation safety limit")
 
     def _next(self, kind: str, **values: Any) -> TextOperation:
         self.counter += 1
@@ -109,12 +138,18 @@ class TextCRDT:
             children.setdefault(parent, []).append(operation)
         ordered: list[str] = []
 
-        def visit(parent: str) -> None:
-            for child in sorted(children.get(parent, ()), key=self._sort_key):
-                ordered.append(child.operation_id)
-                visit(child.operation_id)
-
-        visit(ROOT)
+        stack = list(reversed(sorted(children.get(ROOT, ()), key=self._sort_key)))
+        visited: set[str] = set()
+        while stack:
+            child = stack.pop()
+            if child.operation_id in visited:
+                raise CollaborationError("Collaborative operation graph contains a cycle")
+            visited.add(child.operation_id)
+            ordered.append(child.operation_id)
+            descendants = sorted(children.get(child.operation_id, ()), key=self._sort_key)
+            stack.extend(reversed(descendants))
+        if len(visited) != len(inserts):
+            raise CollaborationError("Collaborative operation graph contains an unreachable cycle")
         return ordered
 
     def visible_ids(self) -> list[str]:
@@ -181,8 +216,15 @@ class CollaborationWorkspace:
 
     def load(self) -> TextCRDT:
         operations: list[TextOperation] = []
-        for path in sorted((self.root / "operations").glob("*/*.json")):
-            operations.append(TextOperation.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+        for index, path in enumerate(sorted((self.root / "operations").glob("*/*.json")), start=1):
+            if index > MAX_OPERATION_FILES:
+                raise CollaborationError("Collaborative workspace exceeds the file-count safety limit")
+            try:
+                if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_OPERATION_FILE_SIZE:
+                    raise CollaborationError(f"Unsafe collaborative operation file: {path.name}")
+                operations.append(TextOperation.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+            except (OSError, UnicodeError, json.JSONDecodeError, TypeError) as exc:
+                raise CollaborationError(f"Invalid collaborative operation file: {path.name}") from exc
         return TextCRDT(self.actor, operations)
 
     def persist(self, operations: Iterable[TextOperation]) -> None:
@@ -289,11 +331,37 @@ class ODFAdapter:
         kind = path.suffix.lower().lstrip(".")
         if kind not in {"odt", "ods"}:
             raise CollaborationError("Structured editing supports ODT and ODS")
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_ARCHIVE_COMPRESSED_SIZE:
+            raise CollaborationError("ODF document exceeds the compressed-size safety limit")
         with zipfile.ZipFile(path) as archive:
-            entries = {name: archive.read(name) for name in archive.namelist()}
+            infos = archive.infolist()
+            if len(infos) > MAX_ARCHIVE_ENTRIES:
+                raise CollaborationError("ODF document contains too many archive entries")
+            names: set[str] = set()
+            expanded = 0
+            for info in infos:
+                member = Path(info.filename)
+                if info.filename in names or member.is_absolute() or ".." in member.parts or "\\" in info.filename:
+                    raise CollaborationError("ODF document contains an unsafe or duplicate archive entry")
+                names.add(info.filename)
+                if info.file_size > MAX_ARCHIVE_ENTRY_SIZE:
+                    raise CollaborationError("ODF archive entry exceeds the size safety limit")
+                expanded += info.file_size
+                if expanded > MAX_ARCHIVE_EXPANDED_SIZE:
+                    raise CollaborationError("ODF document exceeds the expanded-size safety limit")
+                if info.file_size and info.compress_size == 0:
+                    raise CollaborationError("ODF archive entry has an invalid compression ratio")
+                if info.compress_size and info.file_size / info.compress_size > MAX_COMPRESSION_RATIO:
+                    raise CollaborationError("ODF archive entry exceeds the compression-ratio safety limit")
+            entries = {info.filename: archive.read(info) for info in infos if not info.is_dir()}
         if "content.xml" not in entries:
             raise CollaborationError("ODF document has no content.xml")
-        root = ET.fromstring(entries["content.xml"])
+        if len(entries["content.xml"]) > MAX_CONTENT_XML_SIZE:
+            raise CollaborationError("ODF content.xml exceeds the parsing safety limit")
+        try:
+            root = ET.fromstring(entries["content.xml"])
+        except Exception as exc:
+            raise CollaborationError("ODF content.xml is unsafe or malformed") from exc
         document = ODFDocument(kind, entries)
         document.comments = ["".join(node.itertext()) for node in root.findall(f".//{{{OFFICE}}}annotation")]
         document.tracked_changes = root.find(f".//{{{TEXT}}}tracked-changes") is not None
@@ -313,7 +381,10 @@ class ODFAdapter:
 
     @staticmethod
     def export(document: ODFDocument, destination: Path | str) -> None:
-        root = ET.fromstring(document.entries["content.xml"])
+        try:
+            root = ET.fromstring(document.entries["content.xml"])
+        except Exception as exc:
+            raise CollaborationError("ODF content.xml is unsafe or malformed") from exc
         changed = False
         if document.kind == "odt":
             nodes = list(root.findall(f".//{{{TEXT}}}p")) + list(root.findall(f".//{{{TEXT}}}h"))
@@ -338,13 +409,13 @@ class ODFAdapter:
                                 node.set(f"{{{TABLE}}}formula", cell.formula)
                             for child in list(node):
                                 node.remove(child)
-                            paragraph = ET.SubElement(node, f"{{{TEXT}}}p")
+                            paragraph = OutputET.SubElement(node, f"{{{TEXT}}}p")
                             paragraph.text = cell.value
                             changed = True
         entries = dict(document.entries)
         if changed:
             entries["TuxDrive/original-content.xml"] = document.entries["content.xml"]
-            entries["content.xml"] = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            entries["content.xml"] = OutputET.tostring(root, encoding="utf-8", xml_declaration=True)
         destination = Path(destination)
         destination.parent.mkdir(parents=True, exist_ok=True)
         temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")

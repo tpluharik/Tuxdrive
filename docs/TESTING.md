@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.18.1 suite contains **117 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files.
+The TuxDrive 0.19.0 suite contains **125 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files.
 
 ## Test groups
 
@@ -33,13 +33,13 @@ The TuxDrive 0.18.1 suite contains **117 automated tests**. Tests use temporary 
 | `test_i18n_help.py` | 2 | Six-language UI fallback, Arabic/Hebrew RTL detection and complete localized in-app help topics. |
 | `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
 | `test_packaging.py` | 10 | Debian launcher/layout checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion and packaged emblems. |
-| `test_collaboration.py` | 7 | Offline CRDT convergence independent of arrival order, immutable separate state, explicit checkpoints, review events, authenticated expiring presence, deterministic/recoverable ODT export, ODS formula round trips and safe binary-format fallback. |
-| `test_peer.py` | 13 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
+| `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
+| `test_peer.py` | 19 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, isolated per-device role/root enforcement, multi-device authorization, legacy migration, host-key pinning, edit leases and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_security.py` | 2 | Symlink/parent escape rejection plus Ed25519 signed-transaction tamper detection. |
 | `test_rclone.py` | 18 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
-| `test_updater.py` | 7 | Numeric version comparison, trusted release URLs, visible download progress, SHA-256 validation, corrupt-partial cleanup, and a release gate requiring the signed manifest to match the current `.deb` version/name/digest. |
+| `test_updater.py` | 9 | Numeric version comparison, trusted release URLs, progress, download verification, corrupt-partial cleanup, privileged no-follow immutable staging/digest checks, and signed manifest/package release coherence. |
 
 ## Important safety invariants covered
 
@@ -54,12 +54,12 @@ The TuxDrive 0.18.1 suite contains **117 automated tests**. Tests use temporary 
 - Bridge credentials remain out of subprocess arguments, invitations, and application audit/log messages.
 - A peer client pins the server host key and authenticates with its own private key.
 - Proton accounts are not accepted until an actual remote listing succeeds.
-- Update packages are not installed until their SHA-256 checksum matches the signed repository manifest value.
+- Update packages are not installed until both desktop and privileged helper verification succeed; the helper verifies a root-only staged copy and trusts neither a user-supplied digest nor the previously opened user-writable path.
 - Incoming replacement/deletion recovery retains restorable content before changing the local file.
 - Ransomware-like extensions and configured mass-change thresholds pause propagation.
 - Integrity audit differences are parsed into explicit, selectable repair findings.
 - A legacy one-key share migrates into the named-device model without losing access.
-- Multiple enabled public keys are written to the authenticated endpoint; revoked/disabled keys are omitted.
+- Every enabled public key receives a distinct authorization file/listener; role-limited keys cannot share a broader endpoint and revoked/disabled keys are omitted.
 - A foreign unexpired edit lease blocks acquisition instead of allowing an overwrite.
 - LAN/QR invitations preserve the pinned host key and lease duration; protocol-v1 invitations remain importable.
 - Nautilus actions route through the single application instance, and startup-time sync requests wait for runtime readiness.
@@ -72,14 +72,16 @@ The TuxDrive 0.18.1 suite contains **117 automated tests**. Tests use temporary 
 - Audit events are written with mode `0600`, can be filtered by job and ignore malformed historical lines safely.
 - Encrypted profiles reveal no clear configuration, reject wrong passwords and modification, and exclude OAuth/peer secrets unless the sensitive option is explicitly selected.
 - Restored configuration and opted-in credential/key files retain private `0600` permissions, while a local pre-migration configuration is kept for rollback.
+- ODF archives are rejected before expansion when entry count, bytes, entry size, duplicate/path or compression-ratio limits fail; unsafe XML entities never enter the structured editor.
+- Collaborative operation files are bounded regular JSON with validated identifiers/counters, a global count ceiling and non-recursive deterministic traversal.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.18.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.18.1_all.deb
-sha256sum dist/tuxdrive_0.18.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.19.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.19.0_all.deb
+sha256sum dist/tuxdrive_0.19.0_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -94,8 +96,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.18.1 \
-  --package dist/tuxdrive_0.18.1_all.deb \
+python3 scripts/sign-update.py --version 0.19.0 \
+  --package dist/tuxdrive_0.19.0_all.deb \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
 
@@ -120,8 +122,8 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Block delta | Change one block in a multi-gigabyte peer file, verify reduced transmitted bytes in logs, corrupt a queued block, and confirm the receiver rejects it without replacing the destination. |
 | Peer sharing | Three or more clean machines, simultaneous access, named-key revocation, disabled key, wrong key rejection, address edit, restart recovery and a large-file transfer. |
 | Tor transport | Validate persistent/ephemeral Onion addresses, two separately authorized clients, QR import, revoked and rotated client authorization, Tor restart semantics, service failure, SOCKS failure, Tor-only clearnet refusal, no-relay/no-IP rules, bridges in a filtered-network lab and confirmation that secrets are absent from logs/process listings. |
-| Peer roles | Exercise each role in both directions, including local/remote deletion. Verify an all-receive endpoint is server read-only and document that mixed-role enforcement requires paired TuxDrive clients or separate service endpoints. |
-| One-time drop | Test expiry before connection, inbox isolation, first-file consumption, current-session completion, reconnect rejection and host restart persistence. Confirm ordinary jobs exclude `.tuxdrive-drops`. |
+| Peer roles | Exercise each role in both directions using both TuxDrive and a generic SFTP client. Verify distinct ports/one-key files, server read-only behavior, send-only inbox roots, revocation and mixed-role isolation. |
+| One-time drop | Test its dedicated port/root with a generic client, parent-workspace denial, expiry, first-file consumption, current-session completion, reconnect rejection and restart persistence. Confirm ordinary jobs exclude `.tuxdrive-drops`. |
 | Audit timeline | Produce success, failure, policy, peer, delta and drop events; verify local-only storage, permissions, compaction, path sensitivity and malformed-line recovery. |
 | Capability UI | Change among all providers and confirm unsupported modes/actions disappear or disable while server-specific caveats remain visible. |
 | Sync health | Verify running, mounted, paused, callback, last-run and error states against actual job behavior, then reopen to refresh the snapshot. |
@@ -131,7 +133,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Nautilus integration | Test enabled and disabled settings after restarting Nautilus; confirm menus/badges disappear when disabled and streaming items expose pin/free-space actions when enabled. |
 | Internet peer sharing | Direct, UPnP, NAT-PMP and reverse-relay connections; verify host-key pinning, relay fallback, no retained relay content, tunnel recovery, and manual direct mode. |
 | Transfer policies | Maximum default, metered connection, AC/battery transition, overnight schedule, invalid/disconnected NetworkManager state, and queued retry after a policy becomes permissive. |
-| Update | No-update result, valid update, corrupted package rejection and cancelled PolicyKit prompt. |
+| Update | No-update result, valid update, corrupted package, symlink, same-user replacement race, manifest change, cancelled PolicyKit prompt and successful installation from root-only staging. |
 | Diagnostics | Startup log, application log, per-job log and crash-log paths contain useful information without secrets. |
 | Recovery | Replace and remotely delete test files, restore several versions, expire retention, and verify current-file archival before restore. |
 | Mass-change safety | Preview a disposable large rename/deletion burst and ransomware-like suffix batch; confirm the job pauses before real propagation. |
@@ -152,7 +154,8 @@ The repository suite is primarily deterministic unit and command-construction te
 - multi-gigabyte performance and memory benchmarks;
 - compatibility testing against every provider account type and regional endpoint.
 - automatic interpretation of Ubuntu backported security patches from an upstream-looking package version;
-- hostile generic-SFTP authorization for mixed-role peer keys before the future per-key server layer.
+- automated privileged PolicyKit/real-APT race testing in an isolated VM;
+- sustained hostile peer/drop quota and session-termination testing beyond the dedicated-root authorization tests.
 
 These gaps are tracked as roadmap work rather than implied coverage.
 

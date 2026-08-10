@@ -1,24 +1,28 @@
-# TuxDrive 0.16.0 security hardening and secure operation
+# TuxDrive 0.19.0 security hardening and secure operation
 
-This document explains the controls implemented in TuxDrive 0.15.1–0.16.0, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls implemented through TuxDrive 0.19.0, including the second-round critical/high remediation, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.16.0** is the supported baseline. Versions through 0.15.0 lack the complete path, update, credential, Tor, and delta hardening. Version 0.15.1 introduced those controls but allowed an upstream `cryptography` 46.x dependency later rejected by the release audit. Version 0.16.0 requires `cryptography>=50.0.0,<51` for Python/PyPI installations and uses Ubuntu's maintained `python3-cryptography` package for Debian installations, allowing Canonical security backports.
+Version **0.19.0** is the supported baseline. It adds root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing to the earlier path, credential, Tor and delta controls. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
+The 0.19.0 release rotates the update trust root because the preceding offline private key was unavailable. This is intentionally not treated as a signature-verification exception: 0.18.1 users install the reviewed 0.19.0 `.deb` once through APT, then all later manifests are verified with the new offline key. The replacement private key is not committed and must be archived by the maintainer with mode `0600` in protected offline storage.
+
 ## Security control inventory
 
-| Area | 0.16.0 behavior | Security purpose |
+| Area | 0.19.0 behavior | Security purpose |
 |---|---|---|
-| Updates | Ed25519 signature and expiry over canonical version, URL, SHA-256, notes, and expiry; approved repository URL; bounded 1 GiB download; Debian name/version inspection before PolicyKit | Prevent unsigned, replayed, substituted, oversized, or wrong-package updates |
+| Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
 | Filesystem writes | Relative-path validation plus descriptor-based no-follow traversal and atomic replacement for incremental downloads, deltas, recovery, hydration, and repair | Resist traversal and symlink-swap writes outside the configured root |
 | Peer deltas | Canonical signed instructions, authorized Ed25519 signer, bounded block count/size, BLAKE2 block checks, final SHA-256, atomic install, full-file fallback | Reject unauthenticated, tampered, or resource-abusive delta transactions |
 | Tor transport | Tor-only/no-public-IP services bind loopback; explicit invitation transport allowlists; randomized per-remote SOCKS listeners; readiness checks; no silent clearnet fallback | Enforce workspace transport policy and reduce accidental address exposure |
 | Bridges and relays | Packaged pluggable-transport executable allowlist; bridge material excluded from invitations, arguments, logs, and ordinary profile backup; strict SSH host verification and batch mode | Reduce credential leakage and command/path injection opportunities |
-| One-time drops | Consumption marker, authorization rebuild, endpoint restart, expiry validation, and inbox scope | Retire a temporary grant promptly after use |
+| Peer roles | One listener and authorization file per key; server read-only for read/receive roles; private inbox root for send-only | Prevent hostile generic clients from bypassing a role label |
+| One-time drops | Dedicated key/port/inbox root, consumption marker, authorization rebuild, endpoint restart and expiry validation | Prevent parent-workspace browsing and retire a temporary grant promptly after use |
+| Collaborative inputs | Defused XML, ZIP count/size/ratio/path limits, bounded operation JSON/schema/count and iterative CRDT traversal | Prevent archive/XML/operation resource-exhaustion attacks arriving through sync or peers |
 | Configuration backup | Version-2 AES-256-GCM, scrypt `N=131072`, unique minimum 14-character password, 128 MiB bundle limit; version-1 read compatibility | Increase offline-guessing cost and bound memory/storage abuse while preserving migration |
 | Runtime | Isolated Python launcher, cleared Python environment, mode-0600 logs/config, mode-0700 state directories, systemd `UMask=0077`, `PrivateTmp`, and `LockPersonality` | Reduce environment injection and accidental local disclosure |
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
@@ -65,12 +69,12 @@ Existing jobs, provider remotes, peer public metadata, recovery data, and versio
 
 ### Intentionally retained peer-server limitation
 
-Peer sharing and one-time drops remain enabled. Roles are enforced by TuxDrive synchronization jobs, and an all-read-only endpoint can be server-wide read-only. The shared rclone SFTP endpoint does not yet provide per-key roots or permissions for a hostile generic SFTP client in a mixed-role share, and a one-time drop is not yet a separately chrooted per-key service. Grant keys only to trusted collaborators until the planned server-side authorization layer is implemented.
+Peer sharing and one-time drops remain enabled with per-key isolation. Read/write peers retain the selected workspace, read/receive peers receive a server read-only view, and send-only/drop peers receive private inbox roots. Collaborators remain trusted for content they are legitimately allowed to read or modify. Per-endpoint quotas, operation telemetry and immediate upload-session termination remain scheduled in the roadmap.
 
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.16.0 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.19.0 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

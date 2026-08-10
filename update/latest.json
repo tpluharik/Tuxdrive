@@ -1,8 +1,8 @@
 {
-  "version": "0.18.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.18.1_all.deb",
-  "sha256": "2204a4cfcad1e73a681fe868e68ed33389d6e5113c6dcdae7327ddcf6ec019bd",
-  "notes": "Arabic and Hebrew localization with right-to-left text and unchanged interface layout",
-  "expires_at": "2027-02-06T19:06:07.771771+00:00",
-  "signature": "Ty4jyRhQft+Rk62oIVjUpQ2YTGIVJbQxPRf8JXV5PFpHmJY+nKObma2VSJwWowOI4/RB7fhEakY4uIDtkffyAg=="
+  "version": "0.19.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.19.0_all.deb",
+  "sha256": "9326ece23565d68e2781c6680c372983268447ae17f44db8fe5ccd7a5aa7fbcb",
+  "notes": "Critical updater isolation, per-device peer authorization, dedicated drop roots, and bounded collaborative inputs",
+  "expires_at": "2026-11-08T19:50:13.869029+00:00",
+  "signature": "Ex+M5Zg+vu48lGVsya0EEYHO15cdz7G6NNh3t6VuGxsZV3a74jdpxU7t7y2rgfPfZ6OpSgWgcmvdDHYjjr+aBg=="
 }

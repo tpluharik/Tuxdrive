@@ -65,9 +65,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('docs/TESTING.md', build_script)
         self.assertIn('docs/ROADMAP.md', build_script)
         self.assertIn("python3-cryptography", control)
+        self.assertIn("python3-defusedxml", control)
         self.assertIn("libsecret-tools", control)
         self.assertIn("tuxdrive-rclone-password", build_script)
         self.assertIn('find_spec("tuxdrive.migration")', build_script)
+        self.assertIn("tuxdrive-update-helper", build_script)
+        self.assertIn('find_spec("tuxdrive.update_helper")', build_script)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

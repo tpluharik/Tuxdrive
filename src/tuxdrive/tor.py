@@ -10,6 +10,7 @@ import time
 import socket
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
@@ -77,7 +78,7 @@ class TorServiceManager:
         self._private_write(path, f"{onion}:descriptor:x25519:{private_key}\n")
         return target
 
-    def start(self, share: PeerShare, target_port: int, timeout: float = 20.0) -> str:
+    def start(self, share: PeerShare, target_port: int | Iterable[int], timeout: float = 20.0) -> str:
         if not share.onion_enabled:
             raise TorError("Onion Service is not enabled for this workspace")
         binary = shutil.which(self.tor_path)
@@ -91,12 +92,15 @@ class TorServiceManager:
             if peer.enabled and peer.onion_client_public_key:
                 self._write_authorized_client(share, peer)
         config = data / "torrc"
+        target_ports = [target_port] if isinstance(target_port, int) else list(dict.fromkeys(target_port))
+        if not target_ports:
+            raise TorError("Onion Service has no authorized peer endpoint")
         lines = [
             f"DataDirectory {data}", "SocksPort auto", "AvoidDiskWrites 1",
             f"HiddenServiceDir {service}", "HiddenServiceVersion 3",
-            f"HiddenServicePort 22 127.0.0.1:{target_port}",
             f"ClientOnionAuthDir {self.root / 'client-auth'}",
         ]
+        lines.extend(f"HiddenServicePort {port} 127.0.0.1:{port}" for port in target_ports)
         if share.tor_bridge_lines:
             lines.append("UseBridges 1")
             lines.extend(f"Bridge {self._safe_profile(value)}" for value in share.tor_bridge_lines)

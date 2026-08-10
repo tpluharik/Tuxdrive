@@ -230,6 +230,7 @@ class AuthorizedPeer:
     role: PeerRole = PeerRole.READ_WRITE
     added_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     onion_client_public_key: str = ""
+    server_port: int = 0
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AuthorizedPeer":
@@ -248,6 +249,7 @@ class OneTimeDrop:
     id: str = field(default_factory=lambda: uuid4().hex)
     consumed: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    server_port: int = 0
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "OneTimeDrop":

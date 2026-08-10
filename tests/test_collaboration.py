@@ -3,7 +3,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from tuxdrive.collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, TextCRDT, document_capability
+from tuxdrive.collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, TextCRDT, TextOperation, document_capability
 
 
 class CollaborationTests(unittest.TestCase):
@@ -95,6 +95,38 @@ class CollaborationTests(unittest.TestCase):
     def test_unsafe_binary_formats_never_claim_realtime_support(self):
         for name in ("report.docx", "book.xlsx", "review.pdf"):
             self.assertEqual(document_capability(name)["mode"], "lock-version-review")
+
+    def test_odf_zip_bomb_ratio_is_rejected_before_expansion(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "bomb.odt"
+            with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+                archive.writestr("content.xml", b"A" * (2 * 1024 * 1024))
+            with self.assertRaisesRegex(CollaborationError, "compression-ratio"):
+                ODFAdapter.load(source)
+
+    def test_deep_crdt_chain_uses_bounded_iterative_traversal(self):
+        crdt = TextCRDT("device")
+        crdt.insert(0, "x" * 5000)
+        self.assertEqual(len(crdt.text), 5000)
+
+    def test_unreachable_crdt_cycle_is_rejected(self):
+        operations = [
+            TextOperation("a:00000000000000000001", "a", 1, "insert", after="b:00000000000000000001", value="a"),
+            TextOperation("b:00000000000000000001", "b", 1, "insert", after="a:00000000000000000001", value="b"),
+        ]
+        with self.assertRaisesRegex(CollaborationError, "cycle"):
+            _ = TextCRDT("reader", operations).text
+
+    def test_unsafe_xml_entities_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "entities.odt"
+            content = b'<!DOCTYPE x [<!ENTITY boom "boom">]><x>&boom;</x>'
+            with zipfile.ZipFile(source, "w") as archive:
+                archive.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+                archive.writestr("content.xml", content)
+            with self.assertRaisesRegex(CollaborationError, "unsafe or malformed"):
+                ODFAdapter.load(source)
 
 
 if __name__ == "__main__":

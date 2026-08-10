@@ -17,7 +17,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 MANIFEST_URL = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/update/latest.json"
 ALLOWED_PREFIX = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/"
-UPDATE_PUBLIC_KEY = "xyquZ4Mp8SGBpNiNjEcjhkeaPxBkAOwiBT0AhdhjolU="
+UPDATE_PUBLIC_KEY = "3c0BtMjwCmlZR0nw2jdqsAQQm7nYyd68r8BtnK2XzyY="
 MAX_UPDATE_SIZE = 1024 * 1024 * 1024
 
 
@@ -111,18 +111,21 @@ class UpdateManager:
 
     def install(self, package: Path) -> None:
         pkexec = shutil.which("pkexec")
-        apt_get = shutil.which("apt-get") or "/usr/bin/apt-get"
         if not pkexec:
             raise RuntimeError("The PolicyKit update helper (pkexec) is unavailable")
+        helper = Path("/usr/lib/tuxdrive/update-helper")
+        if not helper.is_file():
+            raise RuntimeError("The privileged TuxDrive update helper is unavailable; reinstall the current package")
+        package_path = package.expanduser().absolute()
         metadata = subprocess.run(
-            ["/usr/bin/dpkg-deb", "--show", "--showformat=${Package} ${Version}", str(package.resolve())],
+            ["/usr/bin/dpkg-deb", "--show", "--showformat=${Package} ${Version}", str(package_path)],
             text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False,
         )
         expected_version = package.name.removeprefix("tuxdrive_").removesuffix("_all.deb")
         if metadata.returncode or metadata.stdout.strip() != f"tuxdrive {expected_version}":
             raise RuntimeError("The verified update is not the expected TuxDrive Debian package")
         result = subprocess.run(
-            [pkexec, apt_get, "install", "-y", str(package.resolve())],
+            [pkexec, str(helper), str(package_path)],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,

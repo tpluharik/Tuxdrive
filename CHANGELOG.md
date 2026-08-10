@@ -2,6 +2,18 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.19.0 — critical/high security remediation
+
+- Closed the in-app updater's privilege-boundary race. A fixed PolicyKit helper now independently retrieves and verifies the signed manifest, copies the user-owned package through a no-follow file descriptor into a root-only directory, verifies the immutable copy's SHA-256 and Debian identity, and only then invokes APT.
+- Replaced shared peer authorization with a distinct SFTP listener and one-key authorization file per enabled device. Read-only/receive-only endpoints are server read-only; send-only devices receive an isolated inbox instead of workspace visibility.
+- Moved one-time drops to dedicated per-invitation roots and ports, so a modified SFTP client cannot browse the containing workspace while its invitation remains active.
+- Added persistent per-device endpoint allocation and multi-port Onion publication while retaining host-key pinning, direct/Tor policies and existing read/write behavior.
+- Bounded collaborative operation counts and JSON size/schema, replaced recursive CRDT traversal, and rejected unsafe operation graphs.
+- Hardened ODT/ODS import against ZIP bombs, duplicate/traversal entries, excessive archive/XML sizes and unsafe XML entities by using `defusedxml` and explicit resource limits.
+- Added eight focused updater, peer-isolation, archive and deep/cyclic-CRDT regression tests; the complete suite now contains 125 tests.
+- Documented the remaining medium hardening work in the roadmap and updated the repository and in-app security guidance.
+- Rotated the offline update signing trust root because the preceding private release key was unavailable in the protected release environment. Upgrade from 0.18.1 to 0.19.0 once with the downloaded `.deb`; signed in-app updates resume from 0.19.0 onward.
+
 ## 0.18.1 — Arabic and Hebrew localization
 
 - Added complete Arabic and Hebrew primary-interface translations and all 18 offline documentation chapters.

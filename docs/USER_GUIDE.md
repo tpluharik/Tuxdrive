@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.18.1 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted migration, Nautilus integration, multi-peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.19.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted migration, Nautilus integration, multi-peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
-Version 0.16.0 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.19.0 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.16.0 is the minimum supported security baseline. Upgrade older install
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.18.1_all.deb
+sudo apt install ./tuxdrive_0.19.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -46,7 +46,9 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 ### Update TuxDrive
 
-Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. TuxDrive verifies the package checksum before Ubuntu displays its system authorization prompt. When installation completes, restart TuxDrive. If any stage fails, the existing installation remains unchanged and the result stays visible until you close it.
+Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxDrive. A failure leaves the existing installation unchanged.
+
+When moving from 0.18.1 to 0.19.0, download the repository `.deb` and install it once with APT. The signing trust root was rotated because the previous offline private key was unavailable; 0.18.1 therefore cannot authenticate the 0.19.0 manifest. Never bypass a signature warning. In-app signed updates work normally again after 0.19.0 is installed.
 
 ### Rename an item in TuxDrive
 
@@ -207,13 +209,13 @@ Each named authorized device can be assigned one role before its invitation is c
 | **Send-only** | Uploads the device's selected local folder; it does not download host changes. |
 | **Receive-only** | Mirrors host content locally, including allowed deletions; it never uploads local changes. |
 
-Select the device row before choosing **Copy invitation** or **Show invitation QR**. Protocol-v4 invitations carry the selected role, and the receiving job locks its direction accordingly. If every enabled device on an endpoint is read-only/receive-only, the SFTP server is also launched in read-only mode. With mixed roles, direction is enforced by paired TuxDrive clients; because the underlying interoperable SFTP service cannot assign a different filesystem policy to every key on one port, do not give a role-limited key to a generic SFTP client. Use separate shares/ports where hostile-client enforcement is required.
+Select the device row before choosing **Copy invitation** or **Show invitation QR**. The invitation carries the selected device's server endpoint and role. TuxDrive 0.19.0 runs a distinct listener and one-key authorization file for every enabled device: read-only/receive-only is enforced by the server, send-only is rooted in a private inbox, and read/write sees the selected workspace. A generic SFTP client therefore cannot use a role-limited key to obtain broader workspace access.
 
 ### One-time encrypted file drop
 
-Select a saved/running share, enter the sender's device name and public identity key, choose an expiry from 1–168 hours, then select **Create one-time file drop**. TuxDrive creates a random hidden inbox, restarts authorization, and copies an upload-only invitation. The sender loads the invitation, chooses a local folder, and sends it over the same encrypted, host-key-pinned SFTP transport.
+Select a saved/running share, enter the sender's device name and public identity key, choose an expiry from 1–168 hours, then select **Create one-time file drop**. TuxDrive creates a random hidden inbox with its own port and one-key server endpoint, then copies the invitation. The sender loads it, chooses a local folder, and sends over encrypted, host-key-pinned SFTP.
 
-The invitation exposes only its inbox path, expires at the encoded UTC time, and is retired locally after a successful send. The host detects the first received file and permanently records a consumed marker so the temporary key is omitted after restart. Ordinary synchronization excludes `.tuxdrive-drops`, preventing inbox data from appearing in other peer jobs. A connection already authenticated when the first file arrives may finish its current transfer; one-time means one upload session, not a one-packet limit.
+The server root itself is the drop inbox, so even a modified client cannot browse the parent workspace. The invitation expires at the encoded UTC time and is retired after a successful send. The host records a consumed marker and restarts endpoints without the temporary key. Ordinary synchronization excludes `.tuxdrive-drops`. A connection already authenticated when the first file arrives may finish its current transfer; strict per-drop file/byte quotas are scheduled hardening.
 
 ### Peer and synchronization audit timeline
 
@@ -227,7 +229,7 @@ The chart button in the title bar opens **Sync health and audit**. Its audit pag
 - The connecting public key authenticates the guest; the invitation's pinned host public key authenticates the server. If either key changes unexpectedly, stop and verify with the other user instead of bypassing validation.
 - LAN discovery is convenience, not trust. Always compare the complete fingerprint.
 - Revocation prevents future authentication after the share restarts; it cannot retract copies already downloaded by that device.
-- Directional roles are enforced by TuxDrive jobs. The current shared rclone SFTP endpoint is not yet a hostile-client sandbox for mixed-role peers: a person deliberately using a generic SFTP client may not be constrained by the role label until per-key server-side roots and authorization are implemented. Grant keys only to trusted collaborators. One-time drops restart authorization after consumption, but are not yet separately chrooted per key.
+- Directional roles are enforced by both TuxDrive jobs and per-key SFTP endpoints. This prevents broader access than the assigned root/mode, but it does not make files intentionally shared with a collaborator safe from that collaborator. Revoke lost or untrusted device keys immediately.
 - Protocol-v5 invitations explicitly list allowed transports. **Tor only**, **No relay**, and **No public IP discovery** fail closed; TuxDrive pauses and logs a policy event instead of silently falling back to clearnet.
 - This is direct encrypted transport, not anonymous communication. Endpoint IP addresses are visible to each peer and to intervening network operators.
 - Keep backups of important collaborative data: two-way synchronization intentionally propagates allowed changes and deletions.
@@ -510,7 +512,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.18.1_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.19.0_all.deb`.
 
 ## 13. Data safety
 
@@ -520,10 +522,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.18.1_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.16.0
+### Security upgrade checklist for 0.19.0
 
-1. Install `tuxdrive_0.18.1_all.deb` and restart TuxDrive and Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.18.1 and no signature or expiry error.
+1. Install `tuxdrive_0.19.0_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.19.0 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

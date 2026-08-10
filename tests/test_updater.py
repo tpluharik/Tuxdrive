@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tuxdrive.updater import UpdateManager, version_key
+from tuxdrive.update_helper import PrivilegedUpdateError, stage_verified_package
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -102,6 +103,32 @@ class UpdateManagerTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     manager.download(release)
             self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_privileged_helper_reverifies_root_owned_copy(self):
+        body = b"signed package"
+        release = UpdateManager.parse_manifest(self.release_payload(version="0.5.1", body=body), self.public)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "tuxdrive_0.5.1_all.deb"
+            source.write_bytes(body)
+            staged = stage_verified_package(source, root / "staged.deb", release)
+            self.assertEqual(staged.read_bytes(), body)
+
+    def test_privileged_helper_rejects_symlink_and_wrong_digest(self):
+        body = b"signed package"
+        release = UpdateManager.parse_manifest(self.release_payload(version="0.5.1", body=body), self.public)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            real = root / "real.deb"
+            real.write_bytes(body)
+            link = root / "tuxdrive_0.5.1_all.deb"
+            link.symlink_to(real)
+            with self.assertRaises(PrivilegedUpdateError):
+                stage_verified_package(link, root / "stage-one.deb", release)
+            link.unlink()
+            link.write_bytes(b"replaced after desktop verification")
+            with self.assertRaisesRegex(PrivilegedUpdateError, "digest"):
+                stage_verified_package(link, root / "stage-two.deb", release)
 
 
 if __name__ == "__main__":

@@ -19,7 +19,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.18.1 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It provides searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization. Arabic and Hebrew text renders right-to-left while the established interface layout remains unchanged.
+Version 0.19.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It closes the critical updater race, enforces peer roles through isolated per-device server endpoints, isolates one-time drops, and bounds collaborative ODF/CRDT inputs. Searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization remain included.
 
 ### 0.16.0 security baseline
 
@@ -27,16 +27,17 @@ Version 0.18.1 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and ar
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls were introduced in 0.15.1 and remain enforced in 0.18.1:
+The following controls are enforced in 0.19.0:
 
-- Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
+- Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
 - Incremental download, recovery, integrity repair, offline hydration, and block-delta paths reject symlinked parents/targets outside their configured root.
 - Block-delta instructions are signed with the sender's Ed25519 peer identity and accepted only from an authorized device; unavailable delta signing safely falls back to a complete file transfer.
 - Encrypted profile backups use a stronger scrypt work factor and 14-character minimum for new backups while retaining read compatibility with version-1 profiles.
 - OAuth/configuration subprocesses disable same-user process inspection on Linux; logs/configuration files use explicit private permissions; the launcher runs Python in isolated mode.
 - Provider tokens/passwords are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to the application JSON. Independently encrypted advanced-user rclone configurations are preserved.
-- The remaining documented limitation is mixed-role generic SFTP enforcement: TuxDrive enforces directional roles, but hostile non-TuxDrive clients require the planned per-device server authorization layer.
+- Each authorized peer key receives an isolated listener and authorization file. Read-only/receive-only restrictions are applied by the server, while send-only and one-time-drop devices are rooted in private inboxes rather than the shared workspace.
+- Collaborative operation logs and ODT/ODS imports have explicit count, byte, compression-ratio and schema limits; unsafe XML entities are rejected before document processing.
 
 ### 0.15.0 private Onion workspaces
 
@@ -82,9 +83,9 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
 - block-level peer delta transactions signed by the sender identity, with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and safe full-file fallback
 - automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
-- multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and one authenticated endpoint per folder
-- per-device read/write, read-only, send-only and receive-only peer roles carried by protocol-v4 invitations and enforced by TuxDrive transfer direction
-- expiring, inbox-scoped, upload-only encrypted file-drop invitations that retire after the first received file
+- multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and an isolated authenticated server endpoint per device
+- per-device read/write, read-only, send-only and receive-only roles enforced at both transfer and SFTP server boundaries; send-only devices see only their dedicated inbox
+- expiring, dedicated-root encrypted file-drop invitations that cannot browse the containing workspace and retire after the first received file
 - a private append-only peer and synchronization audit timeline with job, result, peer, path, and bounded diagnostic detail
 - an operations dashboard showing sync/mount/callback health, recent failures, peer access mode, audit events, and provider capabilities
 - a provider capability matrix for streaming, polling, hashes, server moves, share links and versions; unsupported modes/actions are disabled with an explanation
@@ -128,7 +129,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - account, folder, and tray icons with connected, synchronizing, paused, and error states
 - original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
 - provider-specific icons for all eight services in account selection and connected-account views
-- in-app repository update checks with an Ed25519-signed expiring manifest, HTTPS download, SHA-256 verification, Debian identity check, and PolicyKit-authorized installation
+- in-app repository update checks with an Ed25519-signed expiring manifest, HTTPS download, SHA-256 verification, Debian identity check, and an independently verifying root-side PolicyKit helper
 - update window with visible checking, download percentage, verification, installation, success, and failure states
 - one-click display-name editing that does not rename local or cloud folders
 - streaming preflight diagnostics, stale FUSE mount recovery, detailed mount logs, and a 45-second connection window
@@ -139,7 +140,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.18.1_all.deb
+sudo apt install ./tuxdrive_0.19.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -157,7 +158,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.18.1_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.19.0_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -171,7 +172,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 117 automated tests, including six-language help parity, RTL directionality and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 125 automated tests, including updater race-boundary, per-device peer isolation, hostile ODF/CRDT input, six-language help parity, RTL directionality and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -179,7 +180,9 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 ## Update from the app
 
-Open **Settings → Check for updates**. TuxDrive verifies the manifest's Ed25519 signature and expiry, compares versions, downloads the listed `.deb` over HTTPS, verifies its SHA-256 digest and Debian package identity, and only then asks Ubuntu PolicyKit for authorization. No cloud credentials are involved. Restart TuxDrive after a successful update.
+Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
+
+**0.18.1 → 0.19.0 trust-root transition:** install 0.19.0 once with `sudo apt install ./tuxdrive_0.19.0_all.deb`. The prior private release key was unavailable for signing the bridge manifest, so 0.18.1 cannot authenticate the rotated key. Do not bypass its signature error. From 0.19.0 onward the app trusts the rotated offline key and the normal in-app process applies.
 
 ## Crash and startup diagnostics
 

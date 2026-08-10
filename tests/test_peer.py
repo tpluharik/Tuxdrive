@@ -82,6 +82,22 @@ class PeerSharingTests(unittest.TestCase):
         with self.assertRaises(PeerError):
             invitation.assert_usable()
 
+    def test_one_time_drop_invitation_uses_dedicated_server_root(self):
+        from tuxdrive.models import OneTimeDrop
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare("Drop host", str(folder), "192.0.2.10", 22022, authorized_peers=[AuthorizedPeer("Owner peer", KEY)], id="drop-host")
+            drop = OneTimeDrop("Sender", KEY, ".tuxdrive-drops/drop-id", "2999-01-01T00:00:00+00:00")
+            share.one_time_drops.append(drop)
+            host = root / "hosts" / share.id
+            host.parent.mkdir(parents=True)
+            host.write_text("private", encoding="utf-8")
+            host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            invitation = PeerInvitation.decode(PeerManager(root=root).one_time_invitation(share, drop))
+            self.assertEqual(invitation.remote_path, "")
+            self.assertNotEqual(invitation.port, share.authorized_peers[0].server_port)
+
     def test_invitation_preserves_optional_no_storage_relay(self):
         encoded = PeerInvitation(
             "Project", "198.51.100.20", 22022, KEY,
@@ -170,7 +186,7 @@ class PeerSharingTests(unittest.TestCase):
             self.assertEqual(command[:4], ["/usr/bin/rclone", "serve", "sftp", f":local:{folder}"])
             self.assertIn("--authorized-keys", command)
             self.assertEqual(command[command.index("--key") + 1], str(host))
-            authorized = root / "authorized" / "share1.keys"
+            authorized = root / "authorized" / "share1-0.keys"
             self.assertEqual(authorized.read_text(encoding="utf-8").strip(), KEY)
 
     def test_server_authorizes_multiple_named_devices(self):
@@ -190,8 +206,39 @@ class PeerSharingTests(unittest.TestCase):
                 manager = PeerManager(root=root)
                 manager.start(share)
                 manager._servers.clear()
-            lines = (root / "authorized" / "multi.keys").read_text(encoding="utf-8").splitlines()
-            self.assertEqual(lines, [KEY, second])
+            key_files = sorted((root / "authorized").glob("multi-*.keys"))
+            self.assertEqual(len(key_files), 2)
+            self.assertEqual({path.read_text(encoding="utf-8").strip() for path in key_files}, {KEY, second})
+
+    def test_server_enforces_per_device_roles_and_roots(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            second = "ssh-ed25519 QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo="
+            share = PeerShare(
+                "Team", str(folder), "192.0.2.10", 22022,
+                authorized_peers=[
+                    AuthorizedPeer("Reader", KEY, role=PeerRole.READ_ONLY),
+                    AuthorizedPeer("Sender", second, role=PeerRole.SEND_ONLY),
+                ], id="roles",
+            )
+            host = root / "hosts" / share.id
+            host.parent.mkdir(parents=True)
+            host.write_text("private", encoding="utf-8")
+            host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            processes = [MagicMock(), MagicMock()]
+            for process in processes:
+                process.poll.return_value = None
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxdrive.peer.subprocess.Popen", side_effect=processes) as popen:
+                manager = PeerManager(root=root)
+                manager.start(share)
+                manager._servers.clear()
+            commands = [call.args[0] for call in popen.call_args_list]
+            self.assertIn("--read-only", commands[0])
+            self.assertNotIn("--read-only", commands[1])
+            self.assertEqual(commands[0][3], f":local:{folder}")
+            self.assertIn(".tuxdrive-peer-inboxes", commands[1][3])
+            self.assertNotEqual(commands[0][commands[0].index("--addr") + 1], commands[1][commands[1].index("--addr") + 1])
 
     def test_foreign_unexpired_lease_blocks_acquisition(self):
         with tempfile.TemporaryDirectory() as temporary:

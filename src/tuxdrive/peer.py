@@ -22,7 +22,7 @@ from uuid import uuid4
 from .bootstrap import install_rclone, resolve_rclone
 from .config import cache_home, config_home
 from .audit import AuditTimeline
-from .models import OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
+from .models import AuthorizedPeer, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from .tor import ONION_V3, TorError, TorServiceManager, enforce_transport_policy
 from .security import confined_path, confined_parent, ensure_private_directory, prepare_private_file, verify_signed_json
 
@@ -34,6 +34,10 @@ class PeerError(RuntimeError):
 PUBLIC_KEY = re.compile(
     r"^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(?:256|384|521)) [A-Za-z0-9+/]+={0,3}(?: .*)?$"
 )
+
+
+def _endpoint_label(public_key: str) -> str:
+    return hashlib.sha256(normalize_public_key(public_key).encode("utf-8")).hexdigest()[:24]
 
 
 @dataclass(slots=True)
@@ -357,7 +361,7 @@ class PeerManager:
         self._shares: dict[str, PeerShare] = {}
         self._logs: dict[str, object] = {}
         self._tunnels: dict[str, subprocess.Popen[str]] = {}
-        self._nat_ports: dict[str, int] = {}
+        self._nat_ports: dict[str, list[int]] = {}
         self._lock = threading.RLock()
         self.audit = audit or AuditTimeline()
         self.discovery = LanDiscovery(self._discovery_invitations)
@@ -367,9 +371,39 @@ class PeerManager:
     def running_shares(self) -> set[str]:
         with self._lock:
             return {
-                share_id for share_id, process in self._servers.items()
+                share_id.split(":", 1)[0] for share_id, process in self._servers.items()
                 if process.poll() is None
             }
+
+    @staticmethod
+    def _assign_endpoint_ports(share: PeerShare) -> None:
+        used: set[int] = set()
+        next_port = validate_port(int(share.port))
+        endpoints = [item for item in share.authorized_peers if item.enabled]
+        drops = [item for item in share.one_time_drops if item.active]
+        for item in [*endpoints, *drops]:
+            port = int(item.server_port or 0)
+            if port < 1024 or port > 65535 or port in used:
+                while next_port in used:
+                    next_port += 1
+                port = validate_port(next_port)
+                item.server_port = port
+            used.add(port)
+            next_port = max(next_port, port + 1)
+
+    @staticmethod
+    def _peer_for_invitation(share: PeerShare, peer_name: str) -> AuthorizedPeer:
+        peers = [item for item in share.authorized_peers if item.enabled]
+        peer = next((item for item in peers if item.name == peer_name), None)
+        if peer is None and len(peers) == 1:
+            peer = peers[0]
+        if peer is None:
+            raise PeerError("Select the authorized device that will receive this invitation")
+        return peer
+
+    @staticmethod
+    def _relay_port(share: PeerShare, endpoint_port: int) -> int:
+        return validate_port(int(share.relay_public_port) + int(endpoint_port) - int(share.port))
 
     def ensure_identity(self) -> tuple[Path, Path]:
         return self._ensure_keypair(self.root / "identity_ed25519")
@@ -383,30 +417,29 @@ class PeerManager:
         return normalize_public_key(public.read_text(encoding="utf-8"))
 
     def invitation(self, share: PeerShare, role: PeerRole = PeerRole.READ_WRITE, peer_name: str = "") -> str:
+        self._assign_endpoint_ports(share)
+        selected_peer = self._peer_for_invitation(share, peer_name)
+        if selected_peer.role is not role:
+            raise PeerError("The invitation role must match the selected device's server-enforced role")
+        endpoint_port = selected_peer.server_port
         transport = "tor" if share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.onion_enabled else "direct"
         enforce_transport_policy(share, transport)
         client_auth = ""
         if transport == "tor" and share.onion_client_auth:
-            peer = next((item for item in share.authorized_peers if item.name == peer_name and item.enabled), None)
-            if peer is None:
-                raise PeerError("Choose the authorized device that will receive this Onion invitation")
-            credential = self.tor.issue_client_credential(share, peer)
+            credential = self.tor.issue_client_credential(share, selected_peer)
             client_auth = credential.private_key
-        permit_relay = bool(
-            transport == "direct" and not share.no_relay
-            and share.transport_policy is PeerTransportPolicy.AUTO
-            and share.relay_host and share.relay_public_port
-        )
+        permit_relay = bool(transport == "direct" and not share.no_relay and share.transport_policy is PeerTransportPolicy.AUTO and share.relay_host and share.relay_public_port)
+        relay_port = self._relay_port(share, endpoint_port) if permit_relay else 0
         allowed_transports = ("tor",) if transport == "tor" else (("direct", "relay") if permit_relay else ("direct",))
         return PeerInvitation(
             share.name,
             share.onion_address if transport == "tor" else validate_host(share.advertised_host),
-            validate_port(int(share.port)),
+            validate_port(endpoint_port),
             self.host_public_key(share),
             share.id,
             share.lease_minutes,
             share.relay_host if permit_relay else "",
-            share.relay_public_port if permit_relay else 0,
+            relay_port,
             role,
             transport=transport,
             onion_address=share.onion_address,
@@ -419,12 +452,14 @@ class PeerManager:
             raise PeerError("This one-time drop has expired or was already consumed")
         transport = "tor" if share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.onion_enabled else "direct"
         enforce_transport_policy(share, transport)
+        self._assign_endpoint_ports(share)
         permit_relay = bool(transport == "direct" and not share.no_relay and share.transport_policy is PeerTransportPolicy.AUTO and share.relay_host and share.relay_public_port)
+        relay_port = self._relay_port(share, drop.server_port) if permit_relay else 0
         return PeerInvitation(
-            drop.name, share.onion_address if transport == "tor" else validate_host(share.advertised_host), validate_port(share.port),
+            drop.name, share.onion_address if transport == "tor" else validate_host(share.advertised_host), validate_port(drop.server_port),
             self.host_public_key(share), share.id, share.lease_minutes,
-            share.relay_host if permit_relay else "", share.relay_public_port if permit_relay else 0, PeerRole.SEND_ONLY,
-            drop.inbox_path, drop.id, drop.expires_at,
+            share.relay_host if permit_relay else "", relay_port, PeerRole.SEND_ONLY,
+            "", drop.id, drop.expires_at,
             transport=transport, onion_address=share.onion_address,
             allowed_transports=("tor",) if transport == "tor" else (("direct", "relay") if permit_relay else ("direct",)),
         ).encode()
@@ -436,73 +471,73 @@ class PeerManager:
         port = validate_port(int(share.port))
         consumed = self.root / "drop-consumed"
         active_peers = [item for item in share.authorized_peers if item.enabled]
-        allowed_keys = [item.public_key for item in active_peers]
-        if share.allowed_peer_key:
-            allowed_keys.append(share.allowed_peer_key)
-        allowed_keys.extend(
-            item.public_key for item in share.one_time_drops
-            if item.active and not (consumed / item.id).exists()
-        )
-        allowed_keys = list(dict.fromkeys(normalize_public_key(value) for value in allowed_keys))
-        if not allowed_keys:
+        if share.allowed_peer_key and not active_peers:
+            active_peers = [AuthorizedPeer("Legacy peer", share.allowed_peer_key)]
+        active_drops = [item for item in share.one_time_drops if item.active and not (consumed / item.id).exists()]
+        if not active_peers and not active_drops:
             raise PeerError("Authorize at least one peer device before starting the share")
+        self._assign_endpoint_ports(share)
         if not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
             validate_host(share.advertised_host)
         if share.transport_policy is PeerTransportPolicy.TOR_ONLY and not share.onion_enabled:
             self._policy_violation(share, "Tor-only policy requires an enabled Onion Service")
         rclone = self._rclone()
         host_private, _host_public = self._ensure_keypair(self.root / "hosts" / share.id)
-        authorized = self.root / "authorized" / f"{share.id}.keys"
-        authorized.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        authorized.write_text("\n".join(allowed_keys) + "\n", encoding="utf-8")
-        os.chmod(authorized, 0o600)
-        log_path = cache_home() / "tuxdrive" / "logs" / f"peer-{share.id}.log"
-        ensure_private_directory(log_path.parent)
-        with self._lock:
-            current = self._servers.get(share.id)
-            if current and current.poll() is None:
-                return
-            prepare_private_file(log_path)
-            log = log_path.open("a", encoding="utf-8")
-            try:
-                read_only = bool(active_peers) and all(
-                    item.role in {PeerRole.READ_ONLY, PeerRole.RECEIVE_ONLY}
-                    for item in active_peers
-                ) and not any(item.active for item in share.one_time_drops)
+        endpoints: list[tuple[str, int, str, Path, bool, OneTimeDrop | None]] = []
+        for index, peer in enumerate(active_peers):
+            endpoint_root = folder
+            read_only = peer.role in {PeerRole.READ_ONLY, PeerRole.RECEIVE_ONLY}
+            if peer.role is PeerRole.SEND_ONLY:
+                endpoint_root = confined_path(folder, Path(".tuxdrive-peer-inboxes") / _endpoint_label(peer.public_key), create_parents=True)
+                endpoint_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            endpoints.append((f"{share.id}:{index}", validate_port(peer.server_port or port + index), peer.public_key, endpoint_root, read_only, None))
+        for index, drop in enumerate(active_drops):
+            endpoint_root = confined_path(folder, drop.inbox_path, create_parents=True)
+            endpoint_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+            endpoints.append((f"{share.id}:drop-{drop.id}", validate_port(drop.server_port), drop.public_key, endpoint_root, False, drop))
+        if any(endpoint_id == share.id for endpoint_id, *_rest in endpoints):
+            raise PeerError("Invalid peer endpoint identifier")
+        started: list[tuple[str, subprocess.Popen[str], OneTimeDrop | None]] = []
+        try:
+            for endpoint_id, endpoint_port, public_key, endpoint_root, read_only, drop in endpoints:
+                authorized = self.root / "authorized" / f"{endpoint_id.replace(':', '-')}.keys"
+                authorized.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                authorized.write_text(normalize_public_key(public_key) + "\n", encoding="utf-8")
+                os.chmod(authorized, 0o600)
+                log_path = cache_home() / "tuxdrive" / "logs" / f"peer-{endpoint_id.replace(':', '-')}.log"
+                ensure_private_directory(log_path.parent)
+                prepare_private_file(log_path)
+                log = log_path.open("a", encoding="utf-8")
                 command = [
-                    rclone, "serve", "sftp", f":local:{folder}",
-                    "--addr", f"127.0.0.1:{port}" if (
-                        share.transport_policy is PeerTransportPolicy.TOR_ONLY
-                        or share.no_public_ip_discovery
-                    ) else f":{port}",
-                    "--authorized-keys", str(authorized),
-                    "--key", str(host_private),
-                    "--dir-cache-time", "10s",
-                    "--log-level", "INFO",
-                    "--stats", "10s",
-                    "--stats-one-line",
+                    rclone, "serve", "sftp", f":local:{endpoint_root}",
+                    "--addr", f"127.0.0.1:{endpoint_port}" if (share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.no_public_ip_discovery) else f":{endpoint_port}",
+                    "--authorized-keys", str(authorized), "--key", str(host_private),
+                    "--dir-cache-time", "10s", "--log-level", "INFO", "--stats", "10s", "--stats-one-line",
                 ]
                 if read_only:
                     command.append("--read-only")
-                process = subprocess.Popen(
-                    command,
-                    stdout=log,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                    start_new_session=True,
-                )
-            except Exception:
-                log.close()
-                raise
-            self._servers[share.id] = process
-            self._shares[share.id] = share
-            self._logs[share.id] = log
-        threading.Thread(target=self._watch, args=(share.id, process), daemon=True).start()
-        threading.Thread(target=self._delta_watch, args=(share, process), daemon=True, name=f"peer-delta-{share.id[:8]}").start()
-        threading.Thread(target=self._drop_watch, args=(share, process), daemon=True, name=f"peer-drop-{share.id[:8]}").start()
+                try:
+                    process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+                except Exception:
+                    log.close()
+                    raise
+                with self._lock:
+                    self._servers[endpoint_id] = process
+                    self._shares[endpoint_id] = share
+                    self._logs[endpoint_id] = log
+                started.append((endpoint_id, process, drop))
+                threading.Thread(target=self._watch, args=(endpoint_id, process), daemon=True).start()
+        except Exception:
+            self.stop(share.id)
+            raise
+        primary_process = started[0][1]
+        threading.Thread(target=self._delta_watch, args=(share, primary_process), daemon=True, name=f"peer-delta-{share.id[:8]}").start()
+        for endpoint_id, process, drop in started:
+            if drop:
+                threading.Thread(target=self._drop_watch, args=(share, process), daemon=True, name=f"peer-drop-{drop.id[:8]}").start()
         if share.onion_enabled:
             try:
-                address = self.tor.start(share, port)
+                address = self.tor.start(share, [item[1] for item in endpoints])
                 self.audit.record("policy", "Onion Service published", "success", peer=share.name, detail=address)
             except Exception as exc:
                 if share.transport_policy is PeerTransportPolicy.TOR_ONLY:
@@ -510,11 +545,10 @@ class PeerManager:
                 self.audit.record("policy", "Onion Service unavailable", "blocked", peer=share.name, detail=str(exc))
                 raise
         if share.nat_traversal and not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
-            if self._open_nat_mapping(port):
-                self._nat_ports[share.id] = port
+            self._nat_ports[share.id] = [item[1] for item in endpoints if self._open_nat_mapping(item[1])]
         if share.relay_host and share.relay_user and share.relay_public_port and not share.no_relay:
             try:
-                self._start_relay(share)
+                self._start_relay(share, [item[1] for item in endpoints])
             except Exception:
                 # Never leave a share looking healthy when its explicitly
                 # configured relay could not be established.
@@ -523,8 +557,8 @@ class PeerManager:
 
     def stop(self, share_id: str) -> bool:
         self.tor.stop(share_id)
-        mapped_port = self._nat_ports.pop(share_id, None)
-        if mapped_port:
+        mapped_ports = self._nat_ports.pop(share_id, [])
+        for mapped_port in mapped_ports:
             self._close_nat_mapping(mapped_port)
         tunnel = self._tunnels.pop(share_id, None)
         if tunnel and tunnel.poll() is None:
@@ -533,20 +567,21 @@ class PeerManager:
             except ProcessLookupError:
                 pass
         with self._lock:
-            process = self._servers.get(share_id)
-        if not process or process.poll() is not None:
-            self._close_log(share_id)
-            return False
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        try:
-            process.wait(timeout=8)
-        except subprocess.TimeoutExpired:
-            os.killpg(process.pid, signal.SIGKILL)
-        self._close_log(share_id)
-        return True
+            endpoints = [(key, process) for key, process in self._servers.items() if key == share_id or key.startswith(f"{share_id}:")]
+        stopped = False
+        for endpoint_id, process in endpoints:
+            if process.poll() is None:
+                stopped = True
+                try:
+                    os.killpg(process.pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=8)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL)
+            self._close_log(endpoint_id)
+        return stopped
 
     @staticmethod
     def _open_nat_mapping(port: int) -> bool:
@@ -576,7 +611,7 @@ class PeerManager:
         if natpmp:
             subprocess.run([natpmp, "-a", str(port), str(port), "tcp", "0"], capture_output=True, text=True, timeout=20, check=False)
 
-    def _start_relay(self, share: PeerShare) -> None:
+    def _start_relay(self, share: PeerShare, endpoint_ports: list[int]) -> None:
         ssh = shutil.which("ssh")
         if not ssh:
             raise PeerError("OpenSSH is required for the encrypted no-storage relay")
@@ -587,9 +622,10 @@ class PeerManager:
             "-o", "ConnectTimeout=15",
             "-o", "ServerAliveInterval=30", "-o", "ServerAliveCountMax=3",
             "-p", str(validate_port(share.relay_ssh_port)), "-i", str(identity),
-            "-R", f"{validate_port(share.relay_public_port)}:127.0.0.1:{validate_port(share.port)}",
-            f"{share.relay_user}@{validate_host(share.relay_host)}",
         ]
+        for endpoint_port in endpoint_ports:
+            command.extend(("-R", f"{self._relay_port(share, endpoint_port)}:127.0.0.1:{validate_port(endpoint_port)}"))
+        command.append(f"{share.relay_user}@{validate_host(share.relay_host)}")
         process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         self._tunnels[share.id] = process
         try:
@@ -613,13 +649,14 @@ class PeerManager:
 
     def _discovery_invitations(self) -> list[PeerInvitation]:
         with self._lock:
-            shares = [share for share_id, share in self._shares.items() if share_id in self.running_shares and share.lan_discovery]
+            shares = list({share.id: share for share in self._shares.values() if share.id in self.running_shares and share.lan_discovery}.values())
         invitations = []
         for share in shares:
-            try:
-                invitations.append(PeerInvitation.decode(self.invitation(share)))
-            except PeerError:
-                continue
+            for peer in (item for item in share.authorized_peers if item.enabled):
+                try:
+                    invitations.append(PeerInvitation.decode(self.invitation(share, peer.role, peer.name)))
+                except PeerError:
+                    continue
         return invitations
 
     def configure_connection(

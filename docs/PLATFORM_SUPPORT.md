@@ -1,10 +1,10 @@
 # Platform support and adaptive installation
 
-TuxDrive 0.18.1 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxDrive does not publish a macOS package.
+TuxDrive 0.19.0 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxDrive does not publish a macOS package.
 
 ## Compatibility matrix
 
-The supported design baseline is Ubuntu 24.04/26.04 and Debian 12/13 on amd64 or arm64. Automated clean-package core installation covers Ubuntu 24.04 and Debian 12/13; Ubuntu 26.04 remains the primary GNOME desktop target and requires the release VM gate described below. Ubuntu derivatives can run the core application when they provide Python 3.10+, PyGObject/GTK 3, Python cryptography, Secret Service and XDG utilities. Only amd64 and arm64 can use TuxDrive's verified rclone bootstrap; other architectures are reported as unsupported before a cloud job starts.
+The supported design baseline is Ubuntu 24.04/26.04 and Debian 12/13 on amd64 or arm64. Automated clean-package core installation covers Ubuntu 24.04 and Debian 12/13; Ubuntu 26.04 remains the primary GNOME desktop target and requires the release VM gate described below. Ubuntu derivatives can run the core application when they provide Python 3.10+, PyGObject/GTK 3, Python cryptography, `defusedxml`, Secret Service and XDG utilities. Only amd64 and arm64 can use TuxDrive's verified rclone bootstrap; other architectures are reported as unsupported before a cloud job starts.
 
 | Distribution / desktop | Core cloud sync | Streaming | File-manager status/actions | Support level and limitations |
 | --- | --- | --- | --- | --- |
@@ -40,7 +40,7 @@ The session check reports the distribution, CPU, desktop/session and availabilit
 
 ## Package model
 
-- Required: Python 3.10+, PyGObject, GTK 3, Python cryptography, Secret Service tools, XDG utilities and CA certificates.
+- Required: Python 3.10+, PyGObject, GTK 3, Python cryptography, `defusedxml`, Secret Service tools, XDG utilities and CA certificates. `defusedxml` is mandatory for hostile-input-safe collaborative ODT/ODS parsing.
 - Recommended: Nautilus integration, AppIndicator, FUSE streaming, peer SSH, Tor transports, NAT traversal, NetworkManager policies, QR tools, notifications and PolicyKit updates.
 - Suggested: Snowflake transport.
 
