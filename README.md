@@ -19,7 +19,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.15.1 targets Ubuntu 26.04. It is a security-hardening release: update metadata is Ed25519-signed, Tor-only services bind only to loopback, peer delta transactions are signed, local writes reject symlink escapes, update/download sizes are bounded, rclone 1.75.0 or newer is required, and private runtime files receive explicit permissions.
+Version 0.15.2 targets Ubuntu 26.04. It retains the 0.15.1 security hardening and responds to newly disclosed `cryptography` advisories by requiring upstream version 50.0.0 or newer for Python-package installations; Debian installations continue to consume Ubuntu's security-maintained package and backports.
 
 ### 0.15.1 security hardening
 
@@ -133,7 +133,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.15.1_all.deb
+sudo apt install ./tuxdrive_0.15.2_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -151,7 +151,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.15.1_all.deb`.
+The installer is written to `dist/tuxdrive_0.15.2_all.deb`.
 
 The current suite contains more than 100 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
 

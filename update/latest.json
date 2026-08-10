@@ -1,8 +1,8 @@
 {
-  "version": "0.15.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.1_all.deb",
-  "sha256": "e0247890c5e4933e261a412eb95ea5396dff6c67311bbfc382d0bf445b0da02d",
-  "notes": "Security hardening: signed updates, encrypted credentials, confined paths, hardened Tor and delta transfers",
-  "expires_at": "2026-11-08T16:16:44.784766+00:00",
-  "signature": "E4bJNkalRJhfc6MrLM/4XllD3vnyAo9CZK14u+y6eSe76Z9nmEvfuqH2U4GKlmJXmXpWKkDaxkPmTlLsDUxGAA=="
+  "version": "0.15.2",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.15.2_all.deb",
+  "sha256": "5b0bc5084ec07a08203fbd68ac2a97d99bab312a57ce02b4f6ecebb6818c6211",
+  "notes": "Dependency advisory response: cryptography 50 security floor and CI repair",
+  "expires_at": "2026-11-08T16:26:24.469993+00:00",
+  "signature": "iuLUU1IrAsxO0/JLYhpoNE3DnVgOjjk2Jo0e3mWcY3KucWfKn1hi4d+KzKfEya9/1OAZfGJLmd+2t7CYqxdHBA=="
 }

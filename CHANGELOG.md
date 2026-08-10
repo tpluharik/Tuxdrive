@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.15.2 — dependency advisory response and CI repair
+
+- Raised Python-package installations to `cryptography` 50.0.0 or newer after the 0.15.1 dependency audit identified PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf in the previously allowed 46.x series.
+- Kept Ubuntu `.deb` installations on the distribution-maintained `python3-cryptography` package so Ubuntu security backports remain installable without an impossible upstream-version constraint.
+- Updated release packaging, SBOM paths, installer metadata, documentation, and the signed update channel to 0.15.2.
+
 ## 0.15.1 — comprehensive security hardening
 
 - Added Ed25519-signed, expiring update manifests, bounded downloads, Debian package identity checks, and an external release-signing trust root.

@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.15.1 suite contains **100 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
+The TuxDrive 0.15.2 suite contains **100 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -74,16 +74,16 @@ The TuxDrive 0.15.1 suite contains **100 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.15.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.15.1_all.deb
-sha256sum dist/tuxdrive_0.15.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.15.2_all.deb
+dpkg-deb --contents dist/tuxdrive_0.15.2_all.deb
+sha256sum dist/tuxdrive_0.15.2_all.deb
 ```
 
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.15.1 \
-  --package dist/tuxdrive_0.15.1_all.deb \
+python3 scripts/sign-update.py --version 0.15.2 \
+  --package dist/tuxdrive_0.15.2_all.deb \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
 

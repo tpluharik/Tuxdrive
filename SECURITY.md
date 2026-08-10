@@ -2,11 +2,11 @@
 
 ## Supported release
 
-TuxDrive 0.15.1 is the supported security baseline. Older packages retained for historical reference must not be installed on production systems.
+TuxDrive 0.15.2 is the supported security baseline. Older packages retained for historical reference must not be installed on production systems.
 
 Report suspected vulnerabilities privately through GitHub's **Security → Report a vulnerability** workflow. Do not place credentials, peer invitations, Onion authorization material, private keys, or personal filenames in a public issue.
 
-## Security boundaries in 0.15.1
+## Security boundaries in 0.15.2
 
 - Update metadata is signed by the offline Ed25519 release key, expires, and binds the version, URL, package digest and release notes. The updater additionally checks the Debian package name/version before PolicyKit installation.
 - Provider credentials are held in rclone's encrypted configuration. A random configuration password is stored in GNOME Secret Service. Independently encrypted rclone configurations are not overwritten.
