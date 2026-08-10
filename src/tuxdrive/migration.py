@@ -1,0 +1,181 @@
+from __future__ import annotations
+
+import base64
+import json
+import os
+import shutil
+import socket
+import tempfile
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
+
+from . import __version__
+from .config import ConfigStore, config_home
+from .models import AppConfig
+from .rclone import RcloneClient
+
+
+PROFILE_PATH = ".tuxdrive-profile/tuxdrive-profile.tdx"
+FORMAT = "tuxdrive-encrypted-profile"
+
+
+class MigrationError(RuntimeError):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class ProfileSummary:
+    created_at: str
+    app_version: str
+    device_name: str
+    accounts: int
+    jobs: int
+    includes_credentials: bool
+
+
+def _derive(password: str, salt: bytes, n: int = 2**15) -> bytes:
+    if len(password) < 10:
+        raise MigrationError("Use a backup password of at least 10 characters")
+    return Scrypt(salt=salt, length=32, n=n, r=8, p=1).derive(password.encode("utf-8"))
+
+
+def encrypt_profile(payload: dict[str, Any], password: str) -> bytes:
+    salt, nonce = os.urandom(16), os.urandom(12)
+    header = {"format": FORMAT, "version": 1, "kdf": "scrypt", "n": 2**15, "r": 8, "p": 1}
+    aad = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
+    clear = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode()
+    envelope = dict(header)
+    envelope.update({
+        "salt": base64.b64encode(salt).decode(),
+        "nonce": base64.b64encode(nonce).decode(),
+        "ciphertext": base64.b64encode(AESGCM(_derive(password, salt)).encrypt(nonce, clear, aad)).decode(),
+    })
+    return (json.dumps(envelope, sort_keys=True) + "\n").encode()
+
+
+def decrypt_profile(data: bytes, password: str) -> dict[str, Any]:
+    try:
+        envelope = json.loads(data)
+        if envelope.get("format") != FORMAT or envelope.get("version") != 1:
+            raise MigrationError("This is not a supported TuxDrive profile backup")
+        header = {key: envelope[key] for key in ("format", "version", "kdf", "n", "r", "p")}
+        if header["kdf"] != "scrypt" or header["r"] != 8 or header["p"] != 1 or header["n"] != 2**15:
+            raise MigrationError("Unsupported profile key-derivation settings")
+        aad = json.dumps(header, sort_keys=True, separators=(",", ":")).encode()
+        salt = base64.b64decode(envelope["salt"], validate=True)
+        nonce = base64.b64decode(envelope["nonce"], validate=True)
+        cipher = base64.b64decode(envelope["ciphertext"], validate=True)
+        return json.loads(AESGCM(_derive(password, salt)).decrypt(nonce, cipher, aad))
+    except MigrationError:
+        raise
+    except (InvalidTag, ValueError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise MigrationError("The backup password is wrong or the encrypted profile was changed") from exc
+
+
+class ProfileManager:
+    def __init__(self, store: ConfigStore, rclone: RcloneClient, peer_root: Path | None = None) -> None:
+        self.store = store
+        self.rclone = rclone
+        self.peer_root = peer_root or config_home() / "tuxdrive" / "peer"
+
+    @staticmethod
+    def remote_spec(remote: str) -> str:
+        if not remote or any(character in remote for character in ":/\\"):
+            raise MigrationError("Choose a valid connected profile account")
+        return f"{remote}:{PROFILE_PATH}"
+
+    def _secrets(self) -> dict[str, Any]:
+        rclone_file = self.rclone.config_file()
+        peers: dict[str, str] = {}
+        if self.peer_root.is_dir():
+            for path in self.peer_root.rglob("*"):
+                if path.is_file():
+                    relative = path.relative_to(self.peer_root)
+                    peers[str(relative)] = base64.b64encode(path.read_bytes()).decode()
+        return {
+            "rclone_config": base64.b64encode(rclone_file.read_bytes()).decode(),
+            "peer_files": peers,
+        }
+
+    def create_bytes(self, config: AppConfig, password: str, include_credentials: bool = False) -> bytes:
+        payload: dict[str, Any] = {
+            "metadata": {
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "app_version": __version__,
+                "device_name": socket.gethostname(),
+                "includes_credentials": include_credentials,
+            },
+            "config": config.to_dict(),
+        }
+        if include_credentials:
+            payload["secrets"] = self._secrets()
+        return encrypt_profile(payload, password)
+
+    def upload(self, remote: str, config: AppConfig, password: str, include_credentials: bool = False) -> ProfileSummary:
+        data = self.create_bytes(config, password, include_credentials)
+        with tempfile.TemporaryDirectory(prefix="tuxdrive-profile-") as temporary:
+            source = Path(temporary) / "profile.tdx"
+            source.write_bytes(data)
+            os.chmod(source, 0o600)
+            self.rclone.copy_to(source, self.remote_spec(remote))
+        return self.summary(data, password)
+
+    def download(self, remote: str) -> bytes:
+        with tempfile.TemporaryDirectory(prefix="tuxdrive-profile-") as temporary:
+            destination = Path(temporary) / "profile.tdx"
+            self.rclone.copy_to(self.remote_spec(remote), destination)
+            return destination.read_bytes()
+
+    def available(self, remote: str) -> bool:
+        return self.rclone.object_exists(self.remote_spec(remote))
+
+    def summary(self, data: bytes, password: str) -> ProfileSummary:
+        payload = decrypt_profile(data, password)
+        metadata, config = payload.get("metadata", {}), payload.get("config", {})
+        AppConfig.from_dict(config)
+        return ProfileSummary(
+            created_at=str(metadata.get("created_at", "Unknown")),
+            app_version=str(metadata.get("app_version", "Unknown")),
+            device_name=str(metadata.get("device_name", "Unknown")),
+            accounts=len(config.get("accounts", [])),
+            jobs=len(config.get("jobs", [])),
+            includes_credentials=bool(metadata.get("includes_credentials", False)),
+        )
+
+    def restore(self, data: bytes, password: str, restore_credentials: bool = False) -> AppConfig:
+        payload = decrypt_profile(data, password)
+        restored = AppConfig.from_dict(payload.get("config", {}))
+        backup = self.store.path.with_suffix(".json.before-migration")
+        if self.store.path.exists():
+            backup.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            shutil.copy2(self.store.path, backup)
+            os.chmod(backup, 0o600)
+        if restore_credentials and payload.get("secrets"):
+            secrets = payload["secrets"]
+            try:
+                rclone_bytes = base64.b64decode(secrets["rclone_config"], validate=True)
+                peer_bytes: list[tuple[Path, bytes]] = []
+                root = self.peer_root.resolve()
+                for relative, encoded in secrets.get("peer_files", {}).items():
+                    target = (self.peer_root / relative).resolve()
+                    if target != root and root not in target.parents:
+                        raise MigrationError("The profile contains an unsafe peer-key path")
+                    peer_bytes.append((target, base64.b64decode(encoded, validate=True)))
+            except (KeyError, TypeError, ValueError) as exc:
+                raise MigrationError("The profile contains invalid credential data") from exc
+            rclone_file = self.rclone.config_file()
+            rclone_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+            rclone_file.write_bytes(rclone_bytes)
+            os.chmod(rclone_file, 0o600)
+            for target, decoded in peer_bytes:
+                target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+                target.write_bytes(decoded)
+                os.chmod(target, 0o600)
+        self.store.save(restored)
+        return restored

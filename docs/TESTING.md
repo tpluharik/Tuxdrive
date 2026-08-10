@@ -11,19 +11,22 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The TuxDrive 0.13.1 suite contains **83 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
+The TuxDrive 0.14.0 suite contains **89 automated tests**. Tests use temporary directories and mocked cloud processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
 | Test module | Tests | What it verifies |
 |---|---:|---|
+| `test_audit.py` | 2 | Private audit persistence, filtering and malformed historical-line handling. |
 | `test_bootstrap.py` | 4 | Transfer-engine selection, rejection of incompatible rclone versions, supported CPU architectures, and pinned release checksums. |
-| `test_config.py` | 2 | Round-trip persistence of accounts, jobs and peer shares; private `0600` permissions; invalid configuration quarantine. |
+| `test_capabilities.py` | 3 | Complete provider records and conservative adaptive-mode restrictions. |
+| `test_config.py` | 3 | Round-trip persistence of accounts, jobs, peer shares and profile linkage; private `0600` permissions; invalid configuration quarantine. |
 | `test_delta.py` | 1 | Rolling BLAKE2 block signatures identify only modified ranges and calculate transferred bytes. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
-| `test_engine.py` | 19 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
+| `test_engine.py` | 20 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
+| `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
 | `test_packaging.py` | 8 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, Nautilus extension dependency/layout/action routing, InfoProvider completion, and packaged state emblems. |
-| `test_peer.py` | 11 | Invitation v1/v2/v3 and relay parsing, verified atomic delta application, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
+| `test_peer.py` | 13 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, multi-device authorization, legacy migration, host-key pinning, edit-lease blocking, SFTP serving and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_rclone.py` | 17 | OAuth question parsing, stale callback handling, remote-name validation, cloud folder listing, exact Google parent-listing fallback, safe Google/Dropbox online URLs without public-link creation, Google locations, all provider backends, Nextcloud configuration, Proton credential protection, conditional Proton 2FA detection/update, account discovery and pre-connection remote validation. |
@@ -56,14 +59,16 @@ The TuxDrive 0.13.1 suite contains **83 automated tests**. Tests use temporary d
 - Read-only, send-only and receive-only jobs reject incremental changes from the prohibited direction; read-only copies do not delete local extras.
 - Every provider has a capability record and unsupported peer streaming/unsafe Proton sharing controls are rejected by the adaptive model.
 - Audit events are written with mode `0600`, can be filtered by job and ignore malformed historical lines safely.
+- Encrypted profiles reveal no clear configuration, reject wrong passwords and modification, and exclude OAuth/peer secrets unless the sensitive option is explicitly selected.
+- Restored configuration and opted-in credential/key files retain private `0600` permissions, while a local pre-migration configuration is kept for rollback.
 
 ## Build and inspect the Debian package
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.13.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.13.1_all.deb
-sha256sum dist/tuxdrive_0.13.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.14.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.14.0_all.deb
+sha256sum dist/tuxdrive_0.14.0_all.deb
 ```
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
@@ -99,6 +104,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Mass-change safety | Preview a disposable large rename/deletion burst and ransomware-like suffix batch; confirm the job pauses before real propagation. |
 | Integrity repair | Produce local-only, remote-only, changed and unreadable paths; repair reviewed subsets from each side and re-audit. |
 | Encrypted vault | Create a dedicated vault, verify ciphertext/name encryption in the backing account, sync/stream through the vault, and confirm a wrong password cannot read data. |
+| TuxDrive Profile | Store configuration-only and sensitive backups on each supported OAuth provider; inspect and restore on a clean device, test a wrong password/tampered object, confirm discovery, verify rollback and confirm that default backups do not migrate tokens or private keys. |
 
 Use test accounts and disposable folders. Back up both sides before testing deletion, conflict, migration or bidirectional recovery behavior.
 

@@ -12,7 +12,7 @@ body:
     attributes:
       label: TuxDrive version
       description: Run `tuxdrive --version` or provide the installed package version.
-      placeholder: "0.13.1"
+      placeholder: "0.14.0"
     validations:
       required: true
   - type: input

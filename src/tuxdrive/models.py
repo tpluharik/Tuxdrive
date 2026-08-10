@@ -366,6 +366,8 @@ class AppSettings:
     pause_below_battery_percent: int = 0
     schedule_start: str = ""
     schedule_end: str = ""
+    profile_remote: str = ""
+    profile_last_backup: str = ""
     config_version: int = 1
 
     @classmethod

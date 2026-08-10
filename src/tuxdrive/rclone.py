@@ -81,6 +81,29 @@ class RcloneClient:
         result = self._run(["listremotes"])
         return [line.rstrip(":") for line in result.stdout.splitlines() if line.strip()]
 
+    def copy_to(self, source: str | Path, destination: str | Path) -> None:
+        """Copy one object without exposing its contents to logs or stdout."""
+        self._run(["copyto", str(source), str(destination)])
+
+    def object_exists(self, spec: str) -> bool:
+        try:
+            self._run(["lsjson", "--stat", spec])
+            return True
+        except RcloneError:
+            return False
+
+    def config_file(self) -> Path:
+        result = self._run(["config", "file"])
+        lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
+        if lines:
+            candidate = Path(lines[-1]).expanduser()
+            if candidate.is_file():
+                return candidate
+        fallback = Path.home() / ".config" / "rclone" / "rclone.conf"
+        if fallback.is_file():
+            return fallback
+        raise RcloneError("Could not locate rclone's private configuration file")
+
     def discover_accounts(self) -> dict[str, Provider]:
         # The dump is parsed only in memory and is never returned or logged.
         result = self._run(["config", "dump"])

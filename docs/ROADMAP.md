@@ -5,11 +5,11 @@ This document records completed safety work and proposes future work. Suggestion
 1. a dependable Ubuntu client for synchronizing and streaming files from cloud services; and
 2. a private direct peer-to-peer file synchronization tool that can operate without storing files in a cloud or intermediary server.
 
-## Current baseline: 0.13.1
+## Current baseline: 0.14.0
 
-Version 0.13.1 is the current documented and packaged release. It retains the provider's identity icon in every account/job state and constrains the job enable switch to a compact theme-independent size. Version 0.13.0 delivered directional peer roles, a private audit timeline, expiring inbox-scoped file drops, an adaptive capability matrix and consolidated sync health. Ranks 1–18 are implemented; continued work focuses on secure migration, a headless/cross-platform peer agent, richer health metrics and hard enforcement for mixed-role generic SFTP clients.
+Version 0.14.0 is the current documented and packaged release. It adds locally encrypted configuration backup, provider-linked TuxDrive Profiles, cloud discovery, inspected restore and explicit opt-in migration of OAuth credentials and peer private keys. Version 0.13.1 retained provider identity icons and compact controls. Ranks 1–19 are implemented; continued work focuses on a headless/cross-platform peer agent, richer health metrics and hard enforcement for mixed-role generic SFTP clients.
 
-The next recommended development milestone is **1.0.0 — operational hardening**, focusing on encrypted device migration, a headless peer agent, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing and isolated per-role service endpoints. No planned item should be read as available until its status changes to a shipped version.
+The next recommended development milestone is **1.0.0 — operational hardening**, focusing on a headless peer agent, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing and isolated per-role service endpoints. No planned item should be read as available until its status changes to a shipped version.
 
 ## Prioritization principles
 
@@ -42,7 +42,7 @@ The next recommended development milestone is **1.0.0 — operational hardening*
 | 16 | One-time encrypted file drop | Peer | Completed 0.13.0 | Expiring protocol-v4 invitations scope an upload-only sender to a random hidden inbox; ordinary jobs exclude inboxes and the host persists consumption after the first received file. |
 | 17 | Provider capability matrix and adaptive UI | Cloud | Phase 1 completed 0.13.0 | All providers declare conservative streaming, polling, hash, move, version and sharing capabilities. Job modes and share actions adapt accordingly; live server capability probes remain future work. |
 | 18 | Sync health dashboard | Both | Phase 1 completed 0.13.0 | A consolidated GTK view reports job state, mode/role, mount/callback status, last run/error, audit events and the provider matrix. Byte-rate, cache and retry-depth telemetry remain future refinements. |
-| 19 | Encrypted configuration backup and device migration | Both | Medium | Export selected jobs, filters and public metadata in a password-protected bundle. Private identities and OAuth credentials should be opt-in, strongly encrypted and clearly separated. |
+| 19 | Encrypted configuration backup and device migration | Both | Completed 0.14.0 | A TuxDrive Profile is encrypted locally with AES-256-GCM/scrypt and stored in a selected user-owned OAuth cloud. New devices discover it after connecting that provider, inspect metadata and restore atomically. OAuth credentials and peer private keys are excluded by default and require explicit sensitive opt-in. |
 | 20 | Headless and cross-platform peer agent | Peer | Strategic | Provide a minimal daemon for Ubuntu Server and later interoperable desktop peers on Windows/macOS, using the same invitation, key-pinning and folder-policy model. |
 
 ## Suggested delivery sequence
@@ -61,7 +61,7 @@ Versions 0.10.0–0.13.0 delivered live Nautilus integration, per-file offline r
 
 ### Portability
 
-Encrypted migration and a headless/cross-platform agent should follow after the peer protocol and configuration schema are stable.
+Encrypted provider-linked migration shipped in 0.14.0. A headless/cross-platform agent should follow after the peer protocol and configuration schema are stable.
 
 ## Suggestions and discussion
 

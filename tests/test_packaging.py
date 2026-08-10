@@ -44,6 +44,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("class PeerSharingDialog", app)
         self.assertIn("Proton Drive two-factor authentication", app)
         self.assertIn("Save and connect", app)
+        self.assertIn("class ProfileDialog", app)
+        self.assertIn("TuxDrive Profile / migrate", app)
 
     def test_peer_runtime_and_key_generator_are_installed(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
@@ -54,6 +56,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('find_spec("tuxdrive.peer")', build_script)
         self.assertIn('docs/TESTING.md', build_script)
         self.assertIn('docs/ROADMAP.md', build_script)
+        self.assertIn("python3-cryptography", control)
+        self.assertIn('find_spec("tuxdrive.migration")', build_script)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

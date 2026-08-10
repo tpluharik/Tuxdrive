@@ -1,6 +1,6 @@
 {
-  "version": "0.13.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.13.1_all.deb",
-  "sha256": "77289f132844c29e4539405a21dbfe0c143ddb0678f91747dadc6e923a1ed40a",
-  "notes": "Uses each job's cloud-provider icon throughout the main window and keeps job enable switches at a compact, theme-independent size."
+  "version": "0.14.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.14.0_all.deb",
+  "sha256": "75945f22bf29417094ce463029d458534410ccf795e0804c02befa41564f7528",
+  "notes": "Adds locally encrypted, OAuth-provider-linked TuxDrive Profile backup, discovery, inspection, and safe device restore with explicit opt-in credential migration."
 }

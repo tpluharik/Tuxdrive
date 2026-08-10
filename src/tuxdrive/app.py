@@ -61,6 +61,7 @@ from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
+from .migration import MigrationError, ProfileManager
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -1704,6 +1705,147 @@ class PeerSharingDialog(Gtk.Dialog):
         )
 
 
+class ProfileDialog(Gtk.Dialog):
+    """Encrypted, user-owned cloud profile backup and device restore."""
+
+    def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication") -> None:
+        super().__init__(title="TuxDrive Profile and device migration", transient_for=parent, modal=True)
+        self.controller = controller
+        self.set_default_size(650, 470)
+        self.set_icon_name("tuxdrive")
+        area = self.get_content_area()
+        area.set_border_width(24)
+        area.set_spacing(12)
+        title = Gtk.Label(xalign=0)
+        title.set_markup("<span size='large' weight='bold'>Encrypted TuxDrive Profile</span>")
+        area.pack_start(title, False, False, 0)
+        description = Gtk.Label(xalign=0)
+        description.set_line_wrap(True)
+        description.set_text(
+            "Link TuxDrive to one of your OAuth cloud accounts. Configuration is encrypted "
+            "on this device before upload; TuxDrive operates no profile server. On a new "
+            "device, connect the same provider, then restore this profile."
+        )
+        area.pack_start(description, False, False, 0)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
+        self.remote = Gtk.ComboBoxText()
+        accounts = [item for item in controller.config.accounts if item.provider.browser_oauth]
+        for account in accounts:
+            self.remote.append(account.remote, f"{account.provider.label} · {account.display_name}")
+        preferred = controller.config.settings.profile_remote
+        if not (preferred and self.remote.set_active_id(preferred)) and accounts:
+            self.remote.set_active(0)
+        self.password = Gtk.Entry()
+        self.password.set_visibility(False)
+        self.password.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        self.password.set_placeholder_text("At least 10 characters")
+        self.confirm = Gtk.Entry()
+        self.confirm.set_visibility(False)
+        self.confirm.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        self.include = Gtk.CheckButton(label="Include OAuth credentials and peer private keys")
+        self.include.set_tooltip_text("Sensitive: permits a full device migration, but increases the impact of a weak or lost backup password")
+        for row, (label, widget) in enumerate((
+            ("Profile storage account", self.remote),
+            ("Backup password", self.password),
+            ("Confirm password", self.confirm),
+            ("Sensitive migration", self.include),
+        )):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        area.pack_start(grid, False, False, 0)
+        warning = Gtk.Label(xalign=0)
+        warning.set_line_wrap(True)
+        warning.set_markup(
+            "<b>Keep the password safe.</b> It is never uploaded and cannot be recovered. "
+            "Credential migration is off by default. Restoring replaces this device's TuxDrive configuration; a local pre-migration copy is retained."
+        )
+        area.pack_start(warning, False, False, 0)
+        self.spinner = Gtk.Spinner()
+        self.status = Gtk.Label(label="Ready", xalign=0)
+        self.status.set_line_wrap(True)
+        row = Gtk.Box(spacing=10)
+        row.pack_start(self.spinner, False, False, 0)
+        row.pack_start(self.status, True, True, 0)
+        area.pack_start(row, False, False, 0)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.add_button("Inspect cloud backup", 1)
+        self.add_button("Restore this device", 2)
+        self.add_button("Store encrypted backup", 3)
+        self.connect("response", self._response)
+        self.show_all()
+        if not accounts:
+            self._status("Connect Google Drive, OneDrive, Dropbox, Box, or pCloud first.", True)
+
+    def _status(self, text: str, error: bool = False) -> None:
+        color = "#c01c28" if error else "#2ec27e"
+        self.status.set_markup(f"<span foreground='{color}'>{GLib.markup_escape_text(text)}</span>")
+
+    def _response(self, dialog: Gtk.Dialog, response: int) -> None:
+        if response in (Gtk.ResponseType.CLOSE, Gtk.ResponseType.DELETE_EVENT):
+            dialog.destroy()
+            return
+        remote, password = self.remote.get_active_id(), self.password.get_text()
+        if not remote:
+            self._status("Choose a connected OAuth account.", True)
+            return
+        if response == 3 and password != self.confirm.get_text():
+            self._status("The backup passwords do not match.", True)
+            return
+        self.spinner.start()
+        self.set_response_sensitive(1, False)
+        self.set_response_sensitive(2, False)
+        self.set_response_sensitive(3, False)
+        operation = {1: self._inspect, 2: self._restore, 3: self._backup}[response]
+        _run_thread(operation, self._done, remote, password)
+
+    def _inspect(self, remote: str, password: str):
+        data = self.controller.profiles.download(remote)
+        return ("inspect", self.controller.profiles.summary(data, password))
+
+    def _backup(self, remote: str, password: str):
+        self.controller.config.settings.profile_remote = remote
+        summary = self.controller.profiles.upload(
+            remote, self.controller.config, password, self.include.get_active()
+        )
+        return ("backup", summary)
+
+    def _restore(self, remote: str, password: str):
+        data = self.controller.profiles.download(remote)
+        summary = self.controller.profiles.summary(data, password)
+        restored = self.controller.profiles.restore(
+            data, password, restore_credentials=self.include.get_active()
+        )
+        restored.settings.profile_remote = remote
+        return ("restore", summary, restored)
+
+    def _done(self, result, error: Exception | None) -> bool:
+        self.spinner.stop()
+        for response in (1, 2, 3):
+            self.set_response_sensitive(response, True)
+        if error:
+            self._status(f"Profile operation failed safely: {error}", True)
+            return False
+        action, summary = result[0], result[1]
+        if action == "restore":
+            self.controller.config = result[2]
+            self.controller.rclone = RcloneClient(self.controller.config.settings.rclone_path)
+            self.controller.engine = SyncEngine(self.controller.config.settings.rclone_path)
+            self.controller.profiles = ProfileManager(self.controller.store, self.controller.rclone)
+            self.controller.save()
+            if self.controller.window:
+                self.controller.window.refresh()
+        elif action == "backup":
+            self.controller.config.settings.profile_last_backup = summary.created_at
+            self.controller.save()
+        verb = "Restored" if action == "restore" else "Stored" if action == "backup" else "Found"
+        secret = "includes credentials" if summary.includes_credentials else "configuration only"
+        self._status(
+            f"{verb} profile from {summary.device_name}, TuxDrive {summary.app_version}: "
+            f"{summary.accounts} account(s), {summary.jobs} job(s), {secret}."
+        )
+        return False
+
+
 class OperationsDashboard(Gtk.Dialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxDriveApplication") -> None:
         super().__init__(title="TuxDrive sync health and audit", transient_for=parent, modal=False)
@@ -2255,6 +2397,7 @@ class MainWindow(Gtk.ApplicationWindow):
         for widget in (launch, notifications, minimized, nautilus, policy, metered, battery, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
+        dialog.add_button("TuxDrive Profile / migrate…", 4)
         dialog.add_button("Check for updates", 2)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Save", Gtk.ResponseType.OK)
@@ -2289,6 +2432,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self._check_for_updates()
         elif response == 3:
             self._show_peer_sharing(_button)
+        elif response == 4:
+            ProfileDialog(self, self.controller)
 
     def _show_peer_sharing(self, _button: Gtk.Widget) -> None:
         PeerSharingDialog(self, self.controller)
@@ -2553,6 +2698,7 @@ class TuxDriveApplication(Gtk.Application):
         self.engine = SyncEngine(self.config.settings.rclone_path)
         self.audit = AuditTimeline()
         self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
+        self.profiles = ProfileManager(self.store, self.rclone)
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False
@@ -2829,6 +2975,16 @@ class TuxDriveApplication(Gtk.Application):
         if self.window:
             self.window.refresh()
             self.window.message(f"{account.display_name} connected successfully.")
+        if account.provider.browser_oauth:
+            _run_thread(self.profiles.available, self._profile_checked, account.remote)
+
+    def _profile_checked(self, available: bool | None, error: Exception | None) -> bool:
+        if available and not error and self.window:
+            self.window.message(
+                "An encrypted TuxDrive Profile is available. Open Settings → TuxDrive Profile / migrate to inspect or restore it.",
+                Gtk.MessageType.INFO,
+            )
+        return False
 
     def run_job(self, job: SyncJob, quiet: bool = False) -> None:
         self.engine.configure_jobs(self.config.jobs)
@@ -3112,6 +3268,11 @@ class TuxDriveApplication(Gtk.Application):
         if self.window:
             self.window.refresh()
             self.window.message("TuxDrive loaded and is running in the tray.")
+        profile_accounts = [item for item in self.config.accounts if item.provider.browser_oauth]
+        if profile_accounts:
+            preferred = self.config.settings.profile_remote
+            account = next((item for item in profile_accounts if item.remote == preferred), profile_accounts[0])
+            _run_thread(self.profiles.available, self._profile_checked, account.remote)
         self._set_tray_state("ready", "Loaded")
         if not self._runtime_ready_once:
             self._runtime_ready_once = True

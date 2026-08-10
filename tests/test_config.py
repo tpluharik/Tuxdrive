@@ -41,6 +41,17 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(loaded.peer_shares[0].advertised_host, "192.0.2.4")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
+    def test_profile_settings_round_trip(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            store = ConfigStore(Path(temporary) / "config.json")
+            value = AppConfig()
+            value.settings.profile_remote = "google-main"
+            value.settings.profile_last_backup = "2026-08-10T12:00:00+00:00"
+            store.save(value)
+            loaded = store.load()
+            self.assertEqual(loaded.settings.profile_remote, "google-main")
+            self.assertEqual(loaded.settings.profile_last_backup, "2026-08-10T12:00:00+00:00")
+
     def test_invalid_config_is_quarantined(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "config.json"

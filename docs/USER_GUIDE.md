@@ -2,7 +2,7 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.13.1 on Ubuntu 26.04: installation, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
+This guide covers TuxDrive 0.14.0 on Ubuntu 26.04: encrypted profile backup and device migration, adaptive cloud-provider controls, Nautilus integration, role-based multi-peer sharing, one-time encrypted drops, the audit and health dashboard, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, updates, and diagnostics.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -11,7 +11,7 @@ This guide covers TuxDrive 0.13.1 on Ubuntu 26.04: installation, adaptive cloud-
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.13.1_all.deb
+sudo apt install ./tuxdrive_0.14.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -39,6 +39,22 @@ Open **Settings** and select **Check for updates**. A progress window shows repo
 ### Rename an item in TuxDrive
 
 Select **Rename** on a synchronized or streaming job and enter the preferred display title. This changes only the label shown inside TuxDrive; it does not rename or move the local folder or its cloud folder.
+
+### Encrypted TuxDrive Profile and device migration
+
+![Encrypted profile backup and restore](assets/10-profile-migration.svg)
+
+Open **Settings → TuxDrive Profile / migrate** after connecting Google Drive, OneDrive, Dropbox, Box, or pCloud. Choose the account that will hold the profile, enter and confirm a backup password of at least 10 characters, then choose **Store encrypted backup**. TuxDrive encrypts locally with AES-256-GCM and a memory-hard scrypt-derived key before uploading `.tuxdrive-profile/tuxdrive-profile.tdx`. TuxDrive operates no account or configuration server and cannot see or recover the password.
+
+On a replacement or additional computer:
+
+1. Install TuxDrive and connect the same OAuth provider account.
+2. TuxDrive detects the standard encrypted profile object and reports that a profile is available.
+3. Open **Settings → TuxDrive Profile / migrate**, enter the password, and choose **Inspect cloud backup** to review its source device, version, account count, job count, and credential scope.
+4. Choose **Restore this device**. The configuration is validated before replacement and the previous local file is retained as `config.json.before-migration`.
+5. Restart or reconnect jobs as needed. If the backup excluded credentials, authorize the restored provider remotes on this computer.
+
+By default the bundle contains job definitions, display names, filters, policies, peer public metadata, and application settings—but no rclone OAuth/credential file or peer private identity. **Include OAuth credentials and peer private keys** is a sensitive, explicit opt-in intended for full device migration. Use it only with a strong unique backup password and trusted cloud account. The same checkbox must be enabled during restore to write those protected credentials. Losing the password makes the backup unrecoverable; exposing it and the encrypted bundle together can expose every opted-in account and peer identity.
 
 ## 2. Connect a cloud account
 
@@ -447,7 +463,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.13.1_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.14.0_all.deb`.
 
 ## 13. Data safety
 

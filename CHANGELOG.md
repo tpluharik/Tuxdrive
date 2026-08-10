@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.14.0 — encrypted TuxDrive Profiles and device migration
+
+- Added a TuxDrive Profile linked to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account; no TuxDrive-operated account server stores the profile.
+- Added local AES-256-GCM authenticated encryption with a memory-hard scrypt password derivation and a standard private cloud object path.
+- Added backup discovery after OAuth account connection, password-protected metadata inspection, and in-app device restore with a local pre-migration configuration copy.
+- Configuration-only backup is the safe default. OAuth credentials and peer private identities are included and restored only through an explicit sensitive-migration checkbox.
+- Added wrong-password, tamper, cloud copy, settings migration, secret opt-in and private-permission tests; updated documentation, dependencies, package and update metadata.
+
 ## 0.13.1 — provider icons and compact job controls
 
 - Job and account rows now consistently use the connected provider's icon instead of substituting the TuxDrive/state icon.
