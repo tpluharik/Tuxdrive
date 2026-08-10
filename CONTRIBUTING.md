@@ -9,7 +9,7 @@ Thank you for helping improve TuxDrive. The repository is publicly readable, whi
 - Comment on an existing issue to add evidence, logs, testing results, or design feedback.
 - Fork the repository and open a pull request with an implementation.
 - Improve user documentation, packaging, accessibility, or translations.
-- Review or refine the [top-20 feature roadmap](docs/ROADMAP.md).
+- Review or refine the [top-40 feature roadmap](docs/ROADMAP.md).
 
 ## Before reporting a bug
 
@@ -43,7 +43,7 @@ PYTHONPATH=src python3 -m compileall -q src
 6. Update documentation when controls, configuration, packaging, or user-visible behaviour changes.
 7. Open a pull request and complete the checklist.
 
-The [testing guide](docs/TESTING.md) describes the current 75-test suite, release matrix, safety invariants and known coverage gaps. Recovery, integrity, mass-change, conflict-resolution, peer authorization, lease, discovery, Nautilus, streaming-mount, provider-URL, or encryption changes must include focused safety tests and document trust, expiry, authoritative-side, and rollback behavior.
+The [testing guide](docs/TESTING.md) describes the current 100-test suite, release matrix, safety invariants and known coverage gaps. Recovery, integrity, mass-change, conflict-resolution, peer authorization, lease, discovery, Nautilus, streaming-mount, provider-URL, or encryption changes must include focused safety tests and document trust, expiry, authoritative-side, and rollback behavior.
 
 ## Pull-request expectations
 
@@ -51,6 +51,9 @@ The [testing guide](docs/TESTING.md) describes the current 75-test suite, releas
 - Keep unrelated changes out of the pull request.
 - Preserve existing configuration compatibility.
 - Do not commit OAuth tokens, rclone configuration, credentials, real user logs, or personal paths.
+- Run `bandit -q -r src -lll` and `pip-audit -r requirements-security.txt` for security-sensitive or dependency changes. Never suppress an advisory solely to pass CI; explain applicability, compensating controls, expiry, and the planned fixed version in `SECURITY.md`.
+- Update `CHANGELOG.md`, `README.md`, `docs/USER_GUIDE.md`, `docs/TESTING.md`, `docs/ROADMAP.md`, and `docs/SECURITY_HARDENING.md` when a release changes security behavior, dependency floors, credential storage, protocol fields, recovery semantics, or trust boundaries.
+- New untrusted paths, archives, update metadata, peer instructions, or recovery operations require negative tests for traversal, symlink races, resource exhaustion, tampering, and unauthorized signers.
 - Treat synchronization and deletion changes as safety-sensitive. Describe failure and recovery behaviour.
 - Maintain support for Ubuntu 26.04, Google Drive, and Microsoft OneDrive.
 - Use public provider APIs and compatible open-source components; do not copy proprietary client code or branding.

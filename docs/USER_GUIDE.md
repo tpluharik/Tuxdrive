@@ -6,6 +6,8 @@ This guide covers TuxDrive 0.15.2 on Ubuntu 26.04, including signed updates, har
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
+Version 0.15.2 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+
 > The screenshots use sample names and paths. They do not contain real account information.
 
 ## 1. Install and start
@@ -46,7 +48,7 @@ Select **Rename** on a synchronized or streaming job and enter the preferred dis
 
 ![Encrypted profile backup and restore](assets/10-profile-migration.svg)
 
-Open **Settings → TuxDrive Profile / migrate** after connecting Google Drive, OneDrive, Dropbox, Box, or pCloud. Choose the account that will hold the profile, enter and confirm a backup password of at least 10 characters, then choose **Store encrypted backup**. TuxDrive encrypts locally with AES-256-GCM and a memory-hard scrypt-derived key before uploading `.tuxdrive-profile/tuxdrive-profile.tdx`. TuxDrive operates no account or configuration server and cannot see or recover the password.
+Open **Settings → TuxDrive Profile / migrate** after connecting Google Drive, OneDrive, Dropbox, Box, or pCloud. Choose the account that will hold the profile, enter and confirm a unique backup password of at least 14 characters, then choose **Store encrypted backup**. New version-2 profiles use AES-256-GCM with scrypt `N=131072`; version-1 profiles remain readable for migration. TuxDrive encrypts locally before uploading `.tuxdrive-profile/tuxdrive-profile.tdx`. TuxDrive operates no account or configuration server and cannot see or recover the password.
 
 On a replacement or additional computer:
 
@@ -199,7 +201,8 @@ The chart button in the title bar opens **Sync health and audit**. Its audit pag
 - The connecting public key authenticates the guest; the invitation's pinned host public key authenticates the server. If either key changes unexpectedly, stop and verify with the other user instead of bypassing validation.
 - LAN discovery is convenience, not trust. Always compare the complete fingerprint.
 - Revocation prevents future authentication after the share restarts; it cannot retract copies already downloaded by that device.
-- Every authorized device has the same folder-level access in 0.9.0. Per-device roles remain roadmap work.
+- Directional roles are enforced by TuxDrive jobs. The current shared rclone SFTP endpoint is not yet a hostile-client sandbox for mixed-role peers: a person deliberately using a generic SFTP client may not be constrained by the role label until per-key server-side roots and authorization are implemented. Grant keys only to trusted collaborators. One-time drops restart authorization after consumption, but are not yet separately chrooted per key.
+- Protocol-v5 invitations explicitly list allowed transports. **Tor only**, **No relay**, and **No public IP discovery** fail closed; TuxDrive pauses and logs a policy event instead of silently falling back to clearnet.
 - This is direct encrypted transport, not anonymous communication. Endpoint IP addresses are visible to each peer and to intervening network operators.
 - Keep backups of important collaborative data: two-way synchronization intentionally propagates allowed changes and deletions.
 
@@ -490,3 +493,13 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.15.2_all.deb`.
 - Keep unsafe Google flagged-file access disabled unless the content is trusted.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
+
+### Security upgrade checklist for 0.15.2
+
+1. Install `tuxdrive_0.15.2_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.15.2 and no signature or expiry error.
+3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
+4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
+5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.
+6. Run **Verify** on important jobs, inspect the health dashboard, and test recovery using a non-critical file.
+7. Keep an independent backup. Update signing protects installer authenticity; it does not protect data from a compromised desktop account.

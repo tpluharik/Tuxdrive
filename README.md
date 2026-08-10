@@ -6,7 +6,7 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
+🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[0.15.2 security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
@@ -21,7 +21,13 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 
 Version 0.15.2 targets Ubuntu 26.04. It retains the 0.15.1 security hardening and responds to newly disclosed `cryptography` advisories by requiring upstream version 50.0.0 or newer for Python-package installations; Debian installations continue to consume Ubuntu's security-maintained package and backports.
 
-### 0.15.1 security hardening
+### 0.15.2 security baseline
+
+- Python/PyPI installations require `cryptography>=50.0.0,<51` following PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf. Ubuntu `.deb` installations use Ubuntu's maintained `python3-cryptography` package so official security backports remain valid.
+- CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
+- The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
+
+The following controls were introduced in 0.15.1 and remain enforced in 0.15.2:
 
 - Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -86,7 +92,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - optional LAN multicast discovery with host-key fingerprint confirmation and no central discovery service
 - offline QR invitation display and QR-image import; no online QR service receives pairing data
 - generated Ed25519 identities, exchanged public keys, host-key pinning, editable IP/DNS address and port, and per-share folder selection
-- OAuth 2.0 authorization in the default web browser—no cloud password is given to TuxDrive
+- OAuth 2.0 authorization in the default web browser for Google Drive, OneDrive, Dropbox, Box, and pCloud—no provider password is given to TuxDrive for those OAuth flows
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
 - per-job local version history and recycle recovery with configurable retention and one-click restore
@@ -153,7 +159,7 @@ sh scripts/build-deb.sh
 
 The installer is written to `dist/tuxdrive_0.15.2_all.deb`.
 
-The current suite contains more than 100 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 100 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -197,12 +203,16 @@ Do not commit client secrets, access tokens, refresh tokens, or an rclone config
 ## Storage and security
 
 - TuxDrive settings live in `~/.config/tuxdrive/config.json` with mode `0600`.
-- OAuth tokens remain in rclone's protected config (normally `~/.config/rclone/rclone.conf`).
+- OAuth tokens and credential-provider secrets remain in rclone's encrypted config (normally `~/.config/rclone/rclone.conf`). TuxDrive stores the random config password in GNOME Secret Service and retrieves it through a password command rather than application JSON or process arguments.
 - Operational logs live under `~/.cache/tuxdrive/logs` and do not contain a config dump.
 - First two-way synchronization merges both sides and prefers the newer version for an initial same-path collision. Later unresolved conflicts retain renamed copies.
 - Every synchronization enforces a configurable maximum deletion count. Established jobs also perform a non-destructive preview and pause suspicious mass changes.
 - Local recovery data is stored under `~/.local/share/tuxdrive/recovery`; retention is configured per job. Cloud-side version backups are stored in the job remote's `.tuxdrive-versions` area.
 - Encrypted vault passwords are protected in rclone's private configuration. They are not recoverable by TuxDrive; keep them in a password manager.
+- Upgrading from 0.15.0 or earlier automatically migrates an unencrypted managed rclone configuration into authenticated encrypted form when GNOME Secret Service is available. Existing independently encrypted advanced-user configurations are preserved.
+- The updater accepts only a non-expired Ed25519-signed manifest, an approved repository URL, the declared SHA-256 digest, and a Debian package whose embedded name/version match the requested release.
+
+For the complete threat boundaries, sensitive file locations, dependency response, verification commands, backup advice, and remaining peer-server limitation, read [Security hardening and secure operation](docs/SECURITY_HARDENING.md).
 
 Back up important data before introducing any new synchronization tool. A mirror or bidirectional sync intentionally propagates changes and, within the configured safety ceiling, deletions.
 

@@ -12,7 +12,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 ```
 
-The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Ubuntu installations receive the same runtime through the `.deb` package's `python3-cryptography` dependency.
+The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Python-package builds require `cryptography>=50.0.0,<51`; Ubuntu `.deb` installations use the distribution-maintained `python3-cryptography` package so official Ubuntu backported security fixes are recognized by APT rather than compared only by the upstream version string.
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
@@ -79,6 +79,15 @@ dpkg-deb --contents dist/tuxdrive_0.15.2_all.deb
 sha256sum dist/tuxdrive_0.15.2_all.deb
 ```
 
+The CI **Static security analysis** step must run before tests and packaging:
+
+```bash
+bandit -q -r src -lll
+pip-audit -r requirements-security.txt
+```
+
+The release is blocked on any high-severity Bandit result or unresolved dependency advisory. Do not add an ignore merely to make CI green; document exploitability and a time-bounded exception in `SECURITY.md` if no fixed dependency exists. The 0.15.2 floor was introduced because 46.0.7 was affected by PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf.
+
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
@@ -88,6 +97,8 @@ python3 scripts/sign-update.py --version 0.15.2 \
 ```
 
 Only the public key belongs in source control. Store the private key offline or in a protected release secret, restrict release environments, and rotate the embedded public key through a separately reviewed application release if compromise is suspected.
+
+After signing, parse the manifest with `UpdateManager.parse_manifest`, compare its SHA-256 with the package, inspect the embedded Debian package/version, and confirm the expiry is in the future. A successful unit suite alone is not a release authorization.
 
 The build script performs an additional import smoke test against the exact staged `/usr/lib` layout used after installation. It verifies the TuxDrive version and confirms that the desktop application, updater, peer, and recovery modules are discoverable.
 
@@ -137,6 +148,8 @@ The repository suite is primarily deterministic unit and command-construction te
 - fault injection for power loss during transfers or configuration writes;
 - multi-gigabyte performance and memory benchmarks;
 - compatibility testing against every provider account type and regional endpoint.
+- automatic interpretation of Ubuntu backported security patches from an upstream-looking package version;
+- hostile generic-SFTP authorization for mixed-role peer keys before the future per-key server layer.
 
 These gaps are tracked as roadmap work rather than implied coverage.
 

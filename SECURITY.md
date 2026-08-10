@@ -13,6 +13,9 @@ Report suspected vulnerabilities privately through GitHub's **Security → Repor
 - Untrusted relative paths are confined beneath their configured root. Security-sensitive atomic installs use no-follow directory descriptors to resist symlink replacement races.
 - Tor-only and no-public-IP shares bind locally; invitations carry allowed transports and do not contain forbidden relay fallback.
 - Delta transactions are signed by an authorized Ed25519 peer identity, resource bounded, hash verified, and atomically installed.
+- Python-package installations require `cryptography` 50.0.0 or newer after four advisories affected the former 46.x floor. Ubuntu packages consume Canonical-maintained security backports through APT.
+
+The detailed control inventory, credential locations, upgrade checklist, dependency response, verification procedure, and operator guidance are maintained in [docs/SECURITY_HARDENING.md](docs/SECURITY_HARDENING.md).
 
 ## Known limitation intentionally retained
 
@@ -27,3 +30,5 @@ Only the public update key is committed. Keep the private key offline or in a pr
 ## Release gates
 
 Every release must pass unit tests, source compilation, high-severity Bandit checks, `pip-audit`, Debian installed-layout inspection, signed-manifest verification, and SBOM generation. Security-sensitive path, update, credential, Tor, peer, and recovery changes require regression tests.
+
+Dependency findings must be fixed or explicitly documented with applicability, compensating controls, owner, and expiry. CI ignores are not a substitute for analysis. Ubuntu backported fixes must be verified against Ubuntu package security records rather than guessed from the upstream version alone.
