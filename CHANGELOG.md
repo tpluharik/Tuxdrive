@@ -2,6 +2,17 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.17.0 — local-first collaborative documents
+
+- Added an operation-based CRDT for offline multi-peer Markdown/plain-text editing with deterministic convergence and explicit interoperable checkpoints.
+- Stored collaboration state separately as immutable per-device operation files suitable for the existing folder synchronizer.
+- Added optional AES-256-GCM authenticated, expiring cursor/selection presence that is disabled without a shared key and excluded from long-lived audit logs.
+- Added immutable comments, suggestions, tracked-change records, mentions, approvals and file tasks.
+- Added structured experimental ODT and ODS import/export with deterministic archives, formula/style metadata, original XML recovery and round-trip warnings.
+- Kept DOCX, XLSX, PDF and unproven binary formats in safe lease/version/review mode.
+- Added the GTK collaborative editor under peer sharing, seven focused tests and updated documentation.
+- Removed the experimental macOS package workflow and sources; release CI now produces the adaptive `.deb` and SBOM only.
+
 ## 0.16.0 — adaptive Debian/GNOME packaging
 
 - Added an experimental macOS 13+ Apple-silicon `.app`/`.pkg` CI build with Keychain-backed rclone configuration encryption, LaunchAgent login startup, native URL opening, pinned macOS rclone bootstrap and optional macFUSE handling. Finder integration, notarization and the automatic updater are not yet available.

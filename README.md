@@ -6,7 +6,7 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[0.16.0 security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
+🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[Security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
@@ -19,7 +19,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.16.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It retains the 0.15.1 security hardening, adds adaptive host-capability discovery, and responds to newly disclosed `cryptography` advisories by requiring upstream version 50.0.0 or newer for Python-package installations; `.deb` installations consume the distribution's security-maintained package.
+Version 0.17.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It adds a local-first collaborative document subsystem while retaining the 0.16.0 adaptive packaging and security baseline. Markdown and text use an operation-based CRDT; ODT/ODS use structured experimental checkpoints; unsafe binary formats remain in lock/version/review mode.
 
 ### 0.16.0 security baseline
 
@@ -27,7 +27,7 @@ Version 0.16.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and ar
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls were introduced in 0.15.1 and remain enforced in 0.16.0:
+The following controls were introduced in 0.15.1 and remain enforced in 0.17.0:
 
 - Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -139,7 +139,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.16.0_all.deb
+sudo apt install ./tuxdrive_0.17.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -157,13 +157,15 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.16.0_all.deb`.
+The installer is written to `dist/tuxdrive_0.17.0_all.deb`. TuxDrive now publishes Debian packages only; the former experimental macOS package job has been removed.
 
-### Experimental macOS package
+### Local-first collaborative documents
 
-GitHub Actions also builds an ad-hoc-signed Apple-silicon `.pkg`. It uses macOS Keychain, LaunchAgents, native URL opening and verified macOS rclone downloads, but currently requires Homebrew GTK/PyGObject and has no Finder extension or notarized updater. It is a development artifact, not a production release. See [experimental macOS installation and limitations](docs/MACOS_EXPERIMENTAL.md).
+Open **Peer-to-peer sharing → Collaborate → Open collaborative editor**. Markdown and plain text changes are stored as immutable per-device CRDT operations under `.tuxdrive-collaboration`, so offline peers converge after the containing folder synchronizes. **Merge peer changes** records local edits and merges remote operations; **Export checkpoint** updates the ordinary `.md`/`.txt` file for any editor. Optional presence is AES-256-GCM encrypted, expires quickly and is not copied to the long-lived audit timeline. Comments, suggestions, tracked-change records, approvals, mentions and tasks are immutable workspace review events.
 
-The current suite contains 107 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, adaptive Linux/macOS platform checks, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
+ODT paragraphs/styles/comments/tracked-change markers and ODS cells/formulas are imported structurally. Deterministic export retains the original `content.xml` inside the snapshot for recovery and warns where unsupported inline features may flatten. DOCX, XLSX, PDF and unknown binary formats deliberately remain under edit leases, local versions and review rather than making an unsafe real-time claim.
+
+The current suite contains 114 automated tests, including deterministic multi-peer convergence, separate state/checkpoints, authenticated presence, review events, recoverable ODT export and ODS formulas. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 

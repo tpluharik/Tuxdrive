@@ -1,6 +1,6 @@
 # Platform support and adaptive installation
 
-TuxDrive 0.16.0 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization.
+TuxDrive 0.17.0 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxDrive does not publish a macOS package.
 
 ## Compatibility matrix
 
@@ -23,7 +23,6 @@ The supported design baseline is Ubuntu 24.04/26.04 and Debian 12/13 on amd64 or
 | Devuan | Best effort | Best effort | Best effort if Nautilus is installed | The systemd user unit is unavailable; desktop autostart and session services must be supplied separately. |
 | Raspberry Pi OS 64-bit | Best effort | Hardware/kernel dependent | No native default file-manager integration | arm64 rclone is supported, but the default desktop is outside the GNOME/Nautilus matrix. 32-bit ARM is unsupported. |
 | Other Debian derivatives | Unverified | Unverified | Unverified | Requires Python 3.10+, GTK 3/PyGObject, Secret Service and supported amd64/arm64 runtime; run `tuxdrive --system-check`. |
-| macOS 13+ Apple silicon | Experimental core | Experimental with macFUSE | No Finder integration | CI-built ad-hoc-signed `.pkg`; requires Homebrew GTK/PyGObject and manual Gatekeeper approval. See the [macOS guide](MACOS_EXPERIMENTAL.md). |
 
 “CI-installed” means the package was built and installed with mandatory dependencies in the repository's container matrix. It does not replace a graphical VM test. “Expected” and “best effort” describe code/dependency compatibility, not a completed release certification.
 

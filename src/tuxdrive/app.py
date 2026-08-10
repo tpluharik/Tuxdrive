@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -52,6 +53,7 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 
 from .audit import AuditTimeline
 from .capabilities import CAPABILITIES, capabilities_for
+from .collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, document_capability
 from .config import ConfigStore, cache_home
 from .engine import JobResult, SyncEngine
 from .models import (
@@ -1064,6 +1066,227 @@ class VaultDialog(Gtk.Dialog):
         return Account(remote=remote, provider=Provider.VAULT, display_name=self.name.get_text().strip() or "Encrypted vault", vault_base_remote=base, vault_base_path=folder)
 
 
+class CollaborativeEditorDialog(Gtk.Dialog):
+    """Local-first editor whose immutable operation files travel with a shared folder."""
+
+    def __init__(self, parent: Gtk.Window) -> None:
+        super().__init__(title="Collaborative document", transient_for=parent, modal=False)
+        self.set_icon_name("tuxdrive")
+        self.set_default_size(820, 700)
+        self.workspace: CollaborationWorkspace | None = None
+        self.crdt = None
+        self.source: Path | None = None
+        self._buffer_loading = False
+        self._autosave_pending = False
+        self._alive = True
+        area = self.get_content_area()
+        area.set_border_width(16)
+        area.set_spacing(10)
+        intro = Gtk.Label(label=(
+            "Markdown/text uses an offline CRDT and immutable operation files. Place the document in a TuxDrive peer/cloud folder to collaborate. "
+            "ODT/ODS use experimental structured checkpoints; DOCX/XLSX/PDF remain protected by lock/version/review workflows."
+        ), xalign=0)
+        intro.set_line_wrap(True)
+        area.pack_start(intro, False, False, 0)
+        grid = Gtk.Grid(column_spacing=10, row_spacing=8)
+        self.file = Gtk.FileChooserButton(title="Collaborative document", action=Gtk.FileChooserAction.OPEN)
+        file_filter = Gtk.FileFilter()
+        file_filter.set_name("Supported documents")
+        for pattern in ("*.md", "*.markdown", "*.txt", "*.odt", "*.ods", "*.docx", "*.xlsx", "*.pdf"):
+            file_filter.add_pattern(pattern)
+        self.file.add_filter(file_filter)
+        self.actor = Gtk.Entry()
+        self.actor.set_text(platform.node() or "TuxDrive device")
+        self.presence_key = Gtk.Entry()
+        self.presence_key.set_visibility(False)
+        self.presence_key.set_placeholder_text("Optional shared passphrase; never stored")
+        for row, (label, widget) in enumerate((("Document", self.file), ("Device name", self.actor), ("Encrypted presence passphrase", self.presence_key))):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        area.pack_start(grid, False, False, 0)
+        toolbar = Gtk.Box(spacing=8)
+        for label, callback in (("Open/import", self._open), ("Merge peer changes", self._merge), ("Export checkpoint", self._export)):
+            button = Gtk.Button(label=label)
+            button.connect("clicked", callback)
+            toolbar.pack_start(button, False, False, 0)
+        area.pack_start(toolbar, False, False, 0)
+        self.editor = Gtk.TextView()
+        self.editor.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.editor.set_monospace(True)
+        self.editor.get_buffer().connect("changed", self._schedule_autosave)
+        self.editor.get_buffer().connect("mark-set", self._schedule_autosave)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_min_content_height(330)
+        scroll.add(self.editor)
+        area.pack_start(scroll, True, True, 0)
+        review = Gtk.Box(spacing=8)
+        self.review_kind = Gtk.ComboBoxText()
+        for value in ("comment", "suggestion", "approval", "task", "tracked-change"):
+            self.review_kind.append(value, value.replace("-", " ").title())
+        self.review_kind.set_active_id("comment")
+        self.review_text = Gtk.Entry()
+        self.review_text.set_placeholder_text("Comment, suggestion, mention, approval note, or task")
+        add_review = Gtk.Button(label="Add review event")
+        add_review.connect("clicked", self._review)
+        review.pack_start(self.review_kind, False, False, 0)
+        review.pack_start(self.review_text, True, True, 0)
+        review.pack_start(add_review, False, False, 0)
+        area.pack_start(review, False, False, 0)
+        self.review_list = Gtk.Label(xalign=0)
+        self.review_list.set_line_wrap(True)
+        self.review_list.set_selectable(True)
+        area.pack_start(self.review_list, False, False, 0)
+        self.status = Gtk.Label(label="Choose a document to begin.", xalign=0)
+        self.status.set_line_wrap(True)
+        area.pack_start(self.status, False, False, 0)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.connect("response", lambda dialog, _response: dialog.destroy())
+        self.connect("destroy", lambda _dialog: setattr(self, "_alive", False))
+        self.show_all()
+        GLib.timeout_add_seconds(2, self._poll_remote)
+
+    def _selected_text(self) -> str:
+        buffer = self.editor.get_buffer()
+        return buffer.get_text(buffer.get_start_iter(), buffer.get_end_iter(), True)
+
+    def _show_reviews(self) -> None:
+        if not self.workspace:
+            return
+        rows = [f"{event.kind.title()} · {event.actor}: {event.body or event.status}" for event in self.workspace.reviews()[-8:]]
+        self.review_list.set_text("\n".join(rows) if rows else "No review events yet.")
+
+    def _set_editor_text(self, value: str) -> None:
+        self._buffer_loading = True
+        try:
+            self.editor.get_buffer().set_text(value)
+        finally:
+            self._buffer_loading = False
+
+    def _schedule_autosave(self, *_args) -> None:
+        if self._buffer_loading or not self.crdt or not self.workspace or self._autosave_pending:
+            return
+        self._autosave_pending = True
+        GLib.timeout_add(500, self._autosave)
+
+    def _autosave(self) -> bool:
+        self._autosave_pending = False
+        if not self._alive or not self.crdt or not self.workspace:
+            return False
+        try:
+            self.workspace.persist(self.crdt.replace(self._selected_text()))
+            secret = self.presence_key.get_text()
+            if secret:
+                key = hashlib.scrypt(secret.encode(), salt=self.workspace.document_id.encode(), n=2**14, r=8, p=1, dklen=32)
+                buffer = self.editor.get_buffer()
+                self.workspace.write_presence(key, buffer.get_iter_at_mark(buffer.get_insert()).get_offset(), buffer.get_iter_at_mark(buffer.get_selection_bound()).get_offset())
+        except Exception as exc:
+            self.status.set_text(f"Automatic collaboration save failed: {exc}")
+        return False
+
+    def _poll_remote(self) -> bool:
+        if not self._alive:
+            return False
+        if self.workspace and self.crdt:
+            try:
+                merged = self.workspace.load()
+                if merged.text != self.crdt.text:
+                    self.crdt = merged
+                    self._set_editor_text(merged.text)
+                    self.status.set_text("Peer changes merged automatically.")
+                self._show_reviews()
+            except Exception as exc:
+                self.status.set_text(f"Collaboration refresh failed: {exc}")
+        return True
+
+    def _open(self, _button: Gtk.Button) -> None:
+        try:
+            filename = self.file.get_filename()
+            if not filename:
+                raise CollaborationError("Choose a document")
+            self.source = Path(filename)
+            capability = document_capability(self.source)
+            if capability["mode"] == "lock-version-review":
+                self._set_editor_text("")
+                self.editor.set_editable(False)
+                self.status.set_text(f"{self.source.suffix.upper()} uses safe lock/version/review mode; real-time editing is intentionally disabled.")
+                return
+            self.editor.set_editable(True)
+            self.workspace = CollaborationWorkspace(self.source.parent, self.source.name, self.actor.get_text())
+            if capability["mode"] == "realtime-crdt":
+                self.crdt = self.workspace.import_checkpoint(self.source)
+                value = self.crdt.text
+                note = "CRDT document ready; collaboration state is separate in .tuxdrive-collaboration."
+            else:
+                document = ODFAdapter.load(self.source)
+                value = "\n".join(paragraph.text for paragraph in document.paragraphs) if document.kind == "odt" else "\n".join(f"{cell.sheet}!R{cell.row + 1}C{cell.column + 1}: {cell.formula or cell.value}" for cell in document.cells)
+                self.crdt = None
+                note = "Structured ODF preview ready. Export creates a deterministic snapshot and retains original XML for recovery. " + " ".join(sorted(set(document.warnings)))
+            self._set_editor_text(value)
+            self.status.set_text(note)
+            self._show_reviews()
+        except Exception as exc:
+            self.status.set_text(str(exc))
+
+    def _merge(self, _button: Gtk.Button) -> None:
+        try:
+            if not self.workspace or not self.crdt:
+                raise CollaborationError("Open a Markdown or text document first")
+            local = self._selected_text()
+            self.workspace.persist(self.crdt.replace(local))
+            self.crdt = self.workspace.load()
+            self._set_editor_text(self.crdt.text)
+            secret = self.presence_key.get_text()
+            if secret:
+                key = hashlib.scrypt(secret.encode(), salt=self.workspace.document_id.encode(), n=2**14, r=8, p=1, dklen=32)
+                buffer = self.editor.get_buffer()
+                cursor = buffer.get_iter_at_mark(buffer.get_insert()).get_offset()
+                bound = buffer.get_iter_at_mark(buffer.get_selection_bound()).get_offset()
+                self.workspace.write_presence(key, cursor, bound)
+                peers = self.workspace.read_presence(key)
+                self.status.set_text(f"Merged deterministically. {len(peers)} encrypted presence record(s) active; presence expires and is not audited.")
+            else:
+                self.status.set_text("Merged deterministically. Presence remains disabled until a shared passphrase is entered.")
+        except Exception as exc:
+            self.status.set_text(str(exc))
+
+    def _export(self, _button: Gtk.Button) -> None:
+        try:
+            if not self.source:
+                raise CollaborationError("Open a document first")
+            capability = document_capability(self.source)
+            if capability["mode"] == "realtime-crdt":
+                if not self.workspace or not self.crdt:
+                    raise CollaborationError("CRDT state is unavailable")
+                self.workspace.persist(self.crdt.replace(self._selected_text()))
+                self.crdt = self.workspace.load()
+                self.workspace.export_checkpoint(self.source, self.crdt)
+            elif capability["mode"] == "structured-experimental":
+                document = ODFAdapter.load(self.source)
+                lines = self._selected_text().splitlines()
+                if document.kind == "odt":
+                    for paragraph, value in zip(document.paragraphs, lines):
+                        paragraph.text = value
+                ODFAdapter.export(document, self.source)
+            else:
+                raise CollaborationError("This format uses lock/version/review and cannot be exported by the real-time editor")
+            self.status.set_text("Checkpoint exported successfully; ordinary editors can open the file.")
+        except Exception as exc:
+            self.status.set_text(str(exc))
+
+    def _review(self, _button: Gtk.Button) -> None:
+        try:
+            if not self.workspace:
+                raise CollaborationError("Open a collaborative document first")
+            buffer = self.editor.get_buffer()
+            start, end = buffer.get_selection_bounds() if buffer.get_has_selection() else (buffer.get_iter_at_mark(buffer.get_insert()), buffer.get_iter_at_mark(buffer.get_insert()))
+            self.workspace.add_review(self.review_kind.get_active_id() or "comment", self.review_text.get_text().strip(), start.get_offset(), end.get_offset())
+            self.review_text.set_text("")
+            self._show_reviews()
+            self.status.set_text("Workspace review event added for synchronization.")
+        except Exception as exc:
+            self.status.set_text(str(exc))
+
+
 class PeerSharingDialog(Gtk.Dialog):
     """Manage direct encrypted folders and connections without an intermediary."""
 
@@ -1109,6 +1332,7 @@ class PeerSharingDialog(Gtk.Dialog):
         notebook.append_page(self._host_page(), Gtk.Label(label="Share a folder"))
         notebook.append_page(self._client_page(), Gtk.Label(label="Connect to a peer"))
         notebook.append_page(self._lan_page(), Gtk.Label(label="Find on LAN"))
+        notebook.append_page(self._collaboration_page(), Gtk.Label(label="Collaborate"))
         area.pack_start(notebook, True, True, 0)
         self.status = Gtk.Label(xalign=0)
         self.status.set_line_wrap(True)
@@ -1330,6 +1554,26 @@ class PeerSharingDialog(Gtk.Dialog):
         buttons.pack_start(find, False, False, 0)
         buttons.pack_start(use, False, False, 0)
         page.pack_start(buttons, False, False, 0)
+        return page
+
+    def _collaboration_page(self) -> Gtk.Widget:
+        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        page.set_border_width(16)
+        description = Gtk.Label(label=(
+            "Edit Markdown and text with offline CRDT convergence, encrypted ephemeral presence, comments, suggestions, approvals and tasks. "
+            "Collaboration metadata is synchronized by the same shared folder while exported files remain compatible with ordinary editors."
+        ), xalign=0)
+        description.set_line_wrap(True)
+        page.pack_start(description, False, False, 0)
+        open_editor = Gtk.Button(label="Open collaborative editor")
+        open_editor.connect("clicked", lambda _button: CollaborativeEditorDialog(self))
+        page.pack_start(open_editor, False, False, 0)
+        formats = Gtk.Label(label=(
+            "Markdown/TXT: real-time and offline · ODT/ODS: structured experimental checkpoints with recovery XML · "
+            "DOCX/XLSX/PDF: edit leases, version history and review only"
+        ), xalign=0)
+        formats.set_line_wrap(True)
+        page.pack_start(formats, False, False, 0)
         return page
 
     def _reload_share_choices(self, selected: str = "new") -> None:

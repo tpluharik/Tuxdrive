@@ -50,6 +50,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Save and connect", app)
         self.assertIn("class ProfileDialog", app)
         self.assertIn("TuxDrive Profile / migrate", app)
+        self.assertIn("class CollaborativeEditorDialog", app)
+        self.assertIn('Gtk.Label(label="Collaborate")', app)
 
     def test_peer_runtime_and_key_generator_are_installed(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
@@ -113,17 +115,11 @@ class PackagingTests(unittest.TestCase):
             self.assertIn(package, recommends)
         self.assertIn("install-capabilities.json", Path("packaging/DEBIAN/postinst").read_text(encoding="utf-8"))
 
-    def test_experimental_macos_package_uses_keychain_and_native_bundle(self):
-        build = Path("scripts/build-macos-pkg.sh").read_text(encoding="utf-8")
-        launcher = Path("packaging/macos/tuxdrive-launcher").read_text(encoding="utf-8")
-        helper = Path("packaging/macos/rclone_password.py").read_text(encoding="utf-8")
-        self.assertIn("pkgbuild", build)
-        self.assertIn("codesign", build)
-        self.assertIn("TuxDrive.app", build)
-        self.assertIn("/opt/homebrew/bin/python3", launcher)
-        self.assertIn("TUXDRIVE_PASSWORD_HELPER", launcher)
-        self.assertIn("SecKeychainAddGenericPassword", helper)
-        self.assertNotIn("security add-generic-password", helper)
+    def test_release_workflow_builds_debian_only(self):
+        workflow = Path(".github/workflows/build.yml").read_text(encoding="utf-8")
+        self.assertIn("Build Debian package", workflow)
+        self.assertNotIn("macos-experimental-package", workflow)
+        self.assertFalse(Path("scripts/build-macos-pkg.sh").exists())
 
 
 if __name__ == "__main__":
