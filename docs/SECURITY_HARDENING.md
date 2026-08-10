@@ -1,16 +1,16 @@
-# TuxDrive 0.15.2 security hardening and secure operation
+# TuxDrive 0.16.0 security hardening and secure operation
 
-This document explains the controls implemented in TuxDrive 0.15.1–0.15.2, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls implemented in TuxDrive 0.15.1–0.16.0, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.15.2** is the supported baseline. Versions through 0.15.0 lack the complete path, update, credential, Tor, and delta hardening. Version 0.15.1 introduced those controls but allowed an upstream `cryptography` 46.x dependency later rejected by the release audit. Version 0.15.2 requires `cryptography>=50.0.0,<51` for Python/PyPI installations and uses Ubuntu's maintained `python3-cryptography` package for Debian installations, allowing Canonical security backports.
+Version **0.16.0** is the supported baseline. Versions through 0.15.0 lack the complete path, update, credential, Tor, and delta hardening. Version 0.15.1 introduced those controls but allowed an upstream `cryptography` 46.x dependency later rejected by the release audit. Version 0.16.0 requires `cryptography>=50.0.0,<51` for Python/PyPI installations and uses Ubuntu's maintained `python3-cryptography` package for Debian installations, allowing Canonical security backports.
 
 Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
 ## Security control inventory
 
-| Area | 0.15.2 behavior | Security purpose |
+| Area | 0.16.0 behavior | Security purpose |
 |---|---|---|
 | Updates | Ed25519 signature and expiry over canonical version, URL, SHA-256, notes, and expiry; approved repository URL; bounded 1 GiB download; Debian name/version inspection before PolicyKit | Prevent unsigned, replayed, substituted, oversized, or wrong-package updates |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
@@ -26,7 +26,7 @@ Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer author
 
 ## Dependency advisory response
 
-The 0.15.1 workflow installed `cryptography` 46.0.7 and `pip-audit` reported PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf. The highest required fixed version was 50.0.0, so 0.15.2 raises the upstream floor to 50.0.0 rather than ignoring the audit.
+The 0.15.1 workflow installed `cryptography` 46.0.7 and `pip-audit` reported PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf. The highest required fixed version was 50.0.0, so 0.16.0 raises the upstream floor to 50.0.0 rather than ignoring the audit.
 
 There are two installation trust paths:
 
@@ -70,7 +70,7 @@ Peer sharing and one-time drops remain enabled. Roles are enforced by TuxDrive s
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.15.2 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.16.0 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

@@ -8,4 +8,14 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true
 fi
 
+# Maintainer scripts run without the eventual user's graphical environment.
+# Record machine-wide capabilities here; TuxDrive repeats the check in the
+# user's session where GNOME, D-Bus and tray details are visible.
+mkdir -p /var/lib/tuxdrive
+if [ -x /usr/bin/tuxdrive ]; then
+  /usr/bin/tuxdrive --system-check --json > /var/lib/tuxdrive/install-capabilities.json 2>/dev/null || true
+  chmod 0644 /var/lib/tuxdrive/install-capabilities.json 2>/dev/null || true
+  echo "TuxDrive installed. Run 'tuxdrive --system-check' in the desktop session for the complete capability report."
+fi
+
 exit 0

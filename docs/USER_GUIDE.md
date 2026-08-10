@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.15.2 on Ubuntu 26.04, including signed updates, hardened Tor workspaces, encrypted profile migration, adaptive cloud-provider controls, Nautilus integration, multi-peer sharing, one-time encrypted drops, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, and diagnostics.
+This guide covers TuxDrive 0.16.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including signed updates, hardened Tor workspaces, encrypted profile migration, adaptive cloud-provider controls, Nautilus integration, multi-peer sharing, one-time encrypted drops, selective synchronization, streaming, recovery, integrity repair, encrypted vaults, and diagnostics. See [platform support](PLATFORM_SUPPORT.md) for optional integration and derivative limitations.
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
-Version 0.15.2 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.16.0 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.15.2 is the minimum supported security baseline. Upgrade older install
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.15.2_all.deb
+sudo apt install ./tuxdrive_0.16.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -484,7 +484,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.15.2_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.16.0_all.deb`.
 
 ## 13. Data safety
 
@@ -494,10 +494,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.15.2_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.15.2
+### Security upgrade checklist for 0.16.0
 
-1. Install `tuxdrive_0.15.2_all.deb` and restart TuxDrive and Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.15.2 and no signature or expiry error.
+1. Install `tuxdrive_0.16.0_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.16.0 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

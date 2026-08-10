@@ -62,6 +62,7 @@ from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, R
 from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
 from .migration import MigrationError, ProfileManager
+from .platform_support import format_report, inspect_host
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -2769,6 +2770,9 @@ class TuxDriveApplication(Gtk.Application):
         Gtk.Application.do_startup(self)
         self.hold()
         LOGGER.info("GTK application startup completed")
+        host_report = inspect_host()
+        for line in format_report(host_report).splitlines():
+            LOGGER.info("Host capability: %s", line)
         recovered = set(self.engine.recover_stale_mounts(self.config.jobs))
         for job in self.config.jobs:
             if job.id in recovered:

@@ -6,7 +6,7 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[0.15.2 security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
+🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[0.16.0 security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and top-40 roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
 
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
@@ -19,15 +19,15 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.15.2 targets Ubuntu 26.04. It retains the 0.15.1 security hardening and responds to newly disclosed `cryptography` advisories by requiring upstream version 50.0.0 or newer for Python-package installations; Debian installations continue to consume Ubuntu's security-maintained package and backports.
+Version 0.16.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It retains the 0.15.1 security hardening, adds adaptive host-capability discovery, and responds to newly disclosed `cryptography` advisories by requiring upstream version 50.0.0 or newer for Python-package installations; `.deb` installations consume the distribution's security-maintained package.
 
-### 0.15.2 security baseline
+### 0.16.0 security baseline
 
 - Python/PyPI installations require `cryptography>=50.0.0,<51` following PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf. Ubuntu `.deb` installations use Ubuntu's maintained `python3-cryptography` package so official security backports remain valid.
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls were introduced in 0.15.1 and remain enforced in 0.15.2:
+The following controls were introduced in 0.15.1 and remain enforced in 0.16.0:
 
 - Signed and expiring update manifests are verified against the release public key embedded in the application before a package can be downloaded or installed.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -139,7 +139,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.15.2_all.deb
+sudo apt install ./tuxdrive_0.16.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -148,7 +148,7 @@ For a streaming drive, choose an empty mount folder. It may be a child of a norm
 
 For direct collaboration, open the network icon in TuxDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxDrive pins the host public key and verifies the peer before starting two-way synchronization. Automatic NAT mapping is attempted by default. Where direct reachability is impossible, configure an SSH relay account and public forwarding port; the relay carries nested encrypted SFTP traffic without receiving file keys or retaining content.
 
-This is the only installation command required: APT resolves the Ubuntu desktop libraries automatically, while TuxDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts.
+APT installs the secure graphical core and normally installs supported optional recommendations. The same package adapts when an integration is unavailable; check the actual logged-in desktop with `tuxdrive --system-check`. TuxDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts. See the [distribution compatibility table and adaptive installation guide](docs/PLATFORM_SUPPORT.md).
 
 ## Build from source
 
@@ -157,9 +157,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.15.2_all.deb`.
+The installer is written to `dist/tuxdrive_0.16.0_all.deb`.
 
-The current suite contains 100 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 104 automated tests covering security confinement, signed updates and delta transactions, encrypted profile compatibility, peer transport policy, configuration safety, recovery, synchronization, streaming, providers, adaptive platform checks, Nautilus integration, packaging and diagnostics. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 

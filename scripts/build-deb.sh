@@ -2,8 +2,8 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.15.2_all"
-OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.15.2_all.deb"
+PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.16.0_all"
+OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.16.0_all.deb"
 
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p \
@@ -22,6 +22,7 @@ mkdir -p \
 cp "$PROJECT_ROOT/packaging/DEBIAN/control" "$PACKAGE_ROOT/DEBIAN/control"
 cp "$PROJECT_ROOT/packaging/DEBIAN/postinst" "$PACKAGE_ROOT/DEBIAN/postinst"
 cp "$PROJECT_ROOT/packaging/tuxdrive-launcher" "$PACKAGE_ROOT/usr/bin/tuxdrive"
+ln -s tuxdrive "$PACKAGE_ROOT/usr/bin/tuxdrive-doctor"
 cp "$PROJECT_ROOT/packaging/tuxdrive-rclone-password" "$PACKAGE_ROOT/usr/lib/tuxdrive/rclone-password"
 cp -R "$PROJECT_ROOT/src/tuxdrive/." "$PACKAGE_ROOT/usr/lib/tuxdrive/"
 find "$PACKAGE_ROOT/usr/lib/tuxdrive" -type d -name __pycache__ -prune -exec rm -rf -- {} +
@@ -71,7 +72,7 @@ chmod 0644 "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxdrive.py"
 # Verify the exact installed layout used by /usr/bin/tuxdrive. This catches
 # PYTHONPATH/package-placement regressions before a .deb can be published.
 PYTHONPATH="$PACKAGE_ROOT/usr/lib" /usr/bin/python3 -c \
-  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.15.2"; assert importlib.util.find_spec("tuxdrive.app"); assert importlib.util.find_spec("tuxdrive.updater"); assert importlib.util.find_spec("tuxdrive.peer"); assert importlib.util.find_spec("tuxdrive.tor"); assert importlib.util.find_spec("tuxdrive.recovery"); assert importlib.util.find_spec("tuxdrive.delta"); assert importlib.util.find_spec("tuxdrive.policies"); assert importlib.util.find_spec("tuxdrive.audit"); assert importlib.util.find_spec("tuxdrive.capabilities"); assert importlib.util.find_spec("tuxdrive.migration"); assert importlib.util.find_spec("tuxdrive.security")'
+  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.16.0"; assert importlib.util.find_spec("tuxdrive.app"); assert importlib.util.find_spec("tuxdrive.platform_support"); assert importlib.util.find_spec("tuxdrive.updater"); assert importlib.util.find_spec("tuxdrive.peer"); assert importlib.util.find_spec("tuxdrive.tor"); assert importlib.util.find_spec("tuxdrive.recovery"); assert importlib.util.find_spec("tuxdrive.delta"); assert importlib.util.find_spec("tuxdrive.policies"); assert importlib.util.find_spec("tuxdrive.audit"); assert importlib.util.find_spec("tuxdrive.capabilities"); assert importlib.util.find_spec("tuxdrive.migration"); assert importlib.util.find_spec("tuxdrive.security")'
 
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
 printf '%s\n' "$OUTPUT"

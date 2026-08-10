@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.15.2 suite contains **100 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
+The TuxDrive 0.16.0 suite contains **104 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, or personal files.
 
 ## Test groups
 
@@ -28,6 +28,7 @@ The TuxDrive 0.15.2 suite contains **100 automated tests**. Tests use temporary 
 | `test_config.py` | 3 | Round-trip persistence of accounts, jobs, peer shares and profile linkage; private `0600` permissions; invalid configuration quarantine. |
 | `test_delta.py` | 1 | Rolling BLAKE2 block signatures identify only modified ranges and calculate transferred bytes. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
+| `test_platform_support.py` | 3 | Safe distribution parsing, machine-readable capability reporting and unsupported-architecture blocking. |
 | `test_engine.py` | 20 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
 | `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
 | `test_packaging.py` | 8 | Launcher import path, installed Python layout, GTK/GDK version pinning, UI feature presence, provider icon packaging, peer runtime inclusion, Nautilus extension dependency/layout/action routing, InfoProvider completion, and packaged state emblems. |
@@ -74,9 +75,9 @@ The TuxDrive 0.15.2 suite contains **100 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.15.2_all.deb
-dpkg-deb --contents dist/tuxdrive_0.15.2_all.deb
-sha256sum dist/tuxdrive_0.15.2_all.deb
+dpkg-deb --info dist/tuxdrive_0.16.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.16.0_all.deb
+sha256sum dist/tuxdrive_0.16.0_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -86,13 +87,13 @@ bandit -q -r src -lll
 pip-audit -r requirements-security.txt
 ```
 
-The release is blocked on any high-severity Bandit result or unresolved dependency advisory. Do not add an ignore merely to make CI green; document exploitability and a time-bounded exception in `SECURITY.md` if no fixed dependency exists. The 0.15.2 floor was introduced because 46.0.7 was affected by PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf.
+The release is blocked on any high-severity Bandit result or unresolved dependency advisory. Do not add an ignore merely to make CI green; document exploitability and a time-bounded exception in `SECURITY.md` if no fixed dependency exists. The 0.16.0 floor was introduced because 46.0.7 was affected by PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf.
 
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.15.2 \
-  --package dist/tuxdrive_0.15.2_all.deb \
+python3 scripts/sign-update.py --version 0.16.0 \
+  --package dist/tuxdrive_0.16.0_all.deb \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
 

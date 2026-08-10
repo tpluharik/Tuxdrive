@@ -7,9 +7,9 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.15.2
+## Current baseline: 0.16.0
 
-Version 0.15.2 is the current security baseline. It retains the 0.15.1 hardening and raises upstream Python installations to `cryptography` 50.0.0+ in response to the 2026 advisories discovered by the release audit. The complete shipped-control and residual-risk inventory is in [Security hardening and secure operation](SECURITY_HARDENING.md). Ranks 1–19 and 21–24 are implemented; per-key hostile-client authorization remains part of rank 20's server/agent work.
+Version 0.16.0 is the current security baseline. It retains the 0.15.1 hardening and raises upstream Python installations to `cryptography` 50.0.0+ in response to the 2026 advisories discovered by the release audit. The complete shipped-control and residual-risk inventory is in [Security hardening and secure operation](SECURITY_HARDENING.md). Ranks 1–19 and 21–24 are implemented; per-key hostile-client authorization remains part of rank 20's server/agent work.
 
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on the headless peer agent, protocol versioning, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing, isolated per-role service endpoints and a published threat model. Tor transport and secure-workspace primitives should follow only after that foundation is externally reviewable. No planned item should be read as available until its status changes to a shipped version.
 

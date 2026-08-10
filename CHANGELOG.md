@@ -2,11 +2,17 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
-## 0.15.2 — dependency advisory response and CI repair
+## 0.16.0 — adaptive Debian/GNOME packaging
+
+- Added install-time and user-session host capability discovery with human-readable and JSON output through `tuxdrive --system-check`.
+- Reduced the mandatory package set to the secure GTK/Secret-Service core and moved Nautilus, tray, FUSE, Tor, NAT, network-policy, QR, notification and update integrations to recommendations.
+- Added per-feature availability and remediation reporting so an absent optional integration does not block unrelated cloud synchronization.
+- Declared amd64 and arm64 as the supported verified-rclone bootstrap architectures and documented the current Debian, Ubuntu, GNOME and file-manager boundaries.
+- Added packaging and platform-discovery regression tests and included the installation capability snapshot in `/var/lib/tuxdrive`.
 
 - Raised Python-package installations to `cryptography` 50.0.0 or newer after the 0.15.1 dependency audit identified PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf in the previously allowed 46.x series.
 - Kept Ubuntu `.deb` installations on the distribution-maintained `python3-cryptography` package so Ubuntu security backports remain installable without an impossible upstream-version constraint.
-- Updated release packaging, SBOM paths, installer metadata, documentation, and the signed update channel to 0.15.2.
+- Updated release packaging, SBOM paths, installer metadata and documentation to 0.16.0.
 
 ## 0.15.1 — comprehensive security hardening
 

@@ -1,5 +1,11 @@
 #!/bin/sh
 unset PYTHONPATH PYTHONHOME
+if [ "${0##*/}" = "tuxdrive-doctor" ] || [ "${1:-}" = "--system-check" ]; then
+  if [ "${1:-}" = "--system-check" ]; then
+    shift
+  fi
+  exec /usr/bin/python3 -I -c 'import runpy,sys; sys.path.insert(0,"/usr/lib"); sys.argv[0]="tuxdrive --system-check"; runpy.run_module("tuxdrive.platform_support",run_name="__main__")' "$@"
+fi
 rclone_config_root="${XDG_CONFIG_HOME:-${HOME}/.config}/rclone"
 if [ -f "$rclone_config_root/.tuxdrive-encrypted" ]; then
   export RCLONE_PASSWORD_COMMAND=/usr/lib/tuxdrive/rclone-password

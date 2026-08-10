@@ -9,6 +9,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("/usr/bin/python3 -I", launcher)
         self.assertIn('sys.path.insert(0,"/usr/lib")', launcher)
         self.assertIn('run_module("tuxdrive.app"', launcher)
+        self.assertIn('--system-check', launcher)
+        self.assertIn('tuxdrive-doctor', launcher)
+        self.assertIn('run_module("tuxdrive.platform_support"', launcher)
 
     def test_build_has_installed_layout_import_smoke_test(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
@@ -73,7 +76,7 @@ class PackagingTests(unittest.TestCase):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
         extension = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")
         app = Path("src/tuxdrive/app.py").read_text(encoding="utf-8")
-        self.assertIn("python3-nautilus", control)
+        self.assertIn("Recommends: python3-nautilus", control)
         self.assertIn("usr/share/nautilus-python/extensions", build_script)
         self.assertNotIn('gi.require_version("Nautilus"', extension)
         self.assertIn('group.activate_action(action, parameter)', extension)
@@ -101,6 +104,14 @@ class PackagingTests(unittest.TestCase):
         for state in ("synced", "syncing", "streaming", "paused", "pending", "error"):
             self.assertTrue(Path(f"packaging/emblem-tuxdrive-{state}.svg").exists())
         self.assertIn("scalable/emblems", build_script)
+
+    def test_optional_integrations_do_not_block_core_install(self):
+        control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
+        depends, recommends = control.split("Depends: ", 1)[1].split("\n", 1)[0], control.split("Recommends: ", 1)[1].split("\n", 1)[0]
+        for package in ("python3-nautilus", "fuse3", "tor", "obfs4proxy", "natpmpc"):
+            self.assertNotIn(package, depends)
+            self.assertIn(package, recommends)
+        self.assertIn("install-capabilities.json", Path("packaging/DEBIAN/postinst").read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":
