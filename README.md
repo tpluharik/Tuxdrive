@@ -19,15 +19,15 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.19.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It closes the critical updater race, enforces peer roles through isolated per-device server endpoints, isolates one-time drops, and bounds collaborative ODF/CRDT inputs. Searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization remain included.
+Version 0.19.1 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It closes the critical updater race, enforces peer roles through isolated per-device server endpoints, isolates one-time drops, and bounds collaborative ODF/CRDT inputs. Searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization remain included.
 
-### 0.16.0 security baseline
+### Current security baseline
 
 - Python/PyPI installations require `cryptography>=50.0.0,<51` following PYSEC-2026-3552, PYSEC-2026-3553, PYSEC-2026-3554, and GHSA-537c-gmf6-5ccf. Ubuntu `.deb` installations use Ubuntu's maintained `python3-cryptography` package so official security backports remain valid.
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.19.0:
+The following controls are enforced in 0.19.1:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -140,7 +140,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.19.0_all.deb
+sudo apt install ./tuxdrive_0.19.1_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight providers.
@@ -158,7 +158,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.19.0_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.19.1_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -172,7 +172,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 125 automated tests, including updater race-boundary, per-device peer isolation, hostile ODF/CRDT input, six-language help parity, RTL directionality and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 126 automated tests, including legacy/v2 trust-channel validation, updater race-boundary, per-device peer isolation, hostile ODF/CRDT input, six-language help parity, RTL directionality and translation fallback/persistence checks. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -182,7 +182,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
 
-**0.18.1 → 0.19.0 trust-root transition:** install 0.19.0 once with `sudo apt install ./tuxdrive_0.19.0_all.deb`. The prior private release key was unavailable for signing the bridge manifest, so 0.18.1 cannot authenticate the rotated key. Do not bypass its signature error. From 0.19.0 onward the app trusts the rotated offline key and the normal in-app process applies.
+**0.18.1 → 0.19.1 trust-root transition:** 0.18.1 now verifies an original-key-signed legacy manifest and can install 0.19.1 normally from the app. Version 0.19.1 switches to a separate v2 manifest signed by the rotated key for later releases. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

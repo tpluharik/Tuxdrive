@@ -7,9 +7,9 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.19.0
+## Current baseline: 0.19.1
 
-Version 0.19.0 is the critical/high remediation release. Privileged update verification now occurs again inside a fixed root helper over an immutable root-owned copy; peer keys receive isolated server endpoints with server-enforced read-only or inbox roots; one-time drops cannot browse the workspace; and ODT/ODS plus CRDT operation input is explicitly bounded. Six-language documentation and the 0.17 collaboration baseline remain available.
+Version 0.19.1 carries the complete 0.19.0 critical/high remediation and adds a signed trust bridge for 0.18.1. Privileged update verification occurs again inside a fixed root helper over an immutable root-owned copy; peer keys receive isolated server endpoints with server-enforced read-only or inbox roots; one-time drops cannot browse the workspace; and ODT/ODS plus CRDT operation input is explicitly bounded. Six-language documentation and the 0.17 collaboration baseline remain available.
 
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on the headless peer agent, protocol versioning, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing, isolated per-role service endpoints and a published threat model. Tor transport and secure-workspace primitives should follow only after that foundation is externally reviewable. No planned item should be read as available until its status changes to a shipped version.
 
@@ -43,9 +43,9 @@ The next recommended development milestone is **1.0.0 — operational hardening*
 | 11 | Per-file offline availability controls | Cloud | Completed 0.12.0 | Streaming files/folders expose **Always keep available offline** and **Free local space** in Nautilus; persistent rules hydrate VFS content and prevent normal age eviction. Hydration progress remains a future UI refinement. |
 | 12 | Nautilus integration | Cloud | Phase 3 completed 0.12.0 | Live state emblems, safe sync/web/log actions and per-item streaming availability controls are shipped. Integration is optional in Settings and enabled by default. |
 | 13 | Network, battery and schedule policies | Both | Completed 0.12.0 | Settings can defer transfers on metered networks, below a battery threshold, or outside a daily window. Default **Maximum usage** applies no limits. |
-| 14 | Read-only, send-only and receive-only peer roles | Peer | Hardened 0.19.0 | Protocol-v5 invitations persist directional roles. Each key now receives a distinct listener: read-only/receive-only uses server read-only mode, send-only is rooted in a dedicated inbox, and read/write retains the selected workspace. |
+| 14 | Read-only, send-only and receive-only peer roles | Peer | Hardened 0.19.1 | Protocol-v5 invitations persist directional roles. Each key now receives a distinct listener: read-only/receive-only uses server read-only mode, send-only is rooted in a dedicated inbox, and read/write retains the selected workspace. |
 | 15 | Peer activity and audit timeline | Peer | Phase 1 completed 0.13.0 | A private, permission-restricted, compacted JSONL timeline and GTK view record peer/sync lifecycle, failures, delta application and drop events. Device-attributed SFTP operation parsing and export/retention controls remain future refinements. |
-| 16 | One-time encrypted file drop | Peer | Hardened 0.19.0 | Every active drop receives a one-key, dedicated-port SFTP endpoint rooted at its random inbox. A modified client cannot list the parent workspace; ordinary jobs exclude inboxes and consumption is persisted after the first received file. |
+| 16 | One-time encrypted file drop | Peer | Hardened 0.19.1 | Every active drop receives a one-key, dedicated-port SFTP endpoint rooted at its random inbox. A modified client cannot list the parent workspace; ordinary jobs exclude inboxes and consumption is persisted after the first received file. |
 | 17 | Provider capability matrix and adaptive UI | Cloud | Phase 1 completed 0.13.0 | All providers declare conservative streaming, polling, hash, move, version and sharing capabilities. Job modes and share actions adapt accordingly; live server capability probes remain future work. |
 | 18 | Sync health dashboard | Both | Phase 1 completed 0.13.0 | A consolidated GTK view reports job state, mode/role, mount/callback status, last run/error, audit events and the provider matrix. Byte-rate, cache and retry-depth telemetry remain future refinements. |
 | 19 | Encrypted configuration backup and device migration | Both | Completed 0.14.0 | A TuxDrive Profile is encrypted locally with AES-256-GCM/scrypt and stored in a selected user-owned OAuth cloud. New devices discover it after connecting that provider, inspect metadata and restore atomically. OAuth credentials and peer private keys are excluded by default and require explicit sensitive opt-in. |
@@ -71,9 +71,9 @@ The next recommended development milestone is **1.0.0 — operational hardening*
 | 39 | Deterministic snapshots, branches and signed releases | Cooperation | High | Turn collaborative event streams into reproducible file snapshots; allow named branches, reviewed merges, cryptographically signed milestones and rollback. Users can always export a normal folder without requiring the collaboration engine to read it later. |
 | 40 | Offline-first workspace engine and convergence test lab | Both | Strategic | Create one versioned operation log for messages, membership, document edits and file manifests, with causal ordering, deduplication, bounded compaction and recovery after long offline periods. Ship a deterministic multi-device simulator covering partitions, reordering, malicious events, revocation and format round trips before calling real-time collaboration stable. |
 
-## Deferred hardening findings from the 0.19.0 review
+## Deferred hardening findings from the 0.19.1 review
 
-The critical and high findings were fixed in 0.19.0. The following defense-in-depth items remain scheduled. They do not replace the existing rule that TuxDrive assumes the logged-in desktop account is trusted, but they reduce persistence, corruption and abuse opportunities after another same-user process is compromised.
+The critical and high findings were fixed in 0.19.1. The following defense-in-depth items remain scheduled. They do not replace the existing rule that TuxDrive assumes the logged-in desktop account is trusted, but they reduce persistence, corruption and abuse opportunities after another same-user process is compromised.
 
 | Order | Hardening item | Severity | Planned control and acceptance criterion |
 |---:|---|---|---|
@@ -86,7 +86,7 @@ The critical and high findings were fixed in 0.19.0. The following defense-in-de
 | H7 | Structured diagnostic redaction | Medium | Escape control characters and redact tokens, authorization material, bridge credentials and sensitive URL query fields before UI/log output; add hostile-filename fixtures. |
 | H8 | User-service sandbox expansion | Medium | After the updater is fully separated, evaluate `NoNewPrivileges`, `ProtectSystem`, `RestrictSUIDSGID`, address-family and device restrictions without breaking FUSE, Secret Service, browser OAuth or notifications. |
 | H9 | OAuth loopback adversarial tests | Medium | Add PKCE/state/callback-listener integration tests for every OAuth provider path, including occupied ports, stale callbacks and mismatched state. |
-| H10 | Peer/drop quotas and operation telemetry | Medium | Add per-endpoint byte/file/rate quotas, immediate completed-upload session termination and device-attributed operation export. Dedicated roots already prevent workspace escape in 0.19.0. |
+| H10 | Peer/drop quotas and operation telemetry | Medium | Add per-endpoint byte/file/rate quotas, immediate completed-upload session termination and device-attributed operation export. Dedicated roots already prevent workspace escape in 0.19.1. |
 
 ## Rank 20 expanded: headless and cross-platform peer agent
 

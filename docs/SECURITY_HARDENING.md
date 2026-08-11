@@ -1,18 +1,18 @@
-# TuxDrive 0.19.0 security hardening and secure operation
+# TuxDrive 0.19.1 security hardening and secure operation
 
-This document explains the controls implemented through TuxDrive 0.19.0, including the second-round critical/high remediation, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls implemented through TuxDrive 0.19.1, including the second-round critical/high remediation, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.19.0** is the supported baseline. It adds root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing to the earlier path, credential, Tor and delta controls. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version **0.19.1** is the supported baseline. It adds root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing to the earlier path, credential, Tor and delta controls. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
-The 0.19.0 release rotates the update trust root because the preceding offline private key was unavailable. This is intentionally not treated as a signature-verification exception: 0.18.1 users install the reviewed 0.19.0 `.deb` once through APT, then all later manifests are verified with the new offline key. The replacement private key is not committed and must be archived by the maintainer with mode `0600` in protected offline storage.
+The 0.19.1 release completes a trust-root rotation without disabling verification. The legacy `latest.json` manifest is signed by the original offline key embedded in 0.18.1 and is restricted to the 0.19.1 bridge package. Version 0.19.1 reads `latest-v2.json`, signed by the rotated offline key, for all later updates. Both private keys remain outside the repository with mode `0600`; the original key should be retired after the documented legacy-support window.
 
 ## Security control inventory
 
-| Area | 0.19.0 behavior | Security purpose |
+| Area | 0.19.1 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
@@ -74,7 +74,7 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.19.0 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.19.1 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

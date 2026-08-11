@@ -15,7 +15,9 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
 
-MANIFEST_URL = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/update/latest.json"
+# 0.19.1 and later use a dedicated manifest so the legacy 0.18.1 channel can
+# remain signed by its original key long enough to bridge existing installs.
+MANIFEST_URL = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/update/latest-v2.json"
 ALLOWED_PREFIX = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/"
 UPDATE_PUBLIC_KEY = "3c0BtMjwCmlZR0nw2jdqsAQQm7nYyd68r8BtnK2XzyY="
 MAX_UPDATE_SIZE = 1024 * 1024 * 1024

@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.19.1 — signed updater trust bridge
+
+- Restored automatic updates for 0.18.1 without weakening signature checks. The legacy `latest.json` channel remains signed by the original offline key and points only to 0.19.1.
+- Moved 0.19.1 and later clients to the separately signed `latest-v2.json` channel using the rotated offline key, preventing a single static manifest from being interpreted under two trust roots.
+- Added release tests that verify both manifests target the exact current Debian package and validate under their respective Ed25519 public keys.
+- Kept the complete 0.19.0 critical/high remediation unchanged.
+
 ## 0.19.0 — critical/high security remediation
 
 - Closed the in-app updater's privilege-boundary race. A fixed PolicyKit helper now independently retrieves and verifies the signed manifest, copies the user-owned package through a no-follow file descriptor into a root-only directory, verifies the immutable copy's SHA-256 and Debian identity, and only then invokes APT.
@@ -12,7 +19,7 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 - Hardened ODT/ODS import against ZIP bombs, duplicate/traversal entries, excessive archive/XML sizes and unsafe XML entities by using `defusedxml` and explicit resource limits.
 - Added eight focused updater, peer-isolation, archive and deep/cyclic-CRDT regression tests; the complete suite now contains 125 tests.
 - Documented the remaining medium hardening work in the roadmap and updated the repository and in-app security guidance.
-- Rotated the offline update signing trust root because the preceding private release key was unavailable in the protected release environment. Upgrade from 0.18.1 to 0.19.0 once with the downloaded `.deb`; signed in-app updates resume from 0.19.0 onward.
+- Rotated the offline update signing trust root. Version 0.19.1 subsequently introduced a separately signed legacy bridge after the original release key was recovered from protected storage.
 
 ## 0.18.1 — Arabic and Hebrew localization
 

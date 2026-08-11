@@ -3,6 +3,6 @@
   "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.19.1_all.deb",
   "sha256": "6da2566fcbde5836c82c91d782862322ac718467ad63c52b55c2bd085e856be4",
   "notes": "Signed updater trust bridge and complete 0.19 security remediation",
-  "expires_at": "2026-11-09T04:11:54.095923+00:00",
-  "signature": "soLJ05G/EJ4NSwSDq49U4IH3qy6Ly7qBh/EwmeFlbHEyJ9MjLUDpb+/a64uhtcSaOytJn3aF88BGGokm49kPAA=="
+  "expires_at": "2026-11-09T04:11:54.151380+00:00",
+  "signature": "NkN4lS/EDWvuaC8hZtUtN/D//SK9PKsXc4UOLOg4xfpI2Sn5EG+AzLWYYeduYLfeC1SO01LOBOtIlwMV3tfhBA=="
 }
