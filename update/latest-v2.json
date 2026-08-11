@@ -1,8 +1,8 @@
 {
-  "version": "0.20.9",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.9_all.deb",
-  "sha256": "98569a929cb61d8179df84efa80ef0059ecdc318b25d52e5a4880011280a5dfa",
-  "notes": "Keeps the TuxDrive Nautilus menu available after a streamed file is localized by using URI-safe badge refresh and the dedicated menu-update signal.",
-  "expires_at": "2026-11-09T19:28:07.120220+00:00",
-  "signature": "OLmsKizlZT9QlHkOt+EysZcnrV4tjHkILB5UFlEcYRpsH1GqgAGKTZBqE6N39N/pqxSx0wtIvxCuQhoYgNMxBA=="
+  "version": "0.20.10",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.10_all.deb",
+  "sha256": "7639067a7ace86e167c48a5710464f8b06988fc31107fb69d1c888fd91ff6ed4",
+  "notes": "Fixes the provider-independent Nautilus 4.1 exception so the TuxDrive menu remains available while a streamed file is downloading and after it is kept offline.",
+  "expires_at": "2026-11-09T19:57:32.224719+00:00",
+  "signature": "fpfhJ2Nngm9GZE/Nehg6I/nWG4yx/pqZ6gPjM19YeOQ+CTzoNBRATVaH0APMeUwuDBELl4vqpPCuSK0ZMEwMBg=="
 }

@@ -19,16 +19,12 @@ def load_extension():
         def __init__(self, **values):
             self.values = values
             self.submenu = None
-            self.sensitive = True
 
         def connect(self, *_args):
             return None
 
         def set_submenu(self, submenu):
             self.submenu = submenu
-
-        def set_sensitive(self, value):
-            self.sensitive = value
 
     gi = types.ModuleType("gi")
     repository = types.ModuleType("gi.repository")
@@ -135,6 +131,38 @@ class NautilusExtensionTests(unittest.TestCase):
         self.assertEqual(menu[0].values["label"], "TuxDrive")
         labels = [item.values["label"] for item in menu[0].submenu.items]
         self.assertIn("Free local space (make online-only)", labels)
+
+    def test_pending_file_uses_supported_sensitive_property(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxDriveExtension)
+        job = {
+            "id": "drive",
+            "local_path": "/mnt/Cloud",
+            "mode": "virtual_drive",
+            "offline_paths": ["folder/one.txt"],
+            "online_only_paths": [],
+        }
+        path = Path("/mnt/Cloud/folder/one.txt")
+        with patch.object(extension, "_jobs", return_value=[job]), patch.object(
+            extension,
+            "_runtime_states",
+            return_value={
+                "drive": {
+                    "offline_paths": [],
+                    "configured_offline_paths": ["folder/one.txt"],
+                    "online_only_paths": [],
+                    "offline_pending_paths": ["folder/one.txt"],
+                }
+            },
+        ), patch.object(extension, "_local_path", return_value=path):
+            menu = provider._menu_items([object()], allow_availability=True)
+
+        online_only = next(
+            item for item in menu[0].submenu.items
+            if item.values["name"] == "TuxDrive::OnlineOnly"
+        )
+        self.assertEqual(online_only.values["label"], "Downloading for offline availability…")
+        self.assertFalse(online_only.values["sensitive"])
 
     def test_metadata_burst_rebuilds_menu_and_reacquires_current_file_info(self):
         extension = load_extension()

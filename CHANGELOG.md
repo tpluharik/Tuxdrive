@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.10 — Nautilus 4.1 offline-action compatibility
+
+- Fixed the provider-independent exception that removed the complete TuxDrive submenu after a file entered pending or verified offline state. `Nautilus.MenuItem` exposes sensitivity as a GObject property; it does not implement the GTK widget method `set_sensitive()`.
+- The pending action now supplies `sensitive=false` through the supported menu-item constructor property. Completed files retain an enabled **Free local space (make online-only)** action on Google Drive, OneDrive and every other streaming backend.
+- Corrected the Nautilus test double so it no longer invents the unsupported method, and added a pending-file regression that fails on the old implementation. The complete suite now contains 162 automated tests.
+
 ## 0.20.9 — durable post-localization Nautilus menu
 
 - Replaced retained caller-owned `Nautilus.FileInfo` wrappers with stable URI keys. Completion refreshes now reacquire the current file object from Nautilus's cache before invalidating its badge metadata, avoiding stale FUSE wrappers after a streamed file becomes local.
