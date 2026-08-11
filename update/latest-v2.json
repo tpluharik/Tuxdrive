@@ -1,8 +1,8 @@
 {
-  "version": "0.20.11",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.11_all.deb",
-  "sha256": "dbd62c7fa14a4097cb1f9707622d13458f571db491017d2b48270e963861d788",
-  "notes": "Fix Nautilus 4.1 post-download menu construction; offline files retain Free local space action",
-  "expires_at": "2026-11-09T20:19:20.391035+00:00",
-  "signature": "nUeH1W31/sDzw8OSqF1ufwMdV8mN/8mnyO7q9qJdDOCUn5UQ6GRwYuiIxj2GZ2Df+aNY3U7sRMYAAFTE+VEQDw=="
+  "version": "0.21.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.21.0_all.deb",
+  "sha256": "b580950ab1dacef3527e691e15025ff8db0526e3720db7916ee0568c9c9bc9c2",
+  "notes": "Add drag-and-drop folder ordering, group moves, and persistent compact minimized groups",
+  "expires_at": "2026-11-09T20:53:42.021317+00:00",
+  "signature": "NC1VbzeH0BAnkITLfyKGPpJrxndpXgbWUvhEmXV9DK2wJAyG8Vz1DmA6+HL0jb3zPZ+jSRbWjN1DQ9wzmgXvBQ=="
 }

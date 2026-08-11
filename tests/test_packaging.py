@@ -62,6 +62,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('Gtk.Label(label="Collaborate")', app)
         self.assertIn("class HelpCenterDialog", app)
         self.assertIn('language.flag', app)
+        self.assertIn('JOB_DND_MIME = "application/x-tuxdrive-synchronized-folder"', app)
+        self.assertIn("Gtk.TargetEntry.new(JOB_DND_MIME, Gtk.TargetFlags.SAME_APP, 0)", app)
+        self.assertIn("drag_source_set(", app)
+        self.assertIn("drag_dest_set(", app)
+        self.assertIn('tr("minimize_group")', app)
+        self.assertIn('tr("expand_group")', app)
+        self.assertIn("if group.collapsed:", app)
+        self.assertIn("account.provider.icon_name", app)
 
     def test_peer_runtime_and_key_generator_are_installed(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")

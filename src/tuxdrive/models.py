@@ -242,11 +242,14 @@ class FolderGroup:
     name: str
     id: str = field(default_factory=lambda: uuid4().hex)
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    collapsed: bool = False
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "FolderGroup":
         allowed = set(cls.__dataclass_fields__)
-        return cls(**{key: item for key, item in value.items() if key in allowed})
+        data = {key: item for key, item in value.items() if key in allowed}
+        data["collapsed"] = value.get("collapsed") is True
+        return cls(**data)
 
 
 @dataclass(slots=True)

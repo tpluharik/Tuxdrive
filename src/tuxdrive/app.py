@@ -63,6 +63,7 @@ from .models import (
     paths_overlap, safe_streaming_overlap,
 )
 from .github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
+from .folder_layout import move_job
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
@@ -85,6 +86,7 @@ except (ImportError, ValueError):  # pragma: no cover - optional desktop compone
 
 
 APP_ID = "io.github.tuxdrive.TuxDrive"
+JOB_DND_MIME = "application/x-tuxdrive-synchronized-folder"
 
 
 def _desktop_open_command(target: str) -> list[str]:
@@ -2622,9 +2624,10 @@ class MainWindow(Gtk.ApplicationWindow):
         valid_groups = {item.id for item in self.controller.config.folder_groups}
         for group in self.controller.config.folder_groups:
             self.job_list.add(self._group_row(group))
-            for job in self.controller.config.jobs:
-                if job.group_id == group.id:
-                    self.job_list.add(self._job_row(job))
+            if not group.collapsed:
+                for job in self.controller.config.jobs:
+                    if job.group_id == group.id:
+                        self.job_list.add(self._job_row(job))
         ungrouped = [
             job for job in self.controller.config.jobs
             if not job.group_id or job.group_id not in valid_groups
@@ -2647,8 +2650,33 @@ class MainWindow(Gtk.ApplicationWindow):
             f"<b>{GLib.markup_escape_text(group.name if group else tr('ungrouped'))}</b>"
         )
         box.pack_start(icon, False, False, 0)
-        box.pack_start(name, True, True, 0)
+        box.pack_start(name, False, False, 0)
         if group:
+            group_jobs = [job for job in self.controller.config.jobs if job.group_id == group.id]
+            if group.collapsed:
+                icons = Gtk.Box(spacing=5)
+                for job in group_jobs:
+                    account = next(
+                        (item for item in self.controller.config.accounts if item.remote == job.account_remote),
+                        None,
+                    )
+                    provider_icon = Gtk.Image.new_from_icon_name(
+                        account.provider.icon_name if account else "folder-remote-symbolic",
+                        Gtk.IconSize.MENU,
+                    )
+                    provider_icon.set_tooltip_text(
+                        f"{job.name} · {account.provider.label if account else tr('cloud_storage')}"
+                    )
+                    icons.pack_start(provider_icon, False, False, 0)
+                box.pack_start(icons, False, False, 0)
+            spacer = Gtk.Box()
+            box.pack_start(spacer, True, True, 0)
+            collapse = Gtk.Button.new_from_icon_name(
+                "pan-end-symbolic" if group.collapsed else "pan-down-symbolic",
+                Gtk.IconSize.BUTTON,
+            )
+            collapse.set_tooltip_text(tr("expand_group") if group.collapsed else tr("minimize_group"))
+            collapse.connect("clicked", self._toggle_group, group)
             rename = Gtk.Button.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON)
             rename.set_tooltip_text("Rename group")
             rename.connect("clicked", self._rename_group, group)
@@ -2657,7 +2685,13 @@ class MainWindow(Gtk.ApplicationWindow):
             delete.connect("clicked", self._delete_group, group)
             box.pack_end(delete, False, False, 0)
             box.pack_end(rename, False, False, 0)
+            box.pack_end(collapse, False, False, 0)
+        else:
+            spacer = Gtk.Box()
+            box.pack_start(spacer, True, True, 0)
         row.add(box)
+        self._enable_job_drop_target(row, group.id if group else "")
+        row.set_tooltip_text(tr("drop_group_hint"))
         return row
 
     def _job_row(self, job: SyncJob) -> Gtk.ListBoxRow:
@@ -2667,6 +2701,12 @@ class MainWindow(Gtk.ApplicationWindow):
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_border_width(14)
         top = Gtk.Box(spacing=12)
+        drag_handle = Gtk.EventBox()
+        drag_handle.set_visible_window(False)
+        drag_icon = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON)
+        drag_handle.add(drag_icon)
+        drag_handle.set_tooltip_text(tr("drag_folder_hint"))
+        top.pack_start(drag_handle, False, False, 0)
         icon_name = account.provider.icon_name if account else "folder-remote-symbolic"
         job_icon = Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND)
         job_icon.set_tooltip_text(account.provider.label if account else tr("cloud_storage"))
@@ -2786,7 +2826,75 @@ class MainWindow(Gtk.ApplicationWindow):
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
         row.add(outer)
+        self._enable_job_drag_source(drag_handle, job)
+        self._enable_job_drop_target(row, job.group_id, job)
         return row
+
+    @staticmethod
+    def _job_drag_targets() -> list[Gtk.TargetEntry]:
+        return [Gtk.TargetEntry.new(JOB_DND_MIME, Gtk.TargetFlags.SAME_APP, 0)]
+
+    def _enable_job_drag_source(self, widget: Gtk.Widget, job: SyncJob) -> None:
+        widget.drag_source_set(
+            Gdk.ModifierType.BUTTON1_MASK,
+            self._job_drag_targets(),
+            Gdk.DragAction.MOVE,
+        )
+        widget.connect("drag-data-get", self._job_drag_data_get, job.id)
+
+    def _enable_job_drop_target(
+        self,
+        row: Gtk.ListBoxRow,
+        group_id: str,
+        anchor: SyncJob | None = None,
+    ) -> None:
+        row.drag_dest_set(
+            Gtk.DestDefaults.ALL,
+            self._job_drag_targets(),
+            Gdk.DragAction.MOVE,
+        )
+        row.connect("drag-data-received", self._job_drag_data_received, group_id, anchor)
+
+    def _job_drag_data_get(
+        self,
+        _widget: Gtk.Widget,
+        _context: Gdk.DragContext,
+        selection: Gtk.SelectionData,
+        _info: int,
+        _time: int,
+        job_id: str,
+    ) -> None:
+        selection.set_text(job_id, -1)
+
+    def _job_drag_data_received(
+        self,
+        row: Gtk.ListBoxRow,
+        context: Gdk.DragContext,
+        _x: int,
+        y: int,
+        selection: Gtk.SelectionData,
+        _info: int,
+        time: int,
+        group_id: str,
+        anchor: SyncJob | None,
+    ) -> None:
+        job_id = (selection.get_text() or "").strip()
+        valid = any(job.id == job_id for job in self.controller.config.jobs)
+        changed = False
+        if valid:
+            after = bool(anchor and y >= max(row.get_allocated_height(), 1) / 2)
+            changed = move_job(
+                self.controller.config.jobs,
+                self.controller.config.folder_groups,
+                job_id,
+                group_id,
+                anchor_job_id=anchor.id if anchor else "",
+                after=after,
+            )
+        Gtk.drag_finish(context, valid, False, time)
+        if changed:
+            self.controller.save()
+            self.refresh()
 
     def _choose_provider(self, _button: Gtk.Widget) -> None:
         dialog = Gtk.Dialog(title=tr("choose_provider"), transient_for=self, modal=True)
@@ -2892,6 +3000,11 @@ class MainWindow(Gtk.ApplicationWindow):
             group.name = name
             self.controller.save()
             self.refresh()
+
+    def _toggle_group(self, _button: Gtk.Widget, group: FolderGroup) -> None:
+        group.collapsed = not group.collapsed
+        self.controller.save()
+        self.refresh()
 
     def _group_name_dialog(self, title: str, action: str, value: str = "") -> str:
         dialog = Gtk.Dialog(title=title, transient_for=self, modal=True)

@@ -29,6 +29,13 @@ class LocalizationAndHelpTests(unittest.TestCase):
         self.assertEqual(get_language(), "en")
         self.assertEqual(tr("missing-key"), "missing-key")
 
+    def test_group_drag_and_collapse_controls_are_localized(self):
+        for language in LANGUAGES:
+            set_language(language.code)
+            for key in ("expand_group", "minimize_group", "drag_folder_hint", "drop_group_hint"):
+                self.assertNotEqual(tr(key), key)
+                self.assertGreater(len(tr(key)), 5)
+
 
 if __name__ == "__main__":
     unittest.main()

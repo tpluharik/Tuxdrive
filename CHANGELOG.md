@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.21.0 — drag-and-drop folder organization
+
+- Added drag handles to synchronized-folder rows. Dropping a row above or below another row changes its saved position; dropping it on a group header moves it into that group. Local paths, provider paths and file content are never moved.
+- Added persistent collapsible groups. A minimized group hides its full folder rows and shows one compact provider icon per synchronized folder next to the group name, with folder/provider details available as a tooltip.
+- Kept the existing **Group** dialog as an accessible keyboard-friendly alternative, and added localized drag/drop and expand/minimize guidance in English, German, French, Spanish, Arabic and Hebrew.
+- Added pure layout-order regression coverage, collapsed-state configuration migration/round-trip coverage, package UI assertions and complete localization checks. The complete suite now contains 171 automated tests.
+
 ## 0.20.11 — durable Nautilus constructor compatibility
 
 - Fixed the remaining provider-independent post-download menu failure. Nautilus 4.1 exposes `sensitive` as a writable GObject property, but `Nautilus.MenuItem.new()` accepts only `name`, `label`, `tip` and `icon`; passing `sensitive` as a fifth constructor keyword raised `TypeError` only when the pending/offline branch was built.

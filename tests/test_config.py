@@ -28,7 +28,7 @@ class ConfigStoreTests(unittest.TestCase):
                     )
                 ],
                 peer_shares=[PeerShare("Direct", "/tmp/direct", "192.0.2.4", 22022, "ssh-ed25519 AAAA")],
-                folder_groups=[FolderGroup("Customers", id="customers")],
+                folder_groups=[FolderGroup("Customers", id="customers", collapsed=True)],
             )
             value.jobs[0].group_id = "customers"
             store.save(value)
@@ -42,8 +42,11 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertTrue(loaded.jobs[0].acknowledge_google_abuse)
             self.assertEqual(loaded.peer_shares[0].advertised_host, "192.0.2.4")
             self.assertEqual(loaded.folder_groups[0].name, "Customers")
+            self.assertTrue(loaded.folder_groups[0].collapsed)
             self.assertEqual(loaded.jobs[0].group_id, "customers")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
+            self.assertFalse(FolderGroup.from_dict({"name": "Legacy group", "id": "legacy"}).collapsed)
+            self.assertFalse(FolderGroup.from_dict({"name": "Invalid", "collapsed": "false"}).collapsed)
 
     def test_profile_settings_round_trip(self):
         with tempfile.TemporaryDirectory() as temporary:
