@@ -3673,63 +3673,12 @@ class TuxDriveApplication(Gtk.Application):
         relative: str,
         available: bool,
     ) -> str:
-        """Hydrate/release content and apply the matching live VFS policy."""
-        previous_rules = list(job.offline_paths)
-        previous_online_only = list(job.online_only_paths)
-        previously_pinned = bool(previous_rules)
-        was_mounted = job.id in self.engine.mounted_jobs or os.path.ismount(job.local)
-
-        if available and not previously_pinned:
-            # Apply the no-eviction policy *before* reading the first pin.  If
-            # a large selection exceeded the ordinary cache quota while being
-            # hydrated, early files could otherwise be evicted before the
-            # action finished and the badge would be wrong.
-            job.offline_paths = [relative]
-            job.online_only_paths = [
-                rule for rule in previous_online_only
-                if rule != relative and not rule.startswith(relative.rstrip("/") + "/")
-            ]
-            policy_result = self.engine.restart_mount(job, self._job_finished)
-            if not policy_result.success:
-                job.offline_paths = previous_rules
-                job.online_only_paths = previous_online_only
-                recovery = self.engine.restart_mount(job, self._job_finished)
-                recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
-                raise RuntimeError(
-                    f"The streaming drive could not activate durable offline retention: "
-                    f"{policy_result.message} ({recovery_detail})"
-                )
-            try:
-                message = self.engine.set_offline(job, relative, True)
-            except Exception:
-                job.offline_paths = previous_rules
-                job.online_only_paths = previous_online_only
-                self.engine.restart_mount(job, self._job_finished)
-                raise
-            return f"{message} · durable offline retention active"
-
-        message = self.engine.set_offline(job, relative, available)
-        now_pinned = bool(job.offline_paths)
-        if previously_pinned == now_pinned:
-            return message
-        if not was_mounted:
-            return f"{message} · streaming policy will apply on the next connection"
-
-        result = self.engine.restart_mount(job, self._job_finished)
-        if result.success:
-            policy = "durable offline retention active" if now_pinned else "normal streaming cache active"
-            return f"{message} · {policy}"
-
-        # Keep the in-memory/configured rule consistent with the active policy
-        # and make one best-effort attempt to restore the prior mount.
-        job.offline_paths = previous_rules
-        job.online_only_paths = previous_online_only
-        recovery = self.engine.restart_mount(job, self._job_finished)
-        recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
-        raise RuntimeError(
-            f"Offline content was transferred, but the streaming drive could not apply its retention policy: "
-            f"{result.message} ({recovery_detail})"
-        )
+        """Hydrate or release exactly the selected item without remounting."""
+        # The mount starts with the stable retention policy required by pinned
+        # content. A per-item action must never detach the live FUSE view: doing
+        # so invalidates Nautilus' FileInfo objects and can make it re-read
+        # neighbouring files while reconstructing the directory.
+        return self.engine.set_offline(job, relative, available)
 
     def _offline_state_ready(
         self,

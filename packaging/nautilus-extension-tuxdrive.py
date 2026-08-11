@@ -14,9 +14,9 @@ import gi
 # the host has loaded the other prevents the complete extension from loading.
 from gi.repository import Gio, GLib, GObject, Nautilus
 
-
 APP_ID = "io.github.tuxdrive.TuxDrive"
 APP_PATH = "/io/github/tuxdrive/TuxDrive"
+_LAST_VALID_JOBS: list[dict] = []
 
 
 def _config_path() -> Path:
@@ -27,26 +27,32 @@ def _jobs() -> list[dict]:
     # Prefer the small extension snapshot. It is written atomically, contains
     # no provider credentials and avoids parsing unrelated application state
     # for every item in a FUSE directory.
+    global _LAST_VALID_JOBS
     meta = _state_document().get("__tuxdrive__", {})
     if isinstance(meta, dict) and isinstance(meta.get("jobs"), list):
         if not meta.get("nautilus_integration", True):
+            _LAST_VALID_JOBS = []
             return []
-        return list(meta["jobs"])
+        _LAST_VALID_JOBS = list(meta["jobs"])
+        return list(_LAST_VALID_JOBS)
     try:
         value = json.loads(_config_path().read_text(encoding="utf-8"))
         if not value.get("settings", {}).get("nautilus_integration", True):
+            _LAST_VALID_JOBS = []
             return []
         jobs = value.get("jobs", [])
-        return list(jobs) if isinstance(jobs, list) else []
+        if isinstance(jobs, list):
+            _LAST_VALID_JOBS = list(jobs)
+            return list(_LAST_VALID_JOBS)
+        return list(_LAST_VALID_JOBS)
     except (OSError, ValueError, TypeError):
         # The app publishes a minimal, non-secret snapshot specifically for
         # the extension.  A transient/invalid full configuration read must not
         # make the complete TuxDrive menu disappear inside a live FUSE mount.
-        meta = _state_document().get("__tuxdrive__", {})
-        if not isinstance(meta, dict) or not meta.get("nautilus_integration", True):
-            return []
-        jobs = meta.get("jobs", [])
-        return list(jobs) if isinstance(jobs, list) else []
+        # Keep the last complete credential-free snapshot. Menu construction
+        # often races the atomic state-file replacement after a pin changes;
+        # a single failed read must not make the menu disappear.
+        return list(_LAST_VALID_JOBS)
 
 
 def _state_path() -> Path:
@@ -78,9 +84,9 @@ def _local_path(file_info: Nautilus.FileInfo) -> Path | None:
     return Path(os.path.abspath(os.path.expanduser(value))) if value else None
 
 
-def _containing_job(path: Path) -> dict | None:
+def _containing_job(path: Path, configured_jobs: list[dict] | None = None) -> dict | None:
     matches: list[tuple[int, dict]] = []
-    for job in _jobs():
+    for job in configured_jobs if configured_jobs is not None else _jobs():
         try:
             root = Path(os.path.abspath(os.path.expanduser(job["local_path"])))
             path.relative_to(root)
@@ -97,6 +103,9 @@ def _relative_path(path: Path, job: dict) -> str:
 
 
 def _matches_rule(relative: str, rules: list[str]) -> bool:
+    # A file rule applies only to that exact file. The descendant form is
+    # intentionally one-way so ``folder/one.txt`` never matches its parent or
+    # the sibling ``folder/two.txt``.
     return any(
         rule == "." or relative == rule or relative.startswith(rule.rstrip("/") + "/")
         for rule in rules
@@ -144,11 +153,14 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             for name in basenames if isinstance(name, str)
         ):
             return
-        for file_info in list(self._known_files.values()):
+        for uri, file_info in list(self._known_files.items()):
             try:
                 file_info.invalidate_extension_info()
-            except GLib.Error:
-                continue
+            except Exception:
+                # FileInfo objects from an earlier FUSE view become invalid
+                # when a provider disconnects. Never let one stale object
+                # break future menu callbacks.
+                self._known_files.pop(uri, None)
 
     def _activate(self, action: str, path: Path | None = None) -> None:
         if action == "open-online-path":
@@ -203,7 +215,8 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         paths = [_local_path(item) for item in files]
         if any(path is None for path in paths):
             return []
-        jobs = [_containing_job(path) for path in paths if path]
+        configured_jobs = _jobs()
+        jobs = [_containing_job(path, configured_jobs) for path in paths if path]
         if not any(jobs):
             return []
 
@@ -246,7 +259,7 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             )
             online.connect("activate", lambda _item: self._activate("open-online-path", paths[0]))
             submenu.append_item(online)
-            if jobs[0].get("mode") == "virtual_drive":
+            if len(paths) == 1 and jobs[0].get("mode") == "virtual_drive":
                 relative = _relative_path(paths[0], jobs[0])
                 runtime = _runtime_states().get(str(jobs[0].get("id", "")), {})
                 pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))

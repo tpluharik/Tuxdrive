@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.5 — stable per-file pinning and persistent Nautilus menu
+
+- Removed the first/last-pin FUSE remount. The streaming mount now starts with one stable retention policy, so pinning one file does not detach Nautilus, rebuild the folder view, or cause adjacent files to be read while the view reconnects.
+- Kept availability rules exact: a file rule applies only to that file, while folder and drive-root rules remain explicitly recursive.
+- Retained the last complete credential-free job snapshot in the Nautilus extension, so an atomic state/configuration refresh cannot temporarily erase the TuxDrive menu after a pin changes.
+- Added direct extension regression tests for sibling-file isolation and last-known-good menu metadata. The complete suite now contains 151 automated tests.
+
 ## 0.20.4 — reliable per-file offline availability
 
 - Fixed a single-file VFS race: TuxDrive now waits for rclone to publish the exact, complete cache object before it records the file as available offline.

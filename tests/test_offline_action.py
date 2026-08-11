@@ -7,6 +7,7 @@ from tuxdrive.nautilus_support import (
     command_line_path,
     is_available_offline,
     lexical_relative_path,
+    rule_matches,
     verified_rules_after,
 )
 
@@ -82,6 +83,12 @@ class OfflineActionTests(unittest.TestCase):
                 ["folder/online"],
             )
         )
+
+    def test_file_rule_never_applies_to_sibling_or_parent(self):
+        self.assertTrue(rule_matches("folder/one.txt", "folder/one.txt"))
+        self.assertFalse(rule_matches("folder/two.txt", "folder/one.txt"))
+        self.assertFalse(rule_matches("folder", "folder/one.txt"))
+        self.assertFalse(is_available_offline("folder/two.txt", ["folder/one.txt"]))
 
 
 if __name__ == "__main__":

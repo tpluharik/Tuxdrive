@@ -190,11 +190,11 @@ class SyncEngine:
             "--vfs-read-chunk-streams",
             "4",
             "--vfs-cache-max-age",
-            "24h",
+            "87600h",
             "--vfs-cache-max-size",
-            "10G",
+            "off",
             "--vfs-cache-min-free-space",
-            "1G",
+            "off",
             "--vfs-cache-poll-interval",
             "1m",
             "--vfs-write-back",
@@ -212,22 +212,15 @@ class SyncEngine:
             "--stats-one-line",
             "--umask",
             "022",
+            "--vfs-fast-fingerprint",
         ]
-        if job.offline_paths:
-            # A generic rclone cache quota cannot distinguish pinned content
-            # from ordinary streamed files: it evicts the least recently used
-            # object regardless of TuxDrive's offline rules.  Disable those
-            # automatic eviction paths while at least one durable pin exists;
-            # the explicit Free local space action remains the authority for
-            # releasing pinned bytes.  Fast fingerprints avoid a slow remote
-            # hash/modtime round-trip when opening an already cached file.
-            index = command.index("--vfs-cache-max-age")
-            command[index + 1] = "87600h"
-            index = command.index("--vfs-cache-max-size")
-            command[index + 1] = "off"
-            index = command.index("--vfs-cache-min-free-space")
-            command[index + 1] = "off"
-            command.append("--vfs-fast-fingerprint")
+        # Keep one stable VFS policy for the lifetime of the mount. Switching
+        # policy on the first/last pin required a FUSE remount; Nautilus then
+        # held a directory view from the detached mount, lost its TuxDrive
+        # menu and could reopen/cache adjacent files while rebuilding the
+        # folder. rclone cannot exempt individual pinned files from its generic
+        # LRU quota, so automatic eviction stays disabled and TuxDrive's
+        # explicit per-item online-only action is the cache-release authority.
         return command
 
     @staticmethod

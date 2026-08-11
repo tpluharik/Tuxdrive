@@ -92,11 +92,14 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertEqual(command[:4], ["/usr/bin/rclone", "mount", "google:", "/mnt/Google"])
             self.assertEqual(command[command.index("--vfs-cache-mode") + 1], "full")
             self.assertEqual(command[command.index("--vfs-read-chunk-size") + 1], "8M")
-            self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "10G")
+            self.assertEqual(command[command.index("--vfs-cache-max-age") + 1], "87600h")
+            self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "off")
+            self.assertEqual(command[command.index("--vfs-cache-min-free-space") + 1], "off")
+            self.assertIn("--vfs-fast-fingerprint", command)
             self.assertIn("--log-level", command)
             self.assertIn("--stats", command)
 
-    def test_pinned_virtual_drive_disables_unaware_rclone_eviction(self):
+    def test_pin_state_never_changes_live_mount_policy(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ, {"XDG_CACHE_HOME": temporary}
         ):
@@ -107,10 +110,9 @@ class SyncEngineCommandTests(unittest.TestCase):
                 offline_paths=["projects/rail"],
             )
             command = self.engine.mount_command(job)
-        self.assertEqual(command[command.index("--vfs-cache-max-age") + 1], "87600h")
-        self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "off")
-        self.assertEqual(command[command.index("--vfs-cache-min-free-space") + 1], "off")
-        self.assertIn("--vfs-fast-fingerprint", command)
+            job.offline_paths.clear()
+            online_only_command = self.engine.mount_command(job)
+        self.assertEqual(command, online_only_command)
 
     def test_offline_root_and_file_are_fully_hydrated_and_persisted(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(

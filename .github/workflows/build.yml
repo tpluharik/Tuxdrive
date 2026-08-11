@@ -25,15 +25,15 @@ jobs:
       - name: Build Debian package
         run: sh scripts/build-deb.sh
       - name: Inspect Debian package
-        run: dpkg-deb --info dist/tuxdrive_0.20.4_all.deb && dpkg-deb --contents dist/tuxdrive_0.20.4_all.deb
+        run: dpkg-deb --info dist/tuxdrive_0.20.5_all.deb && dpkg-deb --contents dist/tuxdrive_0.20.5_all.deb
       - name: Generate dependency SBOM
-        run: pip-audit -r requirements-security.txt --format cyclonedx-json --output dist/tuxdrive_0.20.4.cdx.json
+        run: pip-audit -r requirements-security.txt --format cyclonedx-json --output dist/tuxdrive_0.20.5.cdx.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: tuxdrive-deb
           path: |
-            dist/tuxdrive_0.20.4_all.deb
-            dist/tuxdrive_0.20.4.cdx.json
+            dist/tuxdrive_0.20.5_all.deb
+            dist/tuxdrive_0.20.5.cdx.json
 
   debian-core-matrix:
     strategy:
@@ -51,6 +51,6 @@ jobs:
       - name: Build adaptive package
         run: sh scripts/build-deb.sh
       - name: Install mandatory core only
-        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./dist/tuxdrive_0.20.4_all.deb
+        run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ./dist/tuxdrive_0.20.5_all.deb
       - name: Verify installed layout and host discovery
         run: tuxdrive --version && tuxdrive --system-check --json

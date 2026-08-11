@@ -1,8 +1,8 @@
 {
-  "version": "0.20.4",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.4_all.deb",
-  "sha256": "f8c09bb6122751c2814f772362e81d5dbcc1acdbb97481d34207d8fdc508d436",
-  "notes": "Fix individual-file offline availability by waiting for exact complete VFS cache publication and using FUSE-safe lexical Nautilus path routing.",
-  "expires_at": "2027-02-07T17:31:11.955191+00:00",
-  "signature": "CMn38ReFzW2qLQTDm17PzFmoXEo9zP2ZuJGYm3usrwiE3t5ITaVcbNLXKmM1oiWiUIKxJRpfdRxGjPDZC9+PCQ=="
+  "version": "0.20.5",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.5_all.deb",
+  "sha256": "ce08d8780cb2af4066b5dd034dacec9e5b139a5d3f7a3a88155e20995f7820fa",
+  "notes": "Keep per-file offline rules exact without remounting the streaming drive, and preserve the TuxDrive Nautilus menu across atomic state refreshes.",
+  "expires_at": "2027-02-07T17:58:39.026803+00:00",
+  "signature": "xkUWGdilsQMs0on4Md97TDGkax0vNPXSkmqTVe9ac3dCgOOw/tUkD7YbTh+L1gxZMtUukGjsZKgzf6ZuqZpwDg=="
 }
