@@ -77,6 +77,7 @@ from .nautilus_support import (
     lexical_relative_path,
     verified_rules_after,
 )
+from .themes import THEMES, css_for_theme, normalize_theme, theme_by_key
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -2455,9 +2456,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.controller = application
         self.set_default_size(920, 620)
         self.set_icon_name("tuxdrive")
+        self.get_style_context().add_class("tuxdrive-surface")
         self.connect("delete-event", self._hide_instead_of_close)
 
         header = Gtk.HeaderBar(title="TuxDrive", subtitle=tr("subtitle"))
+        header.get_style_context().add_class("tuxdrive-header")
         header.set_show_close_button(True)
         self.set_titlebar(header)
         brand = Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.LARGE_TOOLBAR)
@@ -2492,6 +2495,7 @@ class MainWindow(Gtk.ApplicationWindow):
         header.pack_end(self.language)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        root.get_style_context().add_class("tuxdrive-root")
         self.add(root)
         content = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
         root.pack_start(content, True, True, 0)
@@ -2504,28 +2508,57 @@ class MainWindow(Gtk.ApplicationWindow):
         account_label.set_markup(f"<b>{GLib.markup_escape_text(tr('cloud_accounts'))}</b>")
         sidebar.pack_start(account_label, False, False, 0)
         self.account_list = Gtk.ListBox()
+        self.account_list.get_style_context().add_class("account-list")
         self.account_list.set_selection_mode(Gtk.SelectionMode.NONE)
         sidebar.pack_start(self.account_list, False, False, 0)
         connect_button = Gtk.Button(label=tr("connect_account"))
+        connect_button.get_style_context().add_class("primary-outline")
         connect_button.connect("clicked", self._choose_provider)
         sidebar.pack_start(connect_button, False, False, 0)
         content.pack_start(sidebar, False, False, 0)
 
         main = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        main.get_style_context().add_class("workspace")
         main.set_border_width(20)
         heading_row = Gtk.Box(spacing=10)
+        heading_row.get_style_context().add_class("workspace-heading")
         heading = Gtk.Label(xalign=0)
         heading.set_markup(f"<span size='large' weight='bold'>{GLib.markup_escape_text(tr('synced_folders'))}</span>")
         heading_row.pack_start(heading, True, True, 0)
         add_job = Gtk.Button(label=tr("add_folder"))
+        add_job.get_style_context().add_class("primary-action")
         add_job.connect("clicked", self._add_job)
         heading_row.pack_end(add_job, False, False, 0)
         add_group = Gtk.Button(label=tr("new_group"))
+        add_group.get_style_context().add_class("secondary-action")
         add_group.set_tooltip_text("Create an internal group without moving local or cloud folders")
         add_group.connect("clicked", self._create_group)
         heading_row.pack_end(add_group, False, False, 0)
         main.pack_start(heading_row, False, False, 0)
+        self.summary_strip = Gtk.Box(spacing=12)
+        self.summary_values: dict[str, Gtk.Label] = {}
+        for key, icon_name, label in (
+            ("services", "network-server-symbolic", tr("connected_services")),
+            ("active", "emblem-synchronizing-symbolic", tr("active_syncs")),
+            ("protected", "folder-symbolic", tr("protected_folders")),
+        ):
+            card = Gtk.Box(spacing=12)
+            card.set_name(f"summary-{key}")
+            card.get_style_context().add_class("summary-card")
+            card.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.DND), False, False, 0)
+            copy = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            caption = Gtk.Label(label=label, xalign=0)
+            caption.get_style_context().add_class("summary-label")
+            value = Gtk.Label(label="0", xalign=0)
+            value.get_style_context().add_class("summary-value")
+            copy.pack_start(caption, False, False, 0)
+            copy.pack_start(value, False, False, 0)
+            card.pack_start(copy, True, True, 0)
+            self.summary_values[key] = value
+            self.summary_strip.pack_start(card, True, True, 0)
+        main.pack_start(self.summary_strip, False, False, 0)
         self.job_list = Gtk.ListBox()
+        self.job_list.get_style_context().add_class("job-list")
         self.job_list.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -2533,12 +2566,14 @@ class MainWindow(Gtk.ApplicationWindow):
         main.pack_start(scroll, True, True, 0)
 
         activity = Gtk.Expander(label=tr("live_log"))
+        activity.get_style_context().add_class("activity-panel")
         activity.set_expanded(True)
         self.activity_view = Gtk.TextView()
         self.activity_view.set_editable(False)
         self.activity_view.set_cursor_visible(False)
         self.activity_view.set_monospace(True)
         self.activity_view.set_wrap_mode(Gtk.WrapMode.WORD_CHAR)
+        self.activity_view.get_style_context().add_class("activity-log")
         activity_scroll = Gtk.ScrolledWindow()
         activity_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
         activity_scroll.set_size_request(-1, 190)
@@ -2564,16 +2599,27 @@ class MainWindow(Gtk.ApplicationWindow):
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self.refresh()
 
+    def apply_visual_theme(self, key: str) -> None:
+        """Apply the small structural differences that CSS alone cannot express."""
+        if normalize_theme(key) == "bento_cloud":
+            self.summary_strip.show_all()
+        else:
+            self.summary_strip.hide()
+
     def _language_changed(self, combo: Gtk.ComboBoxText) -> None:
         code = combo.get_active_id() or "en"
         if code != get_language():
             self.controller.change_language(code)
 
     def refresh(self) -> None:
+        self.summary_values["services"].set_text(str(len(self.controller.config.accounts)))
+        self.summary_values["active"].set_text(str(len(self.controller.engine.running_jobs)))
+        self.summary_values["protected"].set_text(str(len(self.controller.config.jobs)))
         for child in self.account_list.get_children():
             self.account_list.remove(child)
         for account in self.controller.config.accounts:
             row = Gtk.ListBoxRow()
+            row.get_style_context().add_class("account-card")
             box = Gtk.Box(spacing=10)
             box.set_border_width(8)
             account_jobs = [
@@ -2637,10 +2683,12 @@ class MainWindow(Gtk.ApplicationWindow):
         for job in ungrouped:
             self.job_list.add(self._job_row(job))
         self.show_all()
+        self.apply_visual_theme(self.controller.config.settings.visual_theme)
         self.infobar.hide()
 
     def _group_row(self, group: FolderGroup | None) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
+        row.get_style_context().add_class("group-card")
         row.set_activatable(False)
         box = Gtk.Box(spacing=10)
         box.set_border_width(10)
@@ -2696,12 +2744,14 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _job_row(self, job: SyncJob) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
+        row.get_style_context().add_class("job-card")
         mounted = job.id in self.controller.engine.mounted_jobs
         account = next((item for item in self.controller.config.accounts if item.remote == job.account_remote), None)
         outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
         outer.set_border_width(14)
         top = Gtk.Box(spacing=12)
         drag_handle = Gtk.EventBox()
+        drag_handle.get_style_context().add_class("drag-handle")
         drag_handle.set_visible_window(False)
         drag_handle.set_above_child(True)
         drag_handle.set_size_request(32, 32)
@@ -2731,6 +2781,7 @@ class MainWindow(Gtk.ApplicationWindow):
         detail.set_ellipsize(3)
         status = Gtk.Label(label=job.last_status, xalign=0)
         status.get_style_context().add_class("dim-label")
+        status.get_style_context().add_class("status-label")
         labels.pack_start(title, False, False, 0)
         labels.pack_start(detail, False, False, 0)
         labels.pack_start(status, False, False, 0)
@@ -3277,6 +3328,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def _show_settings(self, _button: Gtk.Widget) -> None:
         dialog = Gtk.Dialog(title="TuxDrive settings", transient_for=self, modal=True)
         dialog.set_icon_name("tuxdrive")
+        dialog.set_default_size(580, 700)
+        dialog.get_style_context().add_class("tuxdrive-dialog")
         dialog.get_content_area().set_border_width(24)
         identity = Gtk.Box(spacing=12)
         identity.pack_start(Gtk.Image.new_from_icon_name("tuxdrive", Gtk.IconSize.DIALOG), False, False, 0)
@@ -3292,6 +3345,26 @@ class MainWindow(Gtk.ApplicationWindow):
         minimized.set_active(self.controller.config.settings.start_minimized)
         nautilus = Gtk.CheckButton(label="Enable Nautilus integration (restart Files after changing)")
         nautilus.set_active(self.controller.config.settings.nautilus_integration)
+        theme_frame = Gtk.Frame(label=tr("visual_style"))
+        theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        theme_box.set_border_width(12)
+        theme = Gtk.ComboBoxText()
+        for visual_theme in THEMES:
+            theme.append(visual_theme.key, visual_theme.label)
+        theme.set_active_id(normalize_theme(self.controller.config.settings.visual_theme))
+        theme_description = Gtk.Label(xalign=0)
+        theme_description.set_line_wrap(True)
+        theme_description.get_style_context().add_class("theme-description")
+
+        def update_theme_description(combo: Gtk.ComboBoxText) -> None:
+            selected = theme_by_key(combo.get_active_id())
+            theme_description.set_text(selected.description + " " + tr("theme_applies_after_save"))
+
+        theme.connect("changed", update_theme_description)
+        update_theme_description(theme)
+        theme_box.pack_start(theme, False, False, 0)
+        theme_box.pack_start(theme_description, False, False, 0)
+        theme_frame.add(theme_box)
         policy = Gtk.ComboBoxText()
         policy.append("maximum", "Maximum usage (no policy limits)")
         policy.append("controlled", "Apply network, battery and schedule policies")
@@ -3307,7 +3380,7 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (launch, notifications, minimized, nautilus, policy, metered, battery, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, policy, metered, battery, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxDrive Profile / migrate…", 4)
@@ -3333,6 +3406,9 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
             self.controller.config.settings.nautilus_integration = nautilus.get_active()
+            selected_theme = normalize_theme(theme.get_active_id())
+            theme_changed = selected_theme != self.controller.config.settings.visual_theme
+            self.controller.config.settings.visual_theme = selected_theme
             self.controller.config.settings.network_policy = policy.get_active_id() or "maximum"
             self.controller.config.settings.allow_metered_networks = metered.get_active()
             self.controller.config.settings.pause_below_battery_percent = battery.get_value_as_int()
@@ -3340,6 +3416,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.schedule_end = end_value
             self.controller.save()
             self.controller.configure_autostart()
+            if theme_changed:
+                self.controller.apply_visual_theme(selected_theme)
         dialog.destroy()
         if response == 2:
             self._check_for_updates()
@@ -3624,6 +3702,7 @@ class TuxDriveApplication(Gtk.Application):
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
+        self._css_provider: Gtk.CssProvider | None = None
 
     def change_language(self, code: str) -> None:
         if code not in LANGUAGE_CODES:
@@ -3638,6 +3717,14 @@ class TuxDriveApplication(Gtk.Application):
         self.window.show_all()
         self.window.present()
         LOGGER.info("UI language changed to %s", code)
+
+    def apply_visual_theme(self, key: str) -> None:
+        key = normalize_theme(key)
+        self.config.settings.visual_theme = key
+        self._install_css()
+        if self.window is not None:
+            self.window.apply_visual_theme(key)
+        LOGGER.info("Visual theme changed to %s", key)
 
     def do_startup(self) -> None:
         Gtk.Application.do_startup(self)
@@ -4419,20 +4506,23 @@ class TuxDriveApplication(Gtk.Application):
                 self._request_offline_path(value, available)
         return False
 
-    @staticmethod
-    def _install_css() -> None:
+    def _install_css(self) -> None:
+        screen = Gdk.Screen.get_default()
+        if self._css_provider is not None and screen is not None:
+            Gtk.StyleContext.remove_provider_for_screen(screen, self._css_provider)
         provider = Gtk.CssProvider()
-        provider.load_from_data(
-            b".sidebar { background: @theme_base_color; border-right: 1px solid alpha(@theme_fg_color, .12); }"
-            b"list row { border-bottom: 1px solid alpha(@theme_fg_color, .10); }"
-            b"switch#tuxdrive-job-switch { min-width: 42px; min-height: 22px; padding: 0; margin: 0; }"
-            b"switch#tuxdrive-job-switch slider { min-width: 18px; min-height: 18px; margin: 2px; padding: 0; }"
-        )
-        Gtk.StyleContext.add_provider_for_screen(
-            Gdk.Screen.get_default(),
-            provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
+        selected = theme_by_key(self.config.settings.visual_theme)
+        provider.load_from_data(css_for_theme(selected.key))
+        if screen is not None:
+            Gtk.StyleContext.add_provider_for_screen(
+                screen,
+                provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            )
+        self._css_provider = provider
+        gtk_settings = Gtk.Settings.get_default()
+        if gtk_settings is not None:
+            gtk_settings.set_property("gtk-application-prefer-dark-theme", selected.dark)
 
     def do_shutdown(self) -> None:
         LOGGER.info("TuxDrive shutting down")

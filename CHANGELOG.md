@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.22.0 — selectable modern application designs
+
+- Implemented the three approved visual systems: **Nordic Glass**, **Bento Cloud**, and **Midnight Sync**. All use rounded controls, card-based account/folder/group surfaces, clearer hierarchy, and provider/status identity without changing synchronization behavior.
+- Added **Settings → Visual design**. The selected theme is validated, stored in the private configuration, applied immediately after saving, and restored on the next launch. Legacy or invalid theme values safely fall back to Nordic Glass.
+- Bento Cloud adds live connected-service, active-sync, and protected-folder summary tiles. Midnight Sync supplies a high-contrast navy/cyan workspace and dark GTK preference; Nordic Glass is the airy blue-white default.
+- Kept drag/drop, grouping, minimized provider icons, streaming controls, account actions, live logs, six-language/RTL text, and accessibility structure intact. Added theme palette, persistence, fallback, dark-mode, localized-control, package-presence, and UI integration regressions; the complete suite now contains 178 automated tests.
+
 ## 0.21.1 — functional GTK folder drag and drop
 
 - Fixed the drag handle accepting a pointer gesture without completing a drop. The 0.21.0 source advertised a private binary target but used GTK's text conversion helpers, so the destination received no synchronized-folder identifier.

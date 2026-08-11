@@ -44,7 +44,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('Gtk.Expander(label=tr("live_log"))', app)
         self.assertIn('account.provider.icon_name', app)
         self.assertIn('toggle.set_name("tuxdrive-job-switch")', app)
-        self.assertIn('switch#tuxdrive-job-switch', app)
+        themes = Path("src/tuxdrive/themes.py").read_text(encoding="utf-8")
+        self.assertIn('switch#tuxdrive-job-switch', themes)
         self.assertIn("class ExceptionRulesEditor", app)
         self.assertIn('"Exclude file and retry"', app)
         self.assertIn('"Allow unsafe download and retry"', app)
@@ -73,6 +74,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('tr("expand_group")', app)
         self.assertIn("if group.collapsed:", app)
         self.assertIn("account.provider.icon_name", app)
+        self.assertIn('theme.append(visual_theme.key, visual_theme.label)', app)
+        self.assertIn('self.controller.apply_visual_theme(selected_theme)', app)
+        self.assertIn('get_style_context().add_class("job-card")', app)
+        self.assertIn('get_style_context().add_class("account-card")', app)
+        self.assertIn('get_style_context().add_class("activity-panel")', app)
+        self.assertIn('normalize_theme(key) == "bento_cloud"', app)
+        for design in ("nordic_glass", "bento_cloud", "midnight_sync"):
+            self.assertIn(f'"{design}"', themes)
 
     def test_peer_runtime_and_key_generator_are_installed(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")

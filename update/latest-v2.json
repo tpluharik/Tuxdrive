@@ -1,8 +1,8 @@
 {
-  "version": "0.21.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.21.1_all.deb",
-  "sha256": "f61aa52b0e5f4ccd014733be68617eecf9743ae26959ed46aa5c17442ebb2c45",
-  "notes": "Fix GTK folder drag-and-drop payload delivery and improve the drag handle",
-  "expires_at": "2026-11-09T21:12:26.379401+00:00",
-  "signature": "aX5K/8Np+wik2z5S1CUe2lvJV4vbM9a/Rn9ihv/9y+DwjxEJqJxs2a4tMrTNzds+fYWbweQLij26Ky4OrBoICg=="
+  "version": "0.22.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.22.0_all.deb",
+  "sha256": "f4156700d81b8a4ccdf592c754ae0f92386359dd813abdd1a592a29bbb733f52",
+  "notes": "Selectable Nordic Glass, Bento Cloud, and Midnight Sync application designs with persistent Settings control.",
+  "expires_at": "2026-11-09T21:49:54.236695+00:00",
+  "signature": "9weeTWdmVWehd9Hj2kCP7lmddgQm/jYjxDA1stH3XvVLnjQI8weCjgVBaw+jrkcy38TW4YAgYV4k56OhxHGwCQ=="
 }

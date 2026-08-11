@@ -55,11 +55,13 @@ class ConfigStoreTests(unittest.TestCase):
             value.settings.profile_remote = "google-main"
             value.settings.profile_last_backup = "2026-08-10T12:00:00+00:00"
             value.settings.language = "fr"
+            value.settings.visual_theme = "midnight_sync"
             store.save(value)
             loaded = store.load()
         self.assertEqual(loaded.settings.profile_remote, "google-main")
         self.assertEqual(loaded.settings.profile_last_backup, "2026-08-10T12:00:00+00:00")
         self.assertEqual(loaded.settings.language, "fr")
+        self.assertEqual(loaded.settings.visual_theme, "midnight_sync")
 
     def test_invalid_config_is_quarantined(self):
         with tempfile.TemporaryDirectory() as temporary:

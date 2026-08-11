@@ -421,6 +421,7 @@ class AppSettings:
     rclone_path: str = "rclone"
     nautilus_integration: bool = True
     language: str = "en"
+    visual_theme: str = "nordic_glass"
     network_policy: str = "maximum"
     allow_metered_networks: bool = True
     pause_below_battery_percent: int = 0
@@ -432,8 +433,12 @@ class AppSettings:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AppSettings":
+        from .themes import normalize_theme
+
         allowed = set(cls.__dataclass_fields__)
-        return cls(**{key: item for key, item in value.items() if key in allowed})
+        data = {key: item for key, item in value.items() if key in allowed}
+        data["visual_theme"] = normalize_theme(data.get("visual_theme"))
+        return cls(**data)
 
 
 @dataclass(slots=True)

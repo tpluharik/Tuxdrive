@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.21.1 suite contains **173 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. The Nautilus tests mirror the real 4.1 four-argument `MenuItem.new()` boundary, reject unsupported GTK-widget methods and require writable properties to be applied after construction. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxDrive 0.22.0 suite contains **178 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Theme tests require all three named designs, distinct palettes, shared rounded components, Midnight-only dark preference, persistent selection, and safe legacy/invalid fallback. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. The Nautilus tests mirror the real 4.1 four-argument `MenuItem.new()` boundary, reject unsupported GTK-widget methods and require writable properties to be applied after construction. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -42,6 +42,7 @@ The TuxDrive 0.21.1 suite contains **173 automated tests**. Tests use temporary 
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_security.py` | 2 | Symlink/parent escape rejection plus Ed25519 signed-transaction tamper detection. |
+| `test_themes.py` | 5 | Nordic Glass, Bento Cloud and Midnight Sync registration; shared components and distinct palettes; Midnight-only dark preference; persisted selection; safe legacy/invalid fallback. |
 | `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 18 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
 | `test_updater.py` | 10 | Numeric version comparison, trusted release URLs, progress, download verification, corrupt-partial cleanup, privileged no-follow immutable staging/digest checks, and signed manifest/package release coherence. |
@@ -84,9 +85,9 @@ The TuxDrive 0.21.1 suite contains **173 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.21.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.21.1_all.deb
-sha256sum dist/tuxdrive_0.21.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.22.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.22.0_all.deb
+sha256sum dist/tuxdrive_0.22.0_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -101,8 +102,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.21.1 \
-  --package dist/tuxdrive_0.21.1_all.deb \
+python3 scripts/sign-update.py --version 0.22.0 \
+  --package dist/tuxdrive_0.22.0_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
@@ -135,6 +136,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 | Capability UI | Change among all providers and confirm unsupported modes/actions disappear or disable while server-specific caveats remain visible. |
 | Sync health | Verify running, mounted, paused, callback, last-run and error states against actual job behavior, then reopen to refresh the snapshot. |
 | Main-window identity | Connect one account for every provider and confirm account/job rows retain the provider icon in idle, syncing, paused and error states. Test the compact enable switch with Ubuntu default, dark and high-DPI themes. |
+| Visual designs | Select Nordic Glass, Bento Cloud, and Midnight Sync in Settings. Confirm immediate application after Save, restart persistence, rounded cards/buttons, readable hover/focus/disabled states, Bento summary counts, Midnight contrast, Nordic fallback, and unchanged folder/group/transfer state at 920×620 and common high-DPI scales. |
 | Edit leases | Simultaneous save of the same file, foreign lease pause, normal release, application crash, lease expiry and retry. Confirm non-TuxDrive writers are documented as outside advisory enforcement. |
 | LAN/QR pairing | Discovery on one subnet, no discovery across a routed boundary, full fingerprint comparison, QR display/import, invalid image rejection and manual-pairing fallback. |
 | Nautilus integration | Test enabled and disabled settings after restarting Nautilus; confirm menus/badges disappear when disabled and streaming items expose pin/free-space actions when enabled. |

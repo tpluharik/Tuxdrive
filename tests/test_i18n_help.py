@@ -32,7 +32,11 @@ class LocalizationAndHelpTests(unittest.TestCase):
     def test_group_drag_and_collapse_controls_are_localized(self):
         for language in LANGUAGES:
             set_language(language.code)
-            for key in ("expand_group", "minimize_group", "drag_folder_hint", "drop_group_hint"):
+            for key in (
+                "expand_group", "minimize_group", "drag_folder_hint", "drop_group_hint",
+                "visual_style", "theme_applies_after_save", "connected_services",
+                "active_syncs", "protected_folders",
+            ):
                 self.assertNotEqual(tr(key), key)
                 self.assertGreater(len(tr(key)), 5)
 
