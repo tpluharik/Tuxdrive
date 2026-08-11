@@ -2,9 +2,9 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
-from tuxdrive.engine import SyncEngine
+from tuxdrive.engine import JobResult, SyncEngine
 from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
 from tuxdrive.models import (
     ConflictPolicy, PeerRole, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
@@ -94,6 +94,22 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertIn("--log-level", command)
             self.assertIn("--stats", command)
 
+    def test_pinned_virtual_drive_disables_unaware_rclone_eviction(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": temporary}
+        ):
+            job = SyncJob(
+                account_remote="google",
+                local_path="/mnt/Google",
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["projects/rail"],
+            )
+            command = self.engine.mount_command(job)
+        self.assertEqual(command[command.index("--vfs-cache-max-age") + 1], "87600h")
+        self.assertEqual(command[command.index("--vfs-cache-max-size") + 1], "off")
+        self.assertEqual(command[command.index("--vfs-cache-min-free-space") + 1], "off")
+        self.assertIn("--vfs-fast-fingerprint", command)
+
     def test_offline_root_and_file_are_fully_hydrated_and_persisted(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -105,6 +121,36 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertEqual(job.offline_paths, ["."])
         self.assertIn("2 file(s)", message)
         self.assertIn("6 bytes", message)
+
+    def test_offline_parent_rule_replaces_redundant_children(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "folder" / "child").mkdir(parents=True)
+            (root / "folder" / "child" / "one.bin").write_bytes(b"one")
+            job = SyncJob(
+                account_remote="google",
+                local_path=str(root),
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["folder/child"],
+            )
+            self.engine.set_offline(job, "folder", True)
+        self.assertEqual(job.offline_paths, ["folder"])
+
+    def test_restart_mount_applies_changed_vfs_policy(self):
+        job = SyncJob(
+            account_remote="google",
+            local_path="/mnt/Google",
+            mode=SyncMode.VIRTUAL_DRIVE,
+            offline_paths=["folder"],
+        )
+        expected = JobResult(job.id, True, "mounted", Path("/tmp/mount.log"))
+        callback = Mock()
+        with patch.object(self.engine, "stop_mount", return_value=True) as stop, \
+             patch.object(self.engine, "start_mount", return_value=expected) as start:
+            result = self.engine.restart_mount(job, callback)
+        self.assertIs(result, expected)
+        stop.assert_called_once_with(job)
+        start.assert_called_once_with(job)
 
     def test_failed_offline_symlink_hydration_rolls_back_pin(self):
         with tempfile.TemporaryDirectory() as temporary:

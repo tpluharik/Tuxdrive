@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.2 — durable verified offline retention
+
+- Replaced the one-time hydration heuristic with a live retention-policy transition: the first offline pin remounts the streaming drive with rclone's unaware age, size, and free-space eviction disabled, and the last unpin restores the normal bounded streaming cache.
+- Rehydrates every persisted offline rule after a mount starts, so content cleared externally or partially evicted by an older release is downloaded again instead of being trusted blindly.
+- Publishes green **Available offline** badges only for rules whose complete hydration finished in the current mount; pending, failed, stale, and disconnected pins no longer receive a false green state.
+- Uses fast VFS fingerprints for pinned mounts to reduce remote metadata delay when opening already cached content, normalizes redundant parent/child rules, and rolls back the configured policy if remounting fails.
+- Added retention-policy, remount, rule-normalization, and verified-badge regression coverage; the complete suite now contains 140 tests.
+
 ## 0.20.1 — reliable Nautilus offline-action dispatch
 
 - Routed **Always keep available offline** and **Free local space** through registered in-process application actions when TuxDrive is running, with the command-line path retained as a compatibility fallback.

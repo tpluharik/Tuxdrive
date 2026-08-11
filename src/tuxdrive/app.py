@@ -70,7 +70,7 @@ from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
 from .migration import MigrationError, ProfileManager
 from .platform_support import format_report, inspect_host
-from .nautilus_support import availability_route, command_line_path
+from .nautilus_support import availability_route, command_line_path, verified_rules_after
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -3476,6 +3476,7 @@ class TuxDriveApplication(Gtk.Application):
         self._pending_nautilus_online: list[str] = []
         self._pending_offline_requests: list[tuple[str, bool]] = []
         self._offline_pending_paths: dict[str, set[str]] = {}
+        self._offline_verified_paths: dict[str, set[str]] = {}
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
@@ -3628,13 +3629,66 @@ class TuxDriveApplication(Gtk.Application):
         self._offline_pending_paths.setdefault(job.id, set()).add(relative)
         self._publish_nautilus_state()
         _run_thread(
-            self.engine.set_offline,
+            self._change_offline_availability,
             lambda result, error: self._offline_state_ready(
                 result, error, job, relative, available
             ),
             job,
             relative,
             available,
+        )
+
+    def _change_offline_availability(
+        self,
+        job: SyncJob,
+        relative: str,
+        available: bool,
+    ) -> str:
+        """Hydrate/release content and apply the matching live VFS policy."""
+        previous_rules = list(job.offline_paths)
+        previously_pinned = bool(previous_rules)
+
+        if available and not previously_pinned:
+            # Apply the no-eviction policy *before* reading the first pin.  If
+            # a large selection exceeded the ordinary cache quota while being
+            # hydrated, early files could otherwise be evicted before the
+            # action finished and the badge would be wrong.
+            job.offline_paths = [relative]
+            policy_result = self.engine.restart_mount(job, self._job_finished)
+            if not policy_result.success:
+                job.offline_paths = previous_rules
+                recovery = self.engine.restart_mount(job, self._job_finished)
+                recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
+                raise RuntimeError(
+                    f"The streaming drive could not activate durable offline retention: "
+                    f"{policy_result.message} ({recovery_detail})"
+                )
+            try:
+                message = self.engine.set_offline(job, relative, True)
+            except Exception:
+                job.offline_paths = previous_rules
+                self.engine.restart_mount(job, self._job_finished)
+                raise
+            return f"{message} · durable offline retention active"
+
+        message = self.engine.set_offline(job, relative, available)
+        now_pinned = bool(job.offline_paths)
+        if previously_pinned == now_pinned:
+            return message
+
+        result = self.engine.restart_mount(job, self._job_finished)
+        if result.success:
+            policy = "durable offline retention active" if now_pinned else "normal streaming cache active"
+            return f"{message} · {policy}"
+
+        # Keep the in-memory/configured rule consistent with the active policy
+        # and make one best-effort attempt to restore the prior mount.
+        job.offline_paths = previous_rules
+        recovery = self.engine.restart_mount(job, self._job_finished)
+        recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
+        raise RuntimeError(
+            f"Offline content was transferred, but the streaming drive could not apply its retention policy: "
+            f"{result.message} ({recovery_detail})"
         )
 
     def _offline_state_ready(
@@ -3653,6 +3707,15 @@ class TuxDriveApplication(Gtk.Application):
             LOGGER.error("Could not change offline availability: %s", error)
             self._publish_nautilus_state()
         else:
+            verified = verified_rules_after(
+                self._offline_verified_paths.get(job.id, set()),
+                job.offline_paths,
+                relative,
+                available,
+            )
+            self._offline_verified_paths[job.id] = verified
+            if not verified:
+                self._offline_verified_paths.pop(job.id, None)
             LOGGER.info("Offline availability changed: %s", result)
             self.save()
         if self.window:
@@ -3829,7 +3892,11 @@ class TuxDriveApplication(Gtk.Application):
             payload[job.id] = {
                 "state": state,
                 "detail": job.last_status or state.title(),
-                "offline_paths": list(job.offline_paths),
+                # A configured rule is only advertised as available offline
+                # after this process has completely read it from the mount.
+                # This prevents a stale rule or externally-cleared VFS cache
+                # from receiving a misleading green badge.
+                "offline_paths": sorted(self._offline_verified_paths.get(job.id, set())),
                 "offline_pending_paths": sorted(self._offline_pending_paths.get(job.id, set())),
             }
         descriptor, temporary = tempfile.mkstemp(
@@ -3912,6 +3979,7 @@ class TuxDriveApplication(Gtk.Application):
         stopped = self.engine.stop_mount(job) if job.mode is SyncMode.VIRTUAL_DRIVE else self.engine.cancel(job.id)
         if stopped:
             self._nautilus_active_jobs.discard(job.id)
+            self._offline_verified_paths.pop(job.id, None)
             job.last_status = "Stopped"
             self.audit.record("sync", "job stopped", "success", job_id=job.id, detail=job.name)
             self.save()
@@ -3941,6 +4009,10 @@ class TuxDriveApplication(Gtk.Application):
             job.last_error = job.last_status
         if result.success and job.mode is not SyncMode.VIRTUAL_DRIVE:
             job.initialized = True
+        if job.mode is SyncMode.VIRTUAL_DRIVE and (result.success or result.mount_lost):
+            # Every new mount must prove its persistent cache again.  A lost
+            # mount must never leave stale green per-item badges behind.
+            self._offline_verified_paths.pop(job.id, None)
         self._set_tray_state("ready" if result.success else "error", result.message)
         LOGGER.info("Job %s finished: success=%s message=%s", job.id, result.success, result.message)
         account = next((item for item in self.config.accounts if item.remote == job.account_remote), None)
@@ -3960,6 +4032,14 @@ class TuxDriveApplication(Gtk.Application):
         self.save()
         if result.success and not result.incremental:
             self.start_callbacks(job)
+        if result.success and job.mode is SyncMode.VIRTUAL_DRIVE and job.offline_paths:
+            # A cache may have been cleared outside TuxDrive or partially
+            # evicted by an older release.  Re-read every durable rule after a
+            # mount starts and keep the badge in the downloading state until
+            # the content is confirmed again.
+            for relative in list(job.offline_paths):
+                selected = job.local if relative == "." else job.local / relative
+                self._set_offline_path(str(selected), True)
         if result.mount_lost and job.enabled:
             recent = self._mount_failures.setdefault(job.id, [])
             cutoff = now.timestamp() - 300

@@ -213,11 +213,20 @@ class SyncEngine:
             "022",
         ]
         if job.offline_paths:
-            # Pinned content is hydrated into the VFS cache and must not age
-            # out. Size pressure remains visible to the user through the
-            # explicit Free local space action.
+            # A generic rclone cache quota cannot distinguish pinned content
+            # from ordinary streamed files: it evicts the least recently used
+            # object regardless of TuxDrive's offline rules.  Disable those
+            # automatic eviction paths while at least one durable pin exists;
+            # the explicit Free local space action remains the authority for
+            # releasing pinned bytes.  Fast fingerprints avoid a slow remote
+            # hash/modtime round-trip when opening an already cached file.
             index = command.index("--vfs-cache-max-age")
             command[index + 1] = "87600h"
+            index = command.index("--vfs-cache-max-size")
+            command[index + 1] = "off"
+            index = command.index("--vfs-cache-min-free-space")
+            command[index + 1] = "off"
+            command.append("--vfs-fast-fingerprint")
         return command
 
     def set_offline(self, job: SyncJob, relative: str, available: bool) -> str:
@@ -225,8 +234,18 @@ class SyncEngine:
         if not relative or relative.startswith("../"):
             raise ValueError("Select a file or folder inside the streaming drive")
         if available:
-            added = relative not in job.offline_paths
-            if added:
+            previous_rules = list(job.offline_paths)
+            already_covered = any(
+                rule == "." or relative == rule or relative.startswith(rule.rstrip("/") + "/")
+                for rule in previous_rules
+            )
+            if relative == ".":
+                job.offline_paths = ["."]
+            elif not already_covered:
+                job.offline_paths = [
+                    rule for rule in previous_rules
+                    if not rule.startswith(relative.rstrip("/") + "/")
+                ]
                 job.offline_paths.append(relative)
             try:
                 target = (
@@ -257,8 +276,7 @@ class SyncEngine:
                     raise ValueError("The selected streaming item is no longer available")
                 return f"Available offline · {files} file(s) · {hydrated} bytes hydrated"
             except Exception:
-                if added:
-                    job.offline_paths.remove(relative)
+                job.offline_paths = previous_rules
                 raise
         if relative == ".":
             job.offline_paths.clear()
@@ -274,6 +292,26 @@ class SyncEngine:
             if item.is_file() and (path.endswith(marker) or marker + "/" in path):
                 item.unlink(missing_ok=True)
         return "Online only; matching cached content released"
+
+    def restart_mount(
+        self,
+        job: SyncJob,
+        callback: Callable[[JobResult], None],
+    ) -> JobResult:
+        """Restart a live VFS after its durable-retention policy changes."""
+        self.stop_mount(job)
+        result = self.start_mount(job)
+        if result.success:
+            with self._lock:
+                process = self._mounts.get(job.id)
+            if process:
+                threading.Thread(
+                    target=self._watch_mount,
+                    args=(job, process, result.log_path, callback),
+                    name=f"tuxdrive-mount-{job.id[:8]}",
+                    daemon=True,
+                ).start()
+        return result
 
     def record_delta_manifest(self, job: SyncJob, relative: str) -> tuple[int, int]:
         """Persist rolling-block signatures and report changed/total bytes."""

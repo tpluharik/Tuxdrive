@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.20.1 suite contains **135 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxDrive 0.20.2 suite contains **140 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -29,11 +29,11 @@ The TuxDrive 0.20.1 suite contains **135 automated tests**. Tests use temporary 
 | `test_delta.py` | 1 | Rolling BLAKE2 block signatures identify only modified ranges and calculate transferred bytes. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
 | `test_platform_support.py` | 4 | Safe distribution parsing, Linux/macOS machine-readable capability reporting and unsupported-architecture blocking. |
-| `test_engine.py` | 22 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, incremental transfers, streaming commands, safe overlap, mount recovery, offline root/item hydration, failed-pin rollback, symlink rejection, failure summaries and transfer-engine replacement. |
+| `test_engine.py` | 25 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, incremental transfers, streaming commands, safe overlap, mount recovery, pin-aware eviction policy/remounting, offline rule normalization, root/item hydration, failed-pin rollback, symlink rejection, failure summaries and transfer-engine replacement. |
 | `test_github_sync.py` | 3 | GitHub-only credential-free URL validation, branch/item URL safety, and guarded two-way commit/fetch/rebase/push orchestration. |
 | `test_i18n_help.py` | 2 | Six-language UI fallback, Arabic/Hebrew RTL detection and complete localized in-app help topics. |
 | `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
-| `test_offline_action.py` | 3 | Mounted-drive fast dispatch, cold-start queuing and both supported command-line availability option forms. |
+| `test_offline_action.py` | 5 | Mounted-drive fast dispatch, cold-start queuing, both supported command-line availability option forms, and green-state publication only for completely reverified rules. |
 | `test_packaging.py` | 11 | Debian launcher/layout checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion, packaged emblems, and unbranded color/shape/glyph-distinct badge metadata. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
 | `test_peer.py` | 19 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, isolated per-device role/root enforcement, multi-device authorization, legacy migration, host-key pinning, edit leases and private-identity authentication. |
@@ -82,9 +82,9 @@ The TuxDrive 0.20.1 suite contains **135 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.20.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.20.1_all.deb
-sha256sum dist/tuxdrive_0.20.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.20.2_all.deb
+dpkg-deb --contents dist/tuxdrive_0.20.2_all.deb
+sha256sum dist/tuxdrive_0.20.2_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -99,8 +99,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.20.1 \
-  --package dist/tuxdrive_0.20.1_all.deb \
+python3 scripts/sign-update.py --version 0.20.2 \
+  --package dist/tuxdrive_0.20.2_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```

@@ -1,6 +1,6 @@
 import unittest
 
-from tuxdrive.nautilus_support import availability_route, command_line_path
+from tuxdrive.nautilus_support import availability_route, command_line_path, verified_rules_after
 
 
 class OfflineActionTests(unittest.TestCase):
@@ -29,6 +29,23 @@ class OfflineActionTests(unittest.TestCase):
         self.assertEqual(
             availability_route(mounted=False, runtime_ready=True, enabled=True),
             "start-mount",
+        )
+
+    def test_only_completed_offline_rules_receive_green_state(self):
+        configured = ["first", "second"]
+        verified = verified_rules_after(set(), configured, "first", True)
+        self.assertEqual(verified, {"first"})
+        verified = verified_rules_after(verified, configured, "second", True)
+        self.assertEqual(verified, {"first", "second"})
+        self.assertEqual(
+            verified_rules_after(verified, ["second"], "first", False),
+            {"second"},
+        )
+
+    def test_verified_root_replaces_child_rules(self):
+        self.assertEqual(
+            verified_rules_after({"folder/child"}, ["."], ".", True),
+            {"."},
         )
 
 
