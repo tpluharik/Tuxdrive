@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.20.0 suite contains **132 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxDrive 0.20.1 suite contains **135 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -33,14 +33,16 @@ The TuxDrive 0.20.0 suite contains **132 automated tests**. Tests use temporary 
 | `test_github_sync.py` | 3 | GitHub-only credential-free URL validation, branch/item URL safety, and guarded two-way commit/fetch/rebase/push orchestration. |
 | `test_i18n_help.py` | 2 | Six-language UI fallback, Arabic/Hebrew RTL detection and complete localized in-app help topics. |
 | `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
+| `test_offline_action.py` | 3 | Mounted-drive fast dispatch, cold-start queuing and both supported command-line availability option forms. |
 | `test_packaging.py` | 11 | Debian launcher/layout checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion, packaged emblems, and unbranded color/shape/glyph-distinct badge metadata. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
 | `test_peer.py` | 19 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, isolated per-device role/root enforcement, multi-device authorization, legacy migration, host-key pinning, edit leases and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
 | `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
 | `test_security.py` | 2 | Symlink/parent escape rejection plus Ed25519 signed-transaction tamper detection. |
+| `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 18 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
-| `test_updater.py` | 9 | Numeric version comparison, trusted release URLs, progress, download verification, corrupt-partial cleanup, privileged no-follow immutable staging/digest checks, and signed manifest/package release coherence. |
+| `test_updater.py` | 10 | Numeric version comparison, trusted release URLs, progress, download verification, corrupt-partial cleanup, privileged no-follow immutable staging/digest checks, and signed manifest/package release coherence. |
 
 ## Important safety invariants covered
 
@@ -80,9 +82,9 @@ The TuxDrive 0.20.0 suite contains **132 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.20.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.20.0_all.deb
-sha256sum dist/tuxdrive_0.20.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.20.1_all.deb
+dpkg-deb --contents dist/tuxdrive_0.20.1_all.deb
+sha256sum dist/tuxdrive_0.20.1_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -97,8 +99,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.20.0 \
-  --package dist/tuxdrive_0.20.0_all.deb \
+python3 scripts/sign-update.py --version 0.20.1 \
+  --package dist/tuxdrive_0.20.1_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```

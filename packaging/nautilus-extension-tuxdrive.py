@@ -95,7 +95,20 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
                 continue
 
     def _metadata_changed(self, _monitor, changed, _other, _event) -> None:
-        if changed.get_basename() not in {"config.json", "nautilus-state.json"}:
+        # Config/state writers use an atomic temporary-file + rename sequence.
+        # Depending on the GLib/GVfs version, the directory monitor can report
+        # either side of that move, so inspect both paths and the temporary
+        # prefixes instead of waiting only for a direct target-file event.
+        basenames = {
+            item.get_basename()
+            for item in (changed, _other)
+            if item is not None
+        }
+        if not any(
+            name in {"config.json", "nautilus-state.json"}
+            or name.startswith(("config-", "nautilus-state-"))
+            for name in basenames
+        ):
             return
         for file_info in list(self._known_files.values()):
             try:
@@ -104,18 +117,14 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
                 continue
 
     def _activate(self, action: str, path: Path | None = None) -> None:
-        if action in {"open-online-path", "offline-path", "online-only-path"}:
+        if action == "open-online-path":
             # GApplication forwards this request to the primary TuxDrive
             # process. This avoids org.gtk.Actions discovery differences in
             # Nautilus 4.1 while preserving one application instance.
             Gio.Subprocess.new(
                 [
                     "/usr/bin/tuxdrive",
-                    {
-                        "open-online-path": "--open-online",
-                        "offline-path": "--offline-path",
-                        "online-only-path": "--online-only-path",
-                    }[action],
+                    "--open-online",
                     str(path or ""),
                 ],
                 Gio.SubprocessFlags.NONE,
@@ -136,6 +145,18 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
                 refreshed.activate_action(action, parameter)
                 return GLib.SOURCE_REMOVE
             if remaining <= 1:
+                if action in {"offline-path", "online-only-path"}:
+                    Gio.Subprocess.new(
+                        [
+                            "/usr/bin/tuxdrive",
+                            {
+                                "offline-path": "--offline-path",
+                                "online-only-path": "--online-only-path",
+                            }[action],
+                            str(path or ""),
+                        ],
+                        Gio.SubprocessFlags.NONE,
+                    )
                 return GLib.SOURCE_REMOVE
             GLib.timeout_add(150, retry, remaining - 1)
             return GLib.SOURCE_REMOVE

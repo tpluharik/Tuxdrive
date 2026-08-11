@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.1 — reliable Nautilus offline-action dispatch
+
+- Routed **Always keep available offline** and **Free local space** through registered in-process application actions when TuxDrive is running, with the command-line path retained as a compatibility fallback.
+- Removed the unrelated cloud-account discovery gate from hydration requests against an already mounted streaming drive.
+- Queued cold-start requests until the streaming mount is ready, accepted both supported command-line option forms, and rejected duplicate hydration requests.
+- Added visible desktop failure notifications and made Nautilus invalidate badges for atomic configuration/state-file replacements.
+
 ## 0.20.0 — reliable offline pinning, folder groups and GitHub sync
 
 - Fixed **Always keep available offline** for both streaming-drive roots and nested items, with rollback on failed hydration and symlink-safe path handling.

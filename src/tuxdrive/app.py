@@ -70,6 +70,7 @@ from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
 from .migration import MigrationError, ProfileManager
 from .platform_support import format_report, inspect_host
+from .nautilus_support import availability_route, command_line_path
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -3516,6 +3517,8 @@ class TuxDriveApplication(Gtk.Application):
             ("sync-path", self._nautilus_sync_path),
             ("open-online-path", self._nautilus_open_online),
             ("open-logs", self._nautilus_open_logs),
+            ("offline-path", self._nautilus_keep_offline),
+            ("online-only-path", self._nautilus_make_online_only),
         ):
             action = Gio.SimpleAction.new(name, GLib.VariantType.new("s"))
             action.connect("activate", callback)
@@ -3540,16 +3543,15 @@ class TuxDriveApplication(Gtk.Application):
         options = command_line.get_options_dict()
         for name, available in (("offline-path", True), ("online-only-path", False)):
             selected = options.lookup_value(name, GLib.VariantType.new("s"))
-            if selected is not None:
-                value = selected.get_string()
+            value = selected.get_string() if selected is not None else ""
+            if not value:
+                value = command_line_path(arguments, name)
+            if value:
                 LOGGER.info("Received Nautilus offline-state request: %s available=%s", value, available)
                 if self.window is None:
                     self.background = True
                     self.activate()
-                if self._runtime_ready_once:
-                    self._set_offline_path(value, available)
-                else:
-                    self._pending_offline_requests.append((value, available))
+                self._request_offline_path(value, available)
                 return 0
         option = options.lookup_value(
             "open-online", GLib.VariantType.new("s")
@@ -3575,14 +3577,53 @@ class TuxDriveApplication(Gtk.Application):
         self.activate()
         return 0
 
-    def _set_offline_path(self, value: str, available: bool) -> None:
+    def _request_offline_path(self, value: str, available: bool) -> None:
+        """Dispatch availability without waiting on unrelated account discovery."""
         job = self._job_for_local_path(value)
         if not job or job.mode is not SyncMode.VIRTUAL_DRIVE:
             LOGGER.warning("Offline-state request is not inside a streaming drive: %s", value)
+            self._offline_request_failed(
+                "The selected path is not inside a configured streaming drive."
+            )
+            return
+        mounted = job.id in self.engine.mounted_jobs or os.path.ismount(job.local)
+        route = availability_route(
+            mounted=mounted,
+            runtime_ready=self._runtime_ready_once,
+            enabled=job.enabled,
+        )
+        if route == "dispatch":
+            self._set_offline_path(value, available)
+            return
+        request = (value, available)
+        if request not in self._pending_offline_requests:
+            self._pending_offline_requests.append(request)
+        LOGGER.info("Queued offline-state request until streaming mount is ready: %s", value)
+        if route == "start-mount":
+            self.run_job(job, quiet=True)
+            if job.id in self.engine.mounted_jobs or os.path.ismount(job.local):
+                try:
+                    self._pending_offline_requests.remove(request)
+                except ValueError:
+                    pass
+                self._set_offline_path(value, available)
+            elif job.last_error:
+                self._offline_request_failed(job.last_error)
+
+    def _set_offline_path(self, value: str, available: bool) -> None:
+        job = self._job_for_local_path(value)
+        if not job or job.mode is not SyncMode.VIRTUAL_DRIVE:
+            self._offline_request_failed(
+                "The selected path is not inside a configured streaming drive."
+            )
             return
         try:
             relative = Path(value).expanduser().resolve(strict=False).relative_to(job.local.resolve(strict=False)).as_posix()
         except (OSError, RuntimeError, ValueError):
+            self._offline_request_failed("The selected streaming path is invalid or no longer available.")
+            return
+        if relative in self._offline_pending_paths.get(job.id, set()):
+            LOGGER.info("Offline-state request already running for %s", value)
             return
         self._offline_pending_paths.setdefault(job.id, set()).add(relative)
         self._publish_nautilus_state()
@@ -3616,7 +3657,23 @@ class TuxDriveApplication(Gtk.Application):
             self.save()
         if self.window:
             self.window.message(str(error) if error else str(result), Gtk.MessageType.ERROR if error else Gtk.MessageType.INFO)
+        if error:
+            self._offline_request_failed(str(error), show_window=False)
         return False
+
+    def _offline_request_failed(self, detail: str, *, show_window: bool = True) -> None:
+        LOGGER.error("Offline availability request failed: %s", detail)
+        notification = Gio.Notification.new("Could not change offline availability")
+        notification.set_body(detail)
+        self.send_notification("offline-availability-error", notification)
+        if show_window and self.window:
+            self.window.message(detail, Gtk.MessageType.ERROR)
+
+    def _nautilus_keep_offline(self, _action: Gio.SimpleAction, parameter: GLib.Variant) -> None:
+        self._request_offline_path(parameter.get_string(), True)
+
+    def _nautilus_make_online_only(self, _action: Gio.SimpleAction, parameter: GLib.Variant) -> None:
+        self._request_offline_path(parameter.get_string(), False)
 
     def _job_for_local_path(self, value: str) -> SyncJob | None:
         try:
@@ -4139,7 +4196,7 @@ class TuxDriveApplication(Gtk.Application):
                 self._open_online_path(value)
             pending_offline, self._pending_offline_requests = self._pending_offline_requests, []
             for value, available in pending_offline:
-                self._set_offline_path(value, available)
+                self._request_offline_path(value, available)
         return False
 
     @staticmethod

@@ -1,8 +1,8 @@
 {
-  "version": "0.20.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.0_all.deb",
-  "sha256": "c8861dcccd6d42083c38d89fc2fe478f93d7a2b2f80fb338be6367c1dd707335",
-  "notes": "Reliable offline availability, editable folder groups, and GitHub repository synchronization",
-  "expires_at": "2026-11-09T05:36:26.815821+00:00",
-  "signature": "2muDxlF37IKuCEGVyZDnh6wV0apCKmi/REVkt8uuFCzjjuZzfzOKBVFVc73fcMnHiPfB0WYPE7nHd4x1M+bIDQ=="
+  "version": "0.20.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.1_all.deb",
+  "sha256": "8ec21d317775cafdddda918dc164e12c3f105ba692c55854a0ded71b95551431",
+  "notes": "Fix Nautilus offline availability dispatch, cold-start queuing, badge refresh, and visible failures",
+  "expires_at": "2027-02-07T06:08:12.448401+00:00",
+  "signature": "o3pyFiyWV3HjHpjnpHaQKzlu53VrXgqsALVaH2UhDY04gyOhsbE7Mv2sRS0XI8ct8J+SY3n64BqxN/vNDEnPAQ=="
 }
