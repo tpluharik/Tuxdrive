@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.0 — reliable offline pinning, folder groups and GitHub sync
+
+- Fixed **Always keep available offline** for both streaming-drive roots and nested items, with rollback on failed hydration and symlink-safe path handling.
+- Added per-item Nautilus hydration metadata: blue synchronization arrows while content downloads and a green check with **Available offline** only after full hydration finishes.
+- Added editable internal groups for synchronized folders. Creating, renaming, moving entries between, or deleting groups changes only TuxDrive list organization and never moves local/cloud files.
+- Added GitHub repository synchronization through system Git: clone, automatic commit, fetch, safe rebase and push for two-way jobs; fast-forward-only download mode; guarded upload-only mode; actionable conflict/authentication failures.
+- GitHub credentials remain with the system SSH agent or Git credential helper. TuxDrive rejects credential-bearing repository URLs and stores no GitHub token.
+- Added GitHub URL/branch validation, offline hydration, group migration, package/icon and Git command regression coverage. The complete suite now contains 132 tests.
+
 ## 0.19.2 — visible functional Nautilus status badges
 
 - Replaced the penguin-branded Nautilus status emblems with six compact functional badges designed to remain readable at normal Files icon sizes.

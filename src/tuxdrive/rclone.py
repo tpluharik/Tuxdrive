@@ -131,7 +131,7 @@ class RcloneClient:
         backend_map = {
             provider.rclone_type: provider
             for provider in Provider
-            if provider not in {Provider.NEXTCLOUD, Provider.PEER}
+            if provider not in {Provider.NEXTCLOUD, Provider.GITHUB, Provider.PEER}
         }
         for name, values in raw.items():
             backend = values.get("type") if isinstance(values, dict) else None

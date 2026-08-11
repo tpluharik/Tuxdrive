@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from tuxdrive.config import ConfigStore
-from tuxdrive.models import Account, AppConfig, ConflictPolicy, PeerShare, Provider, SyncJob, SyncMode
+from tuxdrive.models import Account, AppConfig, ConflictPolicy, FolderGroup, PeerShare, Provider, SyncJob, SyncMode
 
 
 class ConfigStoreTests(unittest.TestCase):
@@ -28,7 +28,9 @@ class ConfigStoreTests(unittest.TestCase):
                     )
                 ],
                 peer_shares=[PeerShare("Direct", "/tmp/direct", "192.0.2.4", 22022, "ssh-ed25519 AAAA")],
+                folder_groups=[FolderGroup("Customers", id="customers")],
             )
+            value.jobs[0].group_id = "customers"
             store.save(value)
             loaded = store.load()
             self.assertEqual(loaded.accounts[0].provider, Provider.GOOGLE_DRIVE)
@@ -39,6 +41,8 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(loaded.jobs[0].cloud_location_name, "Shared Drive · Projects")
             self.assertTrue(loaded.jobs[0].acknowledge_google_abuse)
             self.assertEqual(loaded.peer_shares[0].advertised_host, "192.0.2.4")
+            self.assertEqual(loaded.folder_groups[0].name, "Customers")
+            self.assertEqual(loaded.jobs[0].group_id, "customers")
             self.assertEqual(os.stat(path).st_mode & 0o777, 0o600)
 
     def test_profile_settings_round_trip(self):

@@ -137,14 +137,15 @@ class RcloneClientTests(unittest.TestCase):
         self.assertIn("root_folder_id=root", google_scoped_remote("work", "my_drive"))
         self.assertIn("shared_with_me=true", google_scoped_remote("work", "shared_with_me"))
 
-    def test_eight_cloud_backends_and_direct_peer_backend_are_available(self):
-        self.assertEqual(len(Provider), 10)
+    def test_cloud_git_vault_and_direct_peer_backends_are_available(self):
+        self.assertEqual(len(Provider), 11)
         self.assertEqual(Provider.DROPBOX.rclone_type, "dropbox")
         self.assertEqual(Provider.BOX.rclone_type, "box")
         self.assertEqual(Provider.PCLOUD.rclone_type, "pcloud")
         self.assertEqual(Provider.MEGA.rclone_type, "mega")
         self.assertEqual(Provider.PROTON_DRIVE.rclone_type, "protondrive")
         self.assertEqual(Provider.NEXTCLOUD.rclone_type, "webdav")
+        self.assertEqual(Provider.GITHUB.rclone_type, "git")
         self.assertEqual(Provider.PEER.rclone_type, "sftp")
 
     def test_nextcloud_configuration_sets_webdav_vendor(self):

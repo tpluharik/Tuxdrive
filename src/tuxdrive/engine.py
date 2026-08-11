@@ -26,6 +26,7 @@ from .models import ConflictPolicy, PeerRole, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
+from .github_sync import GitHubSyncError, parse_repository_url, validate_branch
 from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
 
 
@@ -224,20 +225,41 @@ class SyncEngine:
         if not relative or relative.startswith("../"):
             raise ValueError("Select a file or folder inside the streaming drive")
         if available:
-            if relative not in job.offline_paths:
+            added = relative not in job.offline_paths
+            if added:
                 job.offline_paths.append(relative)
-            target = confined_path(job.local, relative)
-            if target.is_file():
-                with target.open("rb") as handle:
-                    while handle.read(4 * 1024 * 1024):
-                        pass
-            elif target.is_dir():
-                for item in target.rglob("*"):
-                    if item.is_file():
-                        with item.open("rb") as handle:
-                            while handle.read(4 * 1024 * 1024):
-                                pass
-            return "Available offline"
+            try:
+                target = (
+                    job.local.expanduser().resolve(strict=True)
+                    if relative == "."
+                    else confined_path(job.local, relative)
+                )
+                files = 0
+                hydrated = 0
+
+                def hydrate(item: Path) -> None:
+                    nonlocal files, hydrated
+                    if item.is_symlink():
+                        raise ValueError(f"Cannot pin symbolic link: {item.name}")
+                    with item.open("rb") as handle:
+                        while content := handle.read(4 * 1024 * 1024):
+                            hydrated += len(content)
+                    files += 1
+
+                if target.is_file():
+                    hydrate(target)
+                elif target.is_dir():
+                    for item in target.rglob("*"):
+                        if item.is_file():
+                            relative_item = item.relative_to(job.local)
+                            hydrate(confined_path(job.local, relative_item))
+                else:
+                    raise ValueError("The selected streaming item is no longer available")
+                return f"Available offline · {files} file(s) · {hydrated} bytes hydrated"
+            except Exception:
+                if added:
+                    job.offline_paths.remove(relative)
+                raise
         if relative == ".":
             job.offline_paths.clear()
         else:
@@ -246,9 +268,10 @@ class SyncEngine:
         if relative == "." and cache.exists():
             shutil.rmtree(cache)
             return "Online only; streaming cache released"
-        suffix = "/" + relative
+        marker = "/" + relative.rstrip("/")
         for item in (cache.rglob("*") if cache.exists() else ()):
-            if item.is_file() and item.as_posix().endswith(suffix):
+            path = item.as_posix()
+            if item.is_file() and (path.endswith(marker) or marker + "/" in path):
                 item.unlink(missing_ok=True)
         return "Online only; matching cached content released"
 
@@ -623,7 +646,7 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
         reconcile: Callable[[SyncJob], None],
     ) -> None:
-        if job.mode is SyncMode.VIRTUAL_DRIVE or not job.realtime_sync or not job.initialized:
+        if job.is_git or job.mode is SyncMode.VIRTUAL_DRIVE or not job.realtime_sync or not job.initialized:
             return
         self.stop_callbacks(job.id)
         monitor = ChangeMonitor(
@@ -778,6 +801,9 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
         dry_run: bool,
     ) -> None:
+        if job.is_git:
+            callback(self._run_git_sync(job, log_path, dry_run))
+            return
         ensure_private_directory(log_path.parent)
         cancelled = False
         try:
@@ -851,6 +877,265 @@ class SyncEngine:
             with self._lock:
                 self._processes.pop(job.id, None)
         callback(result)
+
+    def _run_git_sync(self, job: SyncJob, log_path: Path, dry_run: bool) -> JobResult:
+        """Synchronize a GitHub working tree without storing access tokens."""
+        ensure_private_directory(log_path.parent)
+        prepare_private_file(log_path)
+        try:
+            repository = parse_repository_url(job.repository_url)
+            branch = validate_branch(job.repository_branch)
+            git = shutil.which("git")
+            if not git:
+                raise GitHubSyncError("Git is not installed")
+            environment = os.environ.copy()
+            environment.update({"GIT_TERMINAL_PROMPT": "0", "GIT_ASKPASS": "/bin/false"})
+
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(
+                    f"\n[{datetime.now(timezone.utc).isoformat()}] Starting GitHub "
+                    f"synchronization for {repository.owner}/{repository.name} ({branch})\n"
+                )
+                if dry_run:
+                    return JobResult(job.id, True, "GitHub synchronization preview complete", log_path)
+
+                metadata = job.local / ".git"
+                if not metadata.exists():
+                    if any(job.local.iterdir()):
+                        raise GitHubSyncError(
+                            "The selected local folder is not empty and is not a Git repository"
+                        )
+                    code = self._run_git_process(
+                        job,
+                        [git, "clone", "--single-branch", "--branch", branch, job.repository_url, str(job.local)],
+                        job.local.parent,
+                        log,
+                        environment,
+                    )
+                    if code:
+                        return self._git_failure(job, log_path, code, "clone")
+                else:
+                    origin = self._git_output(
+                        [git, "-C", str(job.local), "remote", "get-url", "origin"], environment
+                    )
+                    current = parse_repository_url(origin)
+                    if (current.owner.lower(), current.name.lower()) != (
+                        repository.owner.lower(), repository.name.lower()
+                    ):
+                        raise GitHubSyncError(
+                            "The local folder's origin points to a different GitHub repository"
+                        )
+                    current_branch = self._git_output(
+                        [git, "-C", str(job.local), "branch", "--show-current"], environment
+                    )
+                    if current_branch != branch:
+                        raise GitHubSyncError(
+                            f"The local repository is on branch '{current_branch or 'detached HEAD'}', not '{branch}'"
+                        )
+
+                if job.git_author_name:
+                    self._run_git_process(
+                        job,
+                        [git, "-C", str(job.local), "config", "user.name", job.git_author_name],
+                        job.local,
+                        log,
+                        environment,
+                    )
+                if job.git_author_email:
+                    self._run_git_process(
+                        job,
+                        [git, "-C", str(job.local), "config", "user.email", job.git_author_email],
+                        job.local,
+                        log,
+                        environment,
+                    )
+
+                if job.mode is SyncMode.DOWNLOAD_ONLY:
+                    if self._git_dirty(git, job.local, environment):
+                        raise GitHubSyncError(
+                            "Download-only synchronization stopped because the local repository has uncommitted changes"
+                        )
+                    if self._run_git_process(
+                        job, [git, "-C", str(job.local), "fetch", "origin", branch],
+                        job.local, log, environment,
+                    ):
+                        return self._git_failure(job, log_path, 1, "fetch")
+                    code = self._run_git_process(
+                        job, [git, "-C", str(job.local), "merge", "--ff-only", f"origin/{branch}"],
+                        job.local, log, environment,
+                    )
+                    return (
+                        self._git_failure(job, log_path, code, "fast-forward")
+                        if code else JobResult(job.id, True, "GitHub download complete", log_path)
+                    )
+
+                changes = self._git_changes(git, job.local, environment)
+                if job.ransomware_protection and job.initialized and changes:
+                    total_files = sum(
+                        1 for item in job.local.rglob("*")
+                        if item.is_file() and ".git" not in item.relative_to(job.local).parts
+                    )
+                    decision = MassChangeGuard.assess(job, changes, total_files)
+                    if decision.blocked:
+                        return JobResult(
+                            job.id, False,
+                            f"Protection paused GitHub synchronization: {decision.reason}",
+                            log_path, mass_change_blocked=True,
+                        )
+                deleted = sum(1 for item in changes if item.deleted)
+                if job.max_delete >= 0 and deleted > job.max_delete:
+                    return JobResult(
+                        job.id, False,
+                        f"Protection paused GitHub synchronization: {deleted} local deletions exceed the limit of {job.max_delete}",
+                        log_path, mass_change_blocked=True,
+                    )
+                if self._run_git_process(
+                    job, [git, "-C", str(job.local), "add", "-A"],
+                    job.local, log, environment,
+                ):
+                    return self._git_failure(job, log_path, 1, "stage")
+                staged = subprocess.run(
+                    [git, "-C", str(job.local), "diff", "--cached", "--quiet"],
+                    env=environment,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    check=False,
+                ).returncode != 0
+                if staged:
+                    message = f"TuxDrive sync {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')}"
+                    code = self._run_git_process(
+                        job, [git, "-C", str(job.local), "commit", "-m", message],
+                        job.local, log, environment,
+                    )
+                    if code:
+                        return self._git_failure(
+                            job, log_path, code, "commit (check Git author name and email)"
+                        )
+                if self._run_git_process(
+                    job, [git, "-C", str(job.local), "fetch", "origin", branch],
+                    job.local, log, environment,
+                ):
+                    return self._git_failure(job, log_path, 1, "fetch")
+                if job.mode is SyncMode.TWO_WAY:
+                    code = self._run_git_process(
+                        job, [git, "-C", str(job.local), "rebase", f"origin/{branch}"],
+                        job.local, log, environment,
+                    )
+                    if code:
+                        self._run_git_process(
+                            job, [git, "-C", str(job.local), "rebase", "--abort"],
+                            job.local, log, environment,
+                        )
+                        return JobResult(
+                            job.id, False,
+                            "GitHub synchronization stopped on a rebase conflict; local changes were restored",
+                            log_path,
+                        )
+                else:
+                    code = self._run_git_process(
+                        job,
+                        [git, "-C", str(job.local), "merge-base", "--is-ancestor", f"origin/{branch}", "HEAD"],
+                        job.local, log, environment,
+                    )
+                    if code:
+                        return JobResult(
+                            job.id, False,
+                            "Upload-only synchronization stopped because GitHub contains changes not present locally",
+                            log_path,
+                        )
+                code = self._run_git_process(
+                    job, [git, "-C", str(job.local), "push", "origin", f"HEAD:{branch}"],
+                    job.local, log, environment,
+                )
+                return (
+                    self._git_failure(job, log_path, code, "push")
+                    if code else JobResult(job.id, True, "GitHub synchronization complete", log_path)
+                )
+        except (OSError, RuntimeError, GitHubSyncError) as exc:
+            return JobResult(job.id, False, f"GitHub synchronization could not start: {exc}", log_path)
+        finally:
+            with self._lock:
+                self._processes.pop(job.id, None)
+
+    def _run_git_process(
+        self, job: SyncJob, command: list[str], cwd: Path, log, environment: dict[str, str]
+    ) -> int:
+        process = subprocess.Popen(
+            command,
+            cwd=cwd,
+            env=environment,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            text=True,
+            start_new_session=True,
+        )
+        with self._lock:
+            self._processes[job.id] = process
+        return process.wait()
+
+    @staticmethod
+    def _git_output(command: list[str], environment: dict[str, str]) -> str:
+        result = subprocess.run(
+            command, env=environment, capture_output=True, text=True, timeout=60, check=False
+        )
+        if result.returncode:
+            raise GitHubSyncError(
+                (result.stderr or result.stdout or "Git command failed").strip()
+            )
+        return result.stdout.strip()
+
+    @staticmethod
+    def _git_dirty(git: str, folder: Path, environment: dict[str, str]) -> bool:
+        result = subprocess.run(
+            [git, "-C", str(folder), "status", "--porcelain"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if result.returncode:
+            raise GitHubSyncError(
+                (result.stderr or "Could not inspect the local repository").strip()
+            )
+        return bool(result.stdout.strip())
+
+    @staticmethod
+    def _git_changes(git: str, folder: Path, environment: dict[str, str]) -> list[FileChange]:
+        result = subprocess.run(
+            [git, "-C", str(folder), "status", "--porcelain", "--untracked-files=all"],
+            env=environment,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        if result.returncode:
+            raise GitHubSyncError(
+                (result.stderr or "Could not inspect local GitHub changes").strip()
+            )
+        changes: list[FileChange] = []
+        for line in result.stdout.splitlines():
+            if len(line) < 4:
+                continue
+            status, path = line[:2], line[3:]
+            if " -> " in path:
+                path = path.rsplit(" -> ", 1)[1]
+            changes.append(FileChange(path.strip('"'), "local", "D" in status))
+        return changes
+
+    @staticmethod
+    def _git_failure(job: SyncJob, log_path: Path, code: int, action: str) -> JobResult:
+        cancelled = code in (-signal.SIGTERM, 143)
+        return JobResult(
+            job.id,
+            False,
+            "GitHub synchronization cancelled"
+            if cancelled else
+            f"GitHub {action} failed; see the job log. Configure SSH or a system Git credential helper for private/write access.",
+            log_path,
+            cancelled=cancelled,
+        )
 
     @staticmethod
     def _conflict_flags(policy: ConflictPolicy) -> list[str]:

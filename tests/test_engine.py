@@ -94,6 +94,32 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertIn("--log-level", command)
             self.assertIn("--stats", command)
 
+    def test_offline_root_and_file_are_fully_hydrated_and_persisted(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "folder").mkdir()
+            (root / "folder" / "one.bin").write_bytes(b"one")
+            (root / "two.bin").write_bytes(b"two")
+            job = SyncJob(account_remote="google", local_path=str(root), mode=SyncMode.VIRTUAL_DRIVE)
+            message = self.engine.set_offline(job, ".", True)
+        self.assertEqual(job.offline_paths, ["."])
+        self.assertIn("2 file(s)", message)
+        self.assertIn("6 bytes", message)
+
+    def test_failed_offline_symlink_hydration_rolls_back_pin(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            outside = root.parent / "outside-tuxdrive-test"
+            outside.write_text("secret", encoding="utf-8")
+            try:
+                (root / "escape").symlink_to(outside)
+                job = SyncJob(account_remote="google", local_path=str(root), mode=SyncMode.VIRTUAL_DRIVE)
+                with self.assertRaises(ValueError):
+                    self.engine.set_offline(job, "escape", True)
+                self.assertEqual(job.offline_paths, [])
+            finally:
+                outside.unlink(missing_ok=True)
+
     def test_overlapping_sync_and_streaming_paths_are_detected(self):
         self.assertTrue(paths_overlap("/data/TuxDrive", "/data/TuxDrive/CEVRO"))
         self.assertTrue(paths_overlap("/data/TuxDrive/CEVRO", "/data/TuxDrive"))

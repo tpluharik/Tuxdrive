@@ -33,6 +33,7 @@ class Provider(str, Enum):
     MEGA = "mega"
     PROTON_DRIVE = "proton_drive"
     NEXTCLOUD = "nextcloud"
+    GITHUB = "github"
     PEER = "peer"
     VAULT = "vault"
 
@@ -47,6 +48,7 @@ class Provider(str, Enum):
             self.MEGA: "MEGA",
             self.PROTON_DRIVE: "Proton Drive",
             self.NEXTCLOUD: "Nextcloud",
+            self.GITHUB: "GitHub",
             self.PEER: "Peer-to-peer",
             self.VAULT: "Encrypted vault",
         }[self]
@@ -62,6 +64,7 @@ class Provider(str, Enum):
             self.MEGA: "mega",
             self.PROTON_DRIVE: "protondrive",
             self.NEXTCLOUD: "webdav",
+            self.GITHUB: "git",
             self.PEER: "sftp",
             self.VAULT: "crypt",
         }[self]
@@ -72,6 +75,8 @@ class Provider(str, Enum):
             return "network-workgroup-symbolic"
         if self is self.VAULT:
             return "changes-prevent-symbolic"
+        if self is self.GITHUB:
+            return "tuxdrive-github"
         return f"tuxdrive-{self.value.replace('_', '-')}"
 
     @property
@@ -85,6 +90,7 @@ class Provider(str, Enum):
             self.MEGA: "mega",
             self.PROTON_DRIVE: "proton",
             self.NEXTCLOUD: "nextcloud",
+            self.GITHUB: "github",
             self.PEER: "peer",
             self.VAULT: "vault",
         }[self]
@@ -137,6 +143,7 @@ class Provider(str, Enum):
             self.MEGA: "https://mega.nz/fm",
             self.PROTON_DRIVE: "https://drive.proton.me/",
             self.NEXTCLOUD: "",
+            self.GITHUB: "https://github.com/",
             self.PEER: "",
             self.VAULT: "",
         }[self]
@@ -206,6 +213,10 @@ class Account:
     peer_host_key: str = ""
     vault_base_remote: str = ""
     vault_base_path: str = ""
+    repository_url: str = ""
+    repository_branch: str = "main"
+    git_author_name: str = ""
+    git_author_email: str = ""
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Account":
@@ -219,7 +230,23 @@ class Account:
             peer_host_key=value.get("peer_host_key", ""),
             vault_base_remote=value.get("vault_base_remote", ""),
             vault_base_path=value.get("vault_base_path", ""),
+            repository_url=value.get("repository_url", ""),
+            repository_branch=value.get("repository_branch", "main"),
+            git_author_name=value.get("git_author_name", ""),
+            git_author_email=value.get("git_author_email", ""),
         )
+
+
+@dataclass(slots=True)
+class FolderGroup:
+    name: str
+    id: str = field(default_factory=lambda: uuid4().hex)
+    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    @classmethod
+    def from_dict(cls, value: dict[str, Any]) -> "FolderGroup":
+        allowed = set(cls.__dataclass_fields__)
+        return cls(**{key: item for key, item in value.items() if key in allowed})
 
 
 @dataclass(slots=True)
@@ -345,6 +372,11 @@ class SyncJob:
     peer_role: PeerRole = PeerRole.READ_WRITE
     one_time_drop_id: str = ""
     offline_paths: list[str] = field(default_factory=list)
+    group_id: str = ""
+    repository_url: str = ""
+    repository_branch: str = "main"
+    git_author_name: str = ""
+    git_author_email: str = ""
     id: str = field(default_factory=lambda: uuid4().hex)
     initialized: bool = False
     last_run: str | None = None
@@ -360,6 +392,10 @@ class SyncJob:
     @property
     def local(self) -> Path:
         return Path(self.local_path).expanduser()
+
+    @property
+    def is_git(self) -> bool:
+        return bool(self.repository_url)
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "SyncJob":
@@ -400,6 +436,7 @@ class AppSettings:
 class AppConfig:
     accounts: list[Account] = field(default_factory=list)
     jobs: list[SyncJob] = field(default_factory=list)
+    folder_groups: list[FolderGroup] = field(default_factory=list)
     peer_shares: list[PeerShare] = field(default_factory=list)
     settings: AppSettings = field(default_factory=AppSettings)
 
@@ -411,6 +448,7 @@ class AppConfig:
         return cls(
             accounts=[Account.from_dict(item) for item in value.get("accounts", [])],
             jobs=[SyncJob.from_dict(item) for item in value.get("jobs", [])],
+            folder_groups=[FolderGroup.from_dict(item) for item in value.get("folder_groups", [])],
             peer_shares=[PeerShare.from_dict(item) for item in value.get("peer_shares", [])],
             settings=AppSettings.from_dict(value.get("settings", {})),
         )

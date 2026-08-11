@@ -59,9 +59,10 @@ from .help_content import topics as help_topics
 from .i18n import LANGUAGES, LANGUAGE_CODES, get_language, is_rtl, set_language, tr
 from .engine import JobResult, SyncEngine
 from .models import (
-    Account, AppConfig, AuthorizedPeer, ConflictPolicy, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, Provider, SyncJob, SyncMode,
+    Account, AppConfig, AuthorizedPeer, ConflictPolicy, FolderGroup, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, Provider, SyncJob, SyncMode,
     paths_overlap, safe_streaming_overlap,
 )
+from .github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
@@ -909,6 +910,156 @@ class SyncJobDialog(Gtk.Dialog):
     def _selected_location_name(self) -> str:
         location = self.locations.get(self.location.get_active_id())
         return location.name if location else "Cloud drive"
+
+
+class GitHubSyncDialog(Gtk.Dialog):
+    """Configure a repository job while leaving authentication to system Git."""
+
+    def __init__(
+        self,
+        parent: Gtk.Window,
+        groups: list[FolderGroup],
+        account: Account | None = None,
+        job: SyncJob | None = None,
+    ) -> None:
+        super().__init__(
+            title="Edit GitHub synchronization" if job else "Synchronize with GitHub",
+            transient_for=parent,
+            modal=True,
+        )
+        self.set_default_size(680, 560)
+        self.groups = groups
+        self.account = account
+        self.existing_job = job
+        area = self.get_content_area()
+        area.set_border_width(24)
+        area.set_spacing(12)
+        explanation = Gtk.Label(
+            label=(
+                "TuxDrive clones, commits, rebases and pushes through system Git. "
+                "For private or writable repositories, configure an SSH key or Git credential helper first. "
+                "Never place a token in the repository URL."
+            ),
+            xalign=0,
+        )
+        explanation.set_line_wrap(True)
+        area.pack_start(explanation, False, False, 0)
+        grid = Gtk.Grid(column_spacing=14, row_spacing=12)
+        area.pack_start(grid, True, True, 0)
+
+        self.name = Gtk.Entry()
+        self.name.set_text(job.name if job else "GitHub repository")
+        self.repository = Gtk.Entry()
+        self.repository.set_placeholder_text("https://github.com/owner/repository.git")
+        self.repository.set_text((job.repository_url if job else "") or (account.repository_url if account else ""))
+        self.branch = Gtk.Entry()
+        self.branch.set_text((job.repository_branch if job else "") or (account.repository_branch if account else "main"))
+        self.local = Gtk.FileChooserButton(
+            title="Choose an empty folder or existing clone",
+            action=Gtk.FileChooserAction.SELECT_FOLDER,
+        )
+        self.local.set_filename(job.local_path if job else str(Path.home() / "TuxDrive" / "GitHub"))
+        self.mode = Gtk.ComboBoxText()
+        for mode in (SyncMode.TWO_WAY, SyncMode.DOWNLOAD_ONLY, SyncMode.UPLOAD_ONLY):
+            self.mode.append(mode.value, mode.label)
+        self.mode.set_active_id((job.mode if job else SyncMode.TWO_WAY).value)
+        self.interval = Gtk.SpinButton.new_with_range(1, 1440, 1)
+        self.interval.set_value(job.interval_minutes if job else 5)
+        self.author_name = Gtk.Entry()
+        self.author_name.set_text((job.git_author_name if job else "") or (account.git_author_name if account else "") or self._git_default("user.name"))
+        self.author_email = Gtk.Entry()
+        self.author_email.set_text((job.git_author_email if job else "") or (account.git_author_email if account else "") or self._git_default("user.email"))
+        self.group = Gtk.ComboBoxText()
+        self.group.append("", "Ungrouped")
+        for item in groups:
+            self.group.append(item.id, item.name)
+        self.group.set_active_id(job.group_id if job and any(item.id == job.group_id for item in groups) else "")
+
+        rows = (
+            ("Displayed name", self.name),
+            ("GitHub repository", self.repository),
+            ("Branch", self.branch),
+            ("Local folder", self.local),
+            ("Mode", self.mode),
+            ("Sync interval (minutes)", self.interval),
+            ("Commit author name", self.author_name),
+            ("Commit author email", self.author_email),
+            ("Internal group", self.group),
+        )
+        for row, (label, widget) in enumerate(rows):
+            grid.attach(Gtk.Label(label=label, xalign=0), 0, row, 1, 1)
+            grid.attach(widget, 1, row, 1, 1)
+        warning = Gtk.Label(
+            label="Two-way mode automatically commits all changes in this local repository. Rebase conflicts stop safely and remain for manual review.",
+            xalign=0,
+        )
+        warning.set_line_wrap(True)
+        warning.get_style_context().add_class("dim-label")
+        area.pack_start(warning, False, False, 0)
+        self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        save = self.add_button("Save" if job else "Connect and synchronize", Gtk.ResponseType.OK)
+        save.get_style_context().add_class("suggested-action")
+        self.show_all()
+
+    @staticmethod
+    def _git_default(key: str) -> str:
+        git = shutil.which("git")
+        if not git:
+            return ""
+        result = subprocess.run(
+            [git, "config", "--global", "--get", key],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return result.stdout.strip() if result.returncode == 0 else ""
+
+    def values(self) -> tuple[Account, SyncJob]:
+        repository = parse_repository_url(self.repository.get_text())
+        branch = validate_branch(self.branch.get_text())
+        local = self.local.get_filename()
+        if not local:
+            raise GitHubSyncError("Choose a local folder")
+        author_name = self.author_name.get_text().strip()
+        author_email = self.author_email.get_text().strip()
+        if self.mode.get_active_id() != SyncMode.DOWNLOAD_ONLY.value and (not author_name or "@" not in author_email):
+            raise GitHubSyncError("Two-way and upload synchronization require a commit author name and email")
+        remote = (
+            self.account.remote
+            if self.account else
+            "github-" + hashlib.sha256(f"{repository.owner}/{repository.name}/{branch}".encode()).hexdigest()[:12]
+        )
+        account = Account(
+            remote=remote,
+            provider=Provider.GITHUB,
+            display_name=self.name.get_text().strip() or repository.name,
+            created_at=self.account.created_at if self.account else datetime.now(timezone.utc).isoformat(),
+            repository_url=repository.clone_url,
+            repository_branch=branch,
+            git_author_name=author_name,
+            git_author_email=author_email,
+        )
+        job = SyncJob(
+            account_remote=remote,
+            local_path=local,
+            name=self.name.get_text().strip() or repository.name,
+            cloud_location_name=f"GitHub · {repository.owner}/{repository.name}",
+            mode=SyncMode(self.mode.get_active_id()),
+            interval_minutes=self.interval.get_value_as_int(),
+            realtime_sync=False,
+            version_history=False,
+            repository_url=repository.clone_url,
+            repository_branch=branch,
+            git_author_name=author_name,
+            git_author_email=author_email,
+            group_id=self.group.get_active_id() or "",
+        )
+        if self.existing_job:
+            job.id = self.existing_job.id
+            job.enabled = self.existing_job.enabled
+            job.initialized = self.existing_job.initialized
+            job.last_run = self.existing_job.last_run
+            job.last_status = self.existing_job.last_status
+            job.last_error = self.existing_job.last_error
+        return account, job
 
 
 class RecoveryHistoryDialog(Gtk.Dialog):
@@ -2360,6 +2511,10 @@ class MainWindow(Gtk.ApplicationWindow):
         add_job = Gtk.Button(label=tr("add_folder"))
         add_job.connect("clicked", self._add_job)
         heading_row.pack_end(add_job, False, False, 0)
+        add_group = Gtk.Button(label=tr("new_group"))
+        add_group.set_tooltip_text("Create an internal group without moving local or cloud folders")
+        add_group.connect("clicked", self._create_group)
+        heading_row.pack_end(add_group, False, False, 0)
         main.pack_start(heading_row, False, False, 0)
         self.job_list = Gtk.ListBox()
         self.job_list.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -2450,17 +2605,53 @@ class MainWindow(Gtk.ApplicationWindow):
 
         for child in self.job_list.get_children():
             self.job_list.remove(child)
-        if not self.controller.config.jobs:
+        if not self.controller.config.jobs and not self.controller.config.folder_groups:
             empty = Gtk.Label(
                 label=tr("empty_jobs")
             )
             empty.set_margin_top(60)
             empty.get_style_context().add_class("dim-label")
             self.job_list.add(empty)
-        for job in self.controller.config.jobs:
+        valid_groups = {item.id for item in self.controller.config.folder_groups}
+        for group in self.controller.config.folder_groups:
+            self.job_list.add(self._group_row(group))
+            for job in self.controller.config.jobs:
+                if job.group_id == group.id:
+                    self.job_list.add(self._job_row(job))
+        ungrouped = [
+            job for job in self.controller.config.jobs
+            if not job.group_id or job.group_id not in valid_groups
+        ]
+        if ungrouped and self.controller.config.folder_groups:
+            self.job_list.add(self._group_row(None))
+        for job in ungrouped:
             self.job_list.add(self._job_row(job))
         self.show_all()
         self.infobar.hide()
+
+    def _group_row(self, group: FolderGroup | None) -> Gtk.ListBoxRow:
+        row = Gtk.ListBoxRow()
+        row.set_activatable(False)
+        box = Gtk.Box(spacing=10)
+        box.set_border_width(10)
+        icon = Gtk.Image.new_from_icon_name("folder-symbolic", Gtk.IconSize.BUTTON)
+        name = Gtk.Label(xalign=0)
+        name.set_markup(
+            f"<b>{GLib.markup_escape_text(group.name if group else tr('ungrouped'))}</b>"
+        )
+        box.pack_start(icon, False, False, 0)
+        box.pack_start(name, True, True, 0)
+        if group:
+            rename = Gtk.Button.new_from_icon_name("document-edit-symbolic", Gtk.IconSize.BUTTON)
+            rename.set_tooltip_text("Rename group")
+            rename.connect("clicked", self._rename_group, group)
+            delete = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
+            delete.set_tooltip_text("Delete group; synchronized folders become ungrouped")
+            delete.connect("clicked", self._delete_group, group)
+            box.pack_end(delete, False, False, 0)
+            box.pack_end(rename, False, False, 0)
+        row.add(box)
+        return row
 
     def _job_row(self, job: SyncJob) -> Gtk.ListBoxRow:
         row = Gtk.ListBoxRow()
@@ -2479,8 +2670,12 @@ class MainWindow(Gtk.ApplicationWindow):
         detail = Gtk.Label(
             label=(
                 f"{job.mode.label} · "
-                f"{job.cloud_location_name or job.account_remote}:/{job.remote_path}"
-                f"  →  {job.local_path}"
+                + (
+                    f"{job.cloud_location_name} · {job.repository_branch}"
+                    if job.is_git else
+                    f"{job.cloud_location_name or job.account_remote}:/{job.remote_path}"
+                )
+                + f"  →  {job.local_path}"
             ),
             xalign=0,
         )
@@ -2533,6 +2728,9 @@ class MainWindow(Gtk.ApplicationWindow):
         rename_button = Gtk.Button(label=tr("rename"))
         rename_button.set_tooltip_text("Change only the name displayed in TuxDrive")
         rename_button.connect("clicked", self._rename_job, job)
+        group_button = Gtk.Button(label=tr("group"))
+        group_button.set_tooltip_text("Move this entry to an internal TuxDrive group")
+        group_button.connect("clicked", self._move_to_group, job)
         share_button = Gtk.Button(label=tr("share_link"))
         share_button.connect("clicked", self._share_job, job)
         share_button.set_sensitive(bool(account and capabilities_for(account.provider).share_links))
@@ -2540,16 +2738,26 @@ class MainWindow(Gtk.ApplicationWindow):
             share_button.set_tooltip_text("This provider does not expose a safe share-link capability")
         history_button = Gtk.Button(label=tr("history"))
         history_button.set_tooltip_text("Restore locally retained versions and recycled files")
-        history_button.connect("clicked", lambda _button: RecoveryHistoryDialog(self, self.controller, job))
+        history_button.connect(
+            "clicked",
+            lambda _button: (
+                webbrowser.open(repository_item_url(job.repository_url, job.repository_branch).replace("/tree/", "/commits/"))
+                if job.is_git else RecoveryHistoryDialog(self, self.controller, job)
+            ),
+        )
         verify_button = Gtk.Button(label=tr("verify"))
         verify_button.set_tooltip_text("Compare content and repair selected integrity differences")
         verify_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job))
+        verify_button.set_sensitive(not job.is_git)
+        if job.is_git:
+            verify_button.set_tooltip_text("GitHub verifies transferred objects; use Git status and history for repository integrity")
         conflicts_button = Gtk.Button(label=tr("conflicts"))
         conflicts_button.connect("clicked", lambda _button: IntegrityDialog(self, self.controller, job, True))
+        conflicts_button.set_sensitive(not job.is_git)
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
         remove.set_tooltip_text(tr("remove_sync"))
         remove.connect("clicked", self._remove_job, job)
-        for widget in (sync, cancel, open_button, share_button, history_button, verify_button, conflicts_button, rename_button, edit_button, log_button):
+        for widget in (sync, cancel, open_button, share_button, history_button, verify_button, conflicts_button, group_button, rename_button, edit_button, log_button):
             actions.pack_start(widget, False, False, 0)
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
@@ -2586,7 +2794,10 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
         if 1 <= response <= len(providers):
             provider = providers[response - 1]
-            OAuthWizard(self, self.controller.rclone, provider, self.controller.add_account)
+            if provider is Provider.GITHUB:
+                self._configure_github()
+            else:
+                OAuthWizard(self, self.controller.rclone, provider, self.controller.add_account)
         elif response == vault_response:
             vault_dialog = VaultDialog(self, self.controller)
             if vault_dialog.run() == Gtk.ResponseType.OK:
@@ -2596,11 +2807,135 @@ class MainWindow(Gtk.ApplicationWindow):
                     self.message(f"Vault creation failed safely: {exc}", Gtk.MessageType.ERROR)
             vault_dialog.destroy()
 
+    def _configure_github(
+        self, account: Account | None = None, job: SyncJob | None = None
+    ) -> None:
+        dialog = GitHubSyncDialog(
+            self, self.controller.config.folder_groups, account=account, job=job
+        )
+        if dialog.run() == Gtk.ResponseType.OK:
+            try:
+                updated_account, updated_job = dialog.values()
+                duplicate_path = next(
+                    (
+                        item for item in self.controller.config.jobs
+                        if item.id != updated_job.id and paths_overlap(item.local_path, updated_job.local_path)
+                    ),
+                    None,
+                )
+                if duplicate_path:
+                    raise GitHubSyncError(
+                        f"The local folder overlaps synchronized folder ‘{duplicate_path.name}’"
+                    )
+                duplicate_account = next(
+                    (
+                        item for item in self.controller.config.accounts
+                        if item.remote == updated_account.remote and (not account or item.remote != account.remote)
+                    ),
+                    None,
+                )
+                if duplicate_account:
+                    raise GitHubSyncError("This repository and branch are already connected")
+                if job and account:
+                    self.controller.stop_job(job)
+                    self.controller.config.accounts[
+                        self.controller.config.accounts.index(account)
+                    ] = updated_account
+                    self.controller.config.jobs[
+                        self.controller.config.jobs.index(job)
+                    ] = updated_job
+                else:
+                    self.controller.config.accounts.append(updated_account)
+                    self.controller.config.jobs.append(updated_job)
+                self.controller.save()
+                self.controller.reconfigure_callbacks()
+                self.refresh()
+                self.controller.run_job(updated_job)
+            except (GitHubSyncError, OSError, ValueError) as exc:
+                self.message(str(exc), Gtk.MessageType.ERROR)
+        dialog.destroy()
+
+    def _create_group(self, _button: Gtk.Widget) -> None:
+        name = self._group_name_dialog("Create group", "Create")
+        if name:
+            self.controller.config.folder_groups.append(FolderGroup(name=name))
+            self.controller.save()
+            self.refresh()
+
+    def _rename_group(self, _button: Gtk.Widget, group: FolderGroup) -> None:
+        name = self._group_name_dialog("Rename group", "Rename", group.name)
+        if name:
+            group.name = name
+            self.controller.save()
+            self.refresh()
+
+    def _group_name_dialog(self, title: str, action: str, value: str = "") -> str:
+        dialog = Gtk.Dialog(title=title, transient_for=self, modal=True)
+        area = dialog.get_content_area()
+        area.set_border_width(20)
+        entry = Gtk.Entry()
+        entry.set_text(value)
+        entry.set_placeholder_text("Example: Work, Personal, Customers")
+        entry.set_activates_default(True)
+        area.pack_start(Gtk.Label(label="Group name", xalign=0), False, False, 6)
+        area.pack_start(entry, False, False, 0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button(action, Gtk.ResponseType.OK)
+        dialog.set_default_response(Gtk.ResponseType.OK)
+        dialog.show_all()
+        name = entry.get_text().strip() if dialog.run() == Gtk.ResponseType.OK else ""
+        dialog.destroy()
+        if name and any(
+            item.name.casefold() == name.casefold() and item.name != value
+            for item in self.controller.config.folder_groups
+        ):
+            self.message("A group with this name already exists.", Gtk.MessageType.WARNING)
+            return ""
+        if not name and value:
+            self.message("The group name cannot be empty.", Gtk.MessageType.WARNING)
+        return name
+
+    def _delete_group(self, _button: Gtk.Widget, group: FolderGroup) -> None:
+        if not self._confirm(
+            f"Delete group ‘{group.name}’? Its synchronized folders will become ungrouped; no files are moved or deleted."
+        ):
+            return
+        for job in self.controller.config.jobs:
+            if job.group_id == group.id:
+                job.group_id = ""
+        self.controller.config.folder_groups.remove(group)
+        self.controller.save()
+        self.refresh()
+
+    def _move_to_group(self, _button: Gtk.Widget, job: SyncJob) -> None:
+        dialog = Gtk.Dialog(title="Move to group", transient_for=self, modal=True)
+        area = dialog.get_content_area()
+        area.set_border_width(20)
+        combo = Gtk.ComboBoxText()
+        combo.append("", "Ungrouped")
+        for group in self.controller.config.folder_groups:
+            combo.append(group.id, group.name)
+        combo.set_active_id(job.group_id if any(group.id == job.group_id for group in self.controller.config.folder_groups) else "")
+        area.pack_start(Gtk.Label(label="Internal TuxDrive group", xalign=0), False, False, 6)
+        area.pack_start(combo, False, False, 0)
+        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dialog.add_button("Move", Gtk.ResponseType.OK)
+        dialog.show_all()
+        if dialog.run() == Gtk.ResponseType.OK:
+            job.group_id = combo.get_active_id() or ""
+            self.controller.save()
+            self.refresh()
+        dialog.destroy()
+
     def _add_job(self, _button: Gtk.Widget) -> None:
-        if not self.controller.config.accounts:
+        accounts = [
+            item for item in self.controller.config.accounts
+            if item.provider is not Provider.GITHUB
+        ]
+        if not accounts:
             self.message("Connect a cloud account first.", Gtk.MessageType.WARNING)
             return
-        dialog = SyncJobDialog(self, self.controller.rclone, self.controller.config.accounts)
+        dialog = SyncJobDialog(self, self.controller.rclone, accounts)
         if dialog.run() == Gtk.ResponseType.OK:
             jobs = dialog.jobs()
             existing_jobs = list(self.controller.config.jobs)
@@ -2634,6 +2969,16 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.start_callbacks(job)
 
     def _edit_job(self, _button: Gtk.Button, job: SyncJob) -> None:
+        if job.is_git:
+            account = next(
+                (item for item in self.controller.config.accounts if item.remote == job.account_remote),
+                None,
+            )
+            if not account:
+                self.message("The GitHub account for this job is missing.", Gtk.MessageType.ERROR)
+                return
+            self._configure_github(account, job)
+            return
         dialog = SyncJobDialog(
             self, self.controller.rclone, self.controller.config.accounts, existing=job
         )
@@ -2671,6 +3016,11 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
     def _share_job(self, _button: Gtk.Button, job: SyncJob) -> None:
+        if job.is_git:
+            link = repository_item_url(job.repository_url, job.repository_branch)
+            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(link, -1)
+            self.message("GitHub branch link copied to the clipboard.")
+            return
         self.message("Creating a provider share link…")
         _run_thread(self.controller.rclone.public_link, self._share_ready, job.remote_spec)
 
@@ -2727,11 +3077,12 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         if not self._confirm(f"Remove {account.display_name} and its local authorization?"):
             return
-        try:
-            self.controller.rclone.delete_remote(account.remote)
-        except RcloneError as exc:
-            self.message(str(exc), Gtk.MessageType.ERROR)
-            return
+        if account.provider is not Provider.GITHUB:
+            try:
+                self.controller.rclone.delete_remote(account.remote)
+            except RcloneError as exc:
+                self.message(str(exc), Gtk.MessageType.ERROR)
+                return
         self.controller.config.accounts.remove(account)
         self.controller.save()
         self.refresh()
@@ -2739,6 +3090,9 @@ class MainWindow(Gtk.ApplicationWindow):
     def _open_online(self, _item: Gtk.MenuItem, account: Account) -> None:
         if account.provider is Provider.PEER:
             self._show_peer_sharing(_item)
+            return
+        if account.provider is Provider.GITHUB:
+            webbrowser.open(repository_item_url(account.repository_url, account.repository_branch))
             return
         if account.provider.home_url:
             webbrowser.open(account.provider.home_url)
@@ -2750,6 +3104,14 @@ class MainWindow(Gtk.ApplicationWindow):
     def _reconnect(self, _item: Gtk.MenuItem, account: Account) -> None:
         if account.provider is Provider.PEER:
             self._show_peer_sharing(_item)
+            return
+        if account.provider is Provider.GITHUB:
+            job = next(
+                (item for item in self.controller.config.jobs if item.account_remote == account.remote),
+                None,
+            )
+            if job:
+                self._configure_github(account, job)
             return
         if account.provider is Provider.VAULT:
             self.message("Vault keys cannot be refreshed or recovered. Create a new vault to change its encryption credentials.", Gtk.MessageType.WARNING)
@@ -3112,6 +3474,7 @@ class TuxDriveApplication(Gtk.Application):
         self._pending_nautilus_paths: list[str] = []
         self._pending_nautilus_online: list[str] = []
         self._pending_offline_requests: list[tuple[str, bool]] = []
+        self._offline_pending_paths: dict[str, set[str]] = {}
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
@@ -3221,11 +3584,33 @@ class TuxDriveApplication(Gtk.Application):
             relative = Path(value).expanduser().resolve(strict=False).relative_to(job.local.resolve(strict=False)).as_posix()
         except (OSError, RuntimeError, ValueError):
             return
-        _run_thread(self.engine.set_offline, self._offline_state_ready, job, relative, available)
+        self._offline_pending_paths.setdefault(job.id, set()).add(relative)
+        self._publish_nautilus_state()
+        _run_thread(
+            self.engine.set_offline,
+            lambda result, error: self._offline_state_ready(
+                result, error, job, relative, available
+            ),
+            job,
+            relative,
+            available,
+        )
 
-    def _offline_state_ready(self, result: str | None, error: Exception | None) -> bool:
+    def _offline_state_ready(
+        self,
+        result: str | None,
+        error: Exception | None,
+        job: SyncJob,
+        relative: str,
+        available: bool,
+    ) -> bool:
+        pending = self._offline_pending_paths.get(job.id, set())
+        pending.discard(relative)
+        if not pending:
+            self._offline_pending_paths.pop(job.id, None)
         if error:
             LOGGER.error("Could not change offline availability: %s", error)
+            self._publish_nautilus_state()
         else:
             LOGGER.info("Offline availability changed: %s", result)
             self.save()
@@ -3308,6 +3693,12 @@ class TuxDriveApplication(Gtk.Application):
             part for part in (job.remote_path.strip("/"), relative.as_posix().strip("/"))
             if part and part != "."
         )
+        if account.provider is Provider.GITHUB:
+            url = repository_item_url(
+                job.repository_url, job.repository_branch, relative.as_posix()
+            )
+            _run_thread(self._launch_online_url, self._online_launch_ready, url, True)
+            return
         remote = job.remote_scope or job.account_remote
         remote_spec = f"{remote}:{remote_path}" if remote_path else f"{remote}:"
         if self.window:
@@ -3369,7 +3760,7 @@ class TuxDriveApplication(Gtk.Application):
         target = cache_home() / "tuxdrive" / "nautilus-state.json"
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         mounted = self.engine.mounted_jobs
-        payload: dict[str, dict[str, str]] = {}
+        payload: dict[str, dict[str, object]] = {}
         for job in self.config.jobs:
             state = (
                 "syncing" if job.id in self._nautilus_active_jobs else
@@ -3378,7 +3769,12 @@ class TuxDriveApplication(Gtk.Application):
                 "paused" if not job.enabled or job.last_status == "Stopped" else
                 "synced" if job.initialized else "pending"
             )
-            payload[job.id] = {"state": state, "detail": job.last_status or state.title()}
+            payload[job.id] = {
+                "state": state,
+                "detail": job.last_status or state.title(),
+                "offline_paths": list(job.offline_paths),
+                "offline_pending_paths": sorted(self._offline_pending_paths.get(job.id, set())),
+            }
         descriptor, temporary = tempfile.mkstemp(
             prefix="nautilus-state-", suffix=".json", dir=target.parent
         )

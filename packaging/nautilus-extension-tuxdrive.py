@@ -66,6 +66,19 @@ def _containing_job(path: Path) -> dict | None:
     return max(matches, default=(0, None), key=lambda item: item[0])[1]
 
 
+def _relative_path(path: Path, job: dict) -> str:
+    root = Path(os.path.abspath(os.path.expanduser(job["local_path"])))
+    value = path.relative_to(root).as_posix()
+    return "." if value in {"", "."} else value.strip("/")
+
+
+def _matches_rule(relative: str, rules: list[str]) -> bool:
+    return any(
+        rule == "." or relative == rule or relative.startswith(rule.rstrip("/") + "/")
+        for rule in rules
+    )
+
+
 class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoProvider):
     """Expose only local, configured TuxDrive paths to Nautilus."""
 
@@ -179,22 +192,42 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             online.connect("activate", lambda _item: self._activate("open-online-path", paths[0]))
             submenu.append_item(online)
             if jobs[0].get("mode") == "virtual_drive":
-                offline = Nautilus.MenuItem(
-                    name="TuxDrive::Offline",
-                    label="Always keep available offline",
-                    tip="Hydrate this item and retain it in TuxDrive's local VFS cache",
-                    icon="emblem-downloads-symbolic",
+                relative = _relative_path(paths[0], jobs[0])
+                runtime = _runtime_states().get(str(jobs[0].get("id", "")), {})
+                pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))
+                offline_rules = list(runtime.get("offline_paths", jobs[0].get("offline_paths", [])))
+                pinned = _matches_rule(
+                    relative,
+                    offline_rules,
                 )
-                offline.connect("activate", lambda _item: self._activate("offline-path", paths[0]))
-                submenu.append_item(offline)
-                online_only = Nautilus.MenuItem(
-                    name="TuxDrive::OnlineOnly",
-                    label="Free local space (online only)",
-                    tip="Remove this item's persistent offline rule and matching cached content",
-                    icon="edit-clear-symbolic",
-                )
-                online_only.connect("activate", lambda _item: self._activate("online-only-path", paths[0]))
-                submenu.append_item(online_only)
+                exact_pin = relative in offline_rules
+                if not pinned and not pending:
+                    offline = Nautilus.MenuItem(
+                        name="TuxDrive::Offline",
+                        label="Always keep available offline",
+                        tip="Download this item completely and retain it in TuxDrive's local VFS cache",
+                        icon="emblem-downloads-symbolic",
+                    )
+                    offline.connect("activate", lambda _item: self._activate("offline-path", paths[0]))
+                    submenu.append_item(offline)
+                else:
+                    online_only = Nautilus.MenuItem(
+                        name="TuxDrive::OnlineOnly",
+                        label=(
+                            "Downloading for offline availability…" if pending else
+                            "Available offline through a parent folder" if pinned and not exact_pin else
+                            "Free local space (online only)"
+                        ),
+                        tip=(
+                            "Unpin the containing folder or streaming root first"
+                            if pinned and not exact_pin else
+                            "Remove this item's persistent offline rule and matching cached content"
+                        ),
+                        icon="edit-clear-symbolic",
+                    )
+                    online_only.set_sensitive(not pending and exact_pin)
+                    online_only.connect("activate", lambda _item: self._activate("online-only-path", paths[0]))
+                    submenu.append_item(online_only)
 
         root = Nautilus.MenuItem(
             name="TuxDrive::Root",
@@ -220,20 +253,32 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             self._known_files.pop(next(iter(self._known_files)))
         mode = job.get("mode")
         runtime = _runtime_states().get(str(job.get("id", "")), {})
-        state = str(runtime.get("state") or (
+        relative = _relative_path(path, job)
+        pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))
+        pinned = _matches_rule(
+            relative,
+            list(runtime.get("offline_paths", job.get("offline_paths", []))),
+        )
+        state = str(("syncing" if pending else "synced" if pinned else "") or runtime.get("state") or (
             "error" if job.get("last_error") else
             "paused" if not job.get("enabled", True) else
             "streaming" if mode == "virtual_drive" else
             "synced" if job.get("initialized") else "pending"
         ))
-        status = str(runtime.get("detail") or {
+        status = (
+            "Downloading for offline availability"
+            if pending else
+            "Available offline"
+            if pinned else
+            str(runtime.get("detail") or {
             "syncing": "TuxDrive is synchronizing",
             "synced": "Synchronized by TuxDrive",
             "streaming": "TuxDrive files on demand",
             "paused": "TuxDrive synchronization paused",
             "error": "TuxDrive needs attention",
             "pending": "TuxDrive synchronization pending",
-        }.get(state, "Managed by TuxDrive"))
+            }.get(state, "Managed by TuxDrive"))
+        )
         file_info.add_string_attribute("tuxdrive_status", status)
         emblem = f"tuxdrive-{state}" if state in {"syncing", "synced", "streaming", "paused", "error", "pending"} else "tuxdrive-pending"
         file_info.add_emblem(emblem)

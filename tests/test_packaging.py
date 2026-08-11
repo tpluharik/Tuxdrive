@@ -72,12 +72,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('find_spec("tuxdrive.migration")', build_script)
         self.assertIn("tuxdrive-update-helper", build_script)
         self.assertIn('find_spec("tuxdrive.update_helper")', build_script)
+        self.assertIn('find_spec("tuxdrive.github_sync")', build_script)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
-        for provider in ("dropbox", "box", "pcloud", "mega", "proton-drive", "nextcloud"):
+        for provider in ("dropbox", "box", "pcloud", "mega", "proton-drive", "nextcloud", "github"):
             self.assertTrue(Path(f"packaging/tuxdrive-{provider}.svg").exists())
-        self.assertIn("dropbox box pcloud mega proton-drive nextcloud", build_script)
+        self.assertIn("dropbox box pcloud mega proton-drive nextcloud github", build_script)
+        self.assertIn("git", Path("packaging/DEBIAN/control").read_text(encoding="utf-8"))
 
     def test_nautilus_extension_is_packaged_with_safe_app_actions(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
