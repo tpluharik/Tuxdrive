@@ -1,8 +1,8 @@
 {
-  "version": "0.20.3",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.3_all.deb",
-  "sha256": "7d0e588c8b026ead0d14dc1520cbdc8f695e367345fb087fa7720ca6444b8dc9",
-  "notes": "Security and reliability update",
-  "expires_at": "2026-11-09T07:27:47.842325+00:00",
-  "signature": "DDanPh1IKvI32kuSEDzn31Nv6wGiqLWBXuhKK+xGCES0ZXrNHb+zF9uijQQvUSD/CJED1lzpz9SfaNl22cmVAg=="
+  "version": "0.20.4",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.4_all.deb",
+  "sha256": "f8c09bb6122751c2814f772362e81d5dbcc1acdbb97481d34207d8fdc508d436",
+  "notes": "Fix individual-file offline availability by waiting for exact complete VFS cache publication and using FUSE-safe lexical Nautilus path routing.",
+  "expires_at": "2027-02-07T17:31:11.955191+00:00",
+  "signature": "CMn38ReFzW2qLQTDm17PzFmoXEo9zP2ZuJGYm3usrwiE3t5ITaVcbNLXKmM1oiWiUIKxJRpfdRxGjPDZC9+PCQ=="
 }

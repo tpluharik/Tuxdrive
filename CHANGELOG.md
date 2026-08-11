@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.4 — reliable per-file offline availability
+
+- Fixed a single-file VFS race: TuxDrive now waits for rclone to publish the exact, complete cache object before it records the file as available offline.
+- Replaced FUSE file resolution in the Nautilus action route with lexical mount-relative matching; the engine still performs its symlink-safe confinement check before opening content.
+- Added true individual-file regression coverage with delayed rclone cache publication and provider-option cache paths. The complete suite now contains 148 automated tests.
+
 ## 0.20.3 — explicit online-only/offline controls
 
 - Stopped reconnect-time hydration: a streaming mount now verifies existing local pin markers without opening cloud files, so an old or root-level 0.20.2 pin cannot silently download the drive after startup.

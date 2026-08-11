@@ -1,9 +1,12 @@
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 
 from tuxdrive.nautilus_support import (
     availability_route,
     command_line_path,
     is_available_offline,
+    lexical_relative_path,
     verified_rules_after,
 )
 
@@ -35,6 +38,20 @@ class OfflineActionTests(unittest.TestCase):
             availability_route(mounted=False, runtime_ready=True, enabled=True),
             "start-mount",
         )
+
+    def test_file_path_routing_is_lexical_and_never_stats_fuse_item(self):
+        with patch.object(Path, "resolve", side_effect=AssertionError("must not resolve FUSE path")):
+            self.assertEqual(
+                lexical_relative_path(
+                    "/mnt/Cloud/reports/rail.pdf", "/mnt/Cloud"
+                ),
+                "reports/rail.pdf",
+            )
+            self.assertEqual(lexical_relative_path("/mnt/Cloud", "/mnt/Cloud"), ".")
+
+    def test_file_path_routing_rejects_sibling_prefix(self):
+        with self.assertRaises(ValueError):
+            lexical_relative_path("/mnt/Cloud-old/file.txt", "/mnt/Cloud")
 
     def test_only_completed_offline_rules_receive_green_state(self):
         configured = ["first", "second"]

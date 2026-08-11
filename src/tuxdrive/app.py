@@ -73,6 +73,7 @@ from .platform_support import format_report, inspect_host
 from .nautilus_support import (
     availability_route,
     command_line_path,
+    lexical_relative_path,
     verified_rules_after,
 )
 
@@ -3647,8 +3648,8 @@ class TuxDriveApplication(Gtk.Application):
             )
             return
         try:
-            relative = Path(value).expanduser().resolve(strict=False).relative_to(job.local.resolve(strict=False)).as_posix()
-        except (OSError, RuntimeError, ValueError):
+            relative = lexical_relative_path(value, job.local)
+        except (OSError, TypeError, ValueError):
             self._offline_request_failed("The selected streaming path is invalid or no longer available.")
             return
         if relative in self._offline_pending_paths.get(job.id, set()):
@@ -3780,15 +3781,16 @@ class TuxDriveApplication(Gtk.Application):
 
     def _job_for_local_path(self, value: str) -> SyncJob | None:
         try:
-            selected = Path(value).expanduser().resolve(strict=False)
-        except (OSError, RuntimeError):
+            selected = Path(os.path.abspath(os.path.expanduser(value)))
+        except (OSError, TypeError, ValueError):
             return None
         matches: list[tuple[int, SyncJob]] = []
         for job in self.config.jobs:
             try:
-                selected.relative_to(job.local.resolve(strict=False))
-                matches.append((len(job.local.parts), job))
-            except (OSError, RuntimeError, ValueError):
+                lexical_relative_path(selected, job.local)
+                root = Path(os.path.abspath(os.path.expanduser(job.local_path)))
+                matches.append((len(root.parts), job))
+            except (OSError, TypeError, ValueError):
                 continue
         return max(matches, default=(0, None), key=lambda item: item[0])[1]
 

@@ -248,28 +248,63 @@ class SyncEngine:
         key = hashlib.sha256(relative.encode("utf-8")).hexdigest()
         return cache_home() / "tuxdrive" / "vfs" / job.id / ".tuxdrive-pins" / f"{key}.json"
 
-    def _record_pin_cache(self, job: SyncJob, relative: str, hydrated_files: list[str]) -> None:
+    def _cached_file_after_hydration(
+        self,
+        data_root: Path,
+        mounted_relative: str,
+        expected_size: int,
+        *,
+        timeout: float = 10.0,
+    ) -> Path | None:
+        """Wait briefly for rclone to publish one fully-read VFS cache file."""
+        deadline = time.monotonic() + timeout
+        while True:
+            candidates = (
+                [item for item in data_root.rglob("*") if item.is_file()]
+                if data_root.exists() else []
+            )
+            matches: list[Path] = []
+            for item in candidates:
+                try:
+                    cache_relative = item.relative_to(data_root).as_posix()
+                    if (
+                        self._cache_relative_matches(
+                            cache_relative, mounted_relative, directory=False
+                        )
+                        and item.stat().st_size == expected_size
+                    ):
+                        matches.append(item)
+                except OSError:
+                    continue
+            if matches:
+                # A per-job cache should normally produce one exact suffix
+                # match. Prefer the shortest prefix if a remote path repeats.
+                return min(matches, key=lambda value: len(value.parts))
+            if time.monotonic() >= deadline:
+                return None
+            time.sleep(0.1)
+
+    def _record_pin_cache(
+        self,
+        job: SyncJob,
+        relative: str,
+        hydrated_files: list[tuple[str, int]],
+    ) -> None:
         cache = cache_home() / "tuxdrive" / "vfs" / job.id
         data_root = cache / "vfs"
         records: list[dict[str, int | str]] = []
-        candidates = [item for item in data_root.rglob("*") if item.is_file()] if data_root.exists() else []
-        for hydrated_relative in hydrated_files:
+        for hydrated_relative, hydrated_size in hydrated_files:
             mounted_relative = "/".join(
                 part for part in (job.remote_path.strip("/"), hydrated_relative.strip("/")) if part
             )
-            matches = [
-                item for item in candidates
-                if self._cache_relative_matches(
-                    item.relative_to(data_root).as_posix(), mounted_relative, directory=False
-                )
-            ]
-            if not matches:
+            item = self._cached_file_after_hydration(
+                data_root, mounted_relative, hydrated_size
+            )
+            if item is None:
                 raise RuntimeError(
-                    f"TuxDrive read {hydrated_relative}, but rclone did not persist a verifiable cache file"
+                    f"TuxDrive read {hydrated_relative}, but rclone did not publish a complete "
+                    "verifiable cache file within 10 seconds"
                 )
-            # A per-job cache should normally produce one exact suffix match.
-            # Prefer the shortest prefix if a remote path repeats names.
-            item = min(matches, key=lambda value: len(value.parts))
             cache_relative = item.relative_to(data_root).as_posix()
             stat = item.stat()
             records.append({
@@ -372,7 +407,7 @@ class SyncEngine:
                 )
                 files = 0
                 hydrated = 0
-                hydrated_files: list[str] = []
+                hydrated_files: list[tuple[str, int]] = []
 
                 def hydrate(item: Path, item_relative: str) -> None:
                     nonlocal files, hydrated
@@ -382,7 +417,7 @@ class SyncEngine:
                         while content := handle.read(4 * 1024 * 1024):
                             hydrated += len(content)
                     files += 1
-                    hydrated_files.append(item_relative)
+                    hydrated_files.append((item_relative, item.stat().st_size))
 
                 is_directory = target.is_dir()
                 if target.is_file():

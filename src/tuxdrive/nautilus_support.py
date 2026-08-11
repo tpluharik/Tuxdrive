@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+from pathlib import Path
+
 
 def command_line_path(arguments: list[str], name: str) -> str:
     """Read both ``--name PATH`` and ``--name=PATH`` fallback forms."""
@@ -21,6 +24,20 @@ def availability_route(*, mounted: bool, runtime_ready: bool, enabled: bool) -> 
     if runtime_ready and enabled:
         return "start-mount"
     return "queue"
+
+
+def lexical_relative_path(value: str | Path, root: str | Path) -> str:
+    """Return a mount-relative path without resolving or statting a FUSE item.
+
+    Nautilus already supplies a local path.  Resolving an individual streamed
+    file here can block on the provider or fail with ``ENOTCONN`` while the
+    containing mount is otherwise usable.  The engine performs the later
+    no-symlink confinement check before it opens any selected item.
+    """
+    selected = Path(os.path.abspath(os.path.expanduser(os.fspath(value))))
+    mount_root = Path(os.path.abspath(os.path.expanduser(os.fspath(root))))
+    relative = selected.relative_to(mount_root).as_posix()
+    return "." if relative in {"", "."} else relative.strip("/")
 
 
 def rule_matches(relative: str, rule: str) -> bool:

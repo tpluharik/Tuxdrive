@@ -1,5 +1,7 @@
 import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -153,6 +155,40 @@ class SyncEngineCommandTests(unittest.TestCase):
             (cached / "one.bin").write_bytes(b"one")
             self.engine.set_offline(job, "folder", True)
         self.assertEqual(job.offline_paths, ["folder"])
+
+    def test_single_file_pin_waits_for_rclone_cache_publication(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            root = Path(temporary)
+            (root / "folder").mkdir()
+            source = root / "folder" / "one.bin"
+            source.write_bytes(b"one")
+            job = SyncJob(
+                account_remote="google,team_drive=,root_folder_id=root",
+                local_path=str(root),
+                remote_path="RemoteRoot",
+                mode=SyncMode.VIRTUAL_DRIVE,
+            )
+            cached = (
+                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                "google,team_drive=,root_folder_id=root" / "RemoteRoot" / "folder" / "one.bin"
+            )
+
+            def publish_cache() -> None:
+                time.sleep(0.05)
+                cached.parent.mkdir(parents=True)
+                cached.write_bytes(b"one")
+
+            publisher = threading.Thread(target=publish_cache)
+            publisher.start()
+            try:
+                message = self.engine.set_offline(job, "folder/one.bin", True)
+            finally:
+                publisher.join()
+            self.assertEqual(job.offline_paths, ["folder/one.bin"])
+            self.assertEqual(self.engine.verified_offline_rules(job), {"folder/one.bin"})
+            self.assertIn("1 file(s)", message)
 
     def test_online_only_child_overrides_parent_and_releases_matching_cache(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
