@@ -63,7 +63,7 @@ from .models import (
     paths_overlap, safe_streaming_overlap,
 )
 from .github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
-from .folder_layout import move_job
+from .folder_layout import job_drag_payload, job_id_from_drag_payload, move_job
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
@@ -86,7 +86,7 @@ except (ImportError, ValueError):  # pragma: no cover - optional desktop compone
 
 
 APP_ID = "io.github.tuxdrive.TuxDrive"
-JOB_DND_MIME = "application/x-tuxdrive-synchronized-folder"
+JOB_DND_TARGET = "UTF8_STRING"
 
 
 def _desktop_open_command(target: str) -> list[str]:
@@ -2703,6 +2703,8 @@ class MainWindow(Gtk.ApplicationWindow):
         top = Gtk.Box(spacing=12)
         drag_handle = Gtk.EventBox()
         drag_handle.set_visible_window(False)
+        drag_handle.set_above_child(True)
+        drag_handle.set_size_request(32, 32)
         drag_icon = Gtk.Image.new_from_icon_name("open-menu-symbolic", Gtk.IconSize.BUTTON)
         drag_handle.add(drag_icon)
         drag_handle.set_tooltip_text(tr("drag_folder_hint"))
@@ -2832,7 +2834,10 @@ class MainWindow(Gtk.ApplicationWindow):
 
     @staticmethod
     def _job_drag_targets() -> list[Gtk.TargetEntry]:
-        return [Gtk.TargetEntry.new(JOB_DND_MIME, Gtk.TargetFlags.SAME_APP, 0)]
+        # Gtk.SelectionData.set_text()/get_text() only support recognized text
+        # targets. The former private MIME target caused every real GTK drop to
+        # arrive without a job id even though the pointer drag had started.
+        return [Gtk.TargetEntry.new(JOB_DND_TARGET, Gtk.TargetFlags.SAME_APP, 0)]
 
     def _enable_job_drag_source(self, widget: Gtk.Widget, job: SyncJob) -> None:
         widget.drag_source_set(
@@ -2840,6 +2845,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self._job_drag_targets(),
             Gdk.DragAction.MOVE,
         )
+        widget.drag_source_set_icon_name("open-menu-symbolic")
         widget.connect("drag-data-get", self._job_drag_data_get, job.id)
 
     def _enable_job_drop_target(
@@ -2864,7 +2870,9 @@ class MainWindow(Gtk.ApplicationWindow):
         _time: int,
         job_id: str,
     ) -> None:
-        selection.set_text(job_id, -1)
+        payload = job_drag_payload(job_id)
+        if payload:
+            selection.set_text(payload, -1)
 
     def _job_drag_data_received(
         self,
@@ -2878,7 +2886,7 @@ class MainWindow(Gtk.ApplicationWindow):
         group_id: str,
         anchor: SyncJob | None,
     ) -> None:
-        job_id = (selection.get_text() or "").strip()
+        job_id = job_id_from_drag_payload(selection.get_text())
         valid = any(job.id == job_id for job in self.controller.config.jobs)
         changed = False
         if valid:

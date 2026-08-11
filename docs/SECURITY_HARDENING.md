@@ -1,10 +1,10 @@
-# TuxDrive 0.21.0 security hardening and secure operation
+# TuxDrive 0.21.1 security hardening and secure operation
 
-This document explains the controls retained through TuxDrive 0.21.0, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls retained through TuxDrive 0.21.1, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.21.0** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, URI-safe Nautilus menu/badge refresh, exact Nautilus 4.1 constructor/property compatibility and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version **0.21.1** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, URI-safe Nautilus menu/badge refresh, exact Nautilus 4.1 constructor/property compatibility and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
@@ -12,7 +12,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 
 ## Security control inventory
 
-| Area | 0.21.0 behavior | Security purpose |
+| Area | 0.21.1 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
@@ -28,7 +28,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
 | GitHub repositories | Credential-free GitHub-only URLs, validated branches/origins, noninteractive system Git credentials, fast-forward/rebase guards, conflict abort | Avoid token leakage, command injection and silent Git history overwrite |
 | Offline hydration | Root/child confinement, symlink rejection, progress-based inactivity timeout with one isolated retry, failed-pin rollback, exact file rules, stable no-remount retention, explicit nested online-only exceptions, and confined local pin manifests checked without remote reads | Avoid indefinitely blocked helpers, stale pending badges, sibling downloads, detached Nautilus views, silent reconnect downloads, false offline claims, generic-cache eviction of pinned content, and path escape |
-| CI/release | Pinned GitHub Action SHAs, 160 tests, compile checks, high-severity Bandit, `pip-audit`, Debian inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
+| CI/release | Pinned GitHub Action SHAs, 173 tests, compile checks, high-severity Bandit, `pip-audit`, Debian inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
 
 ## Dependency advisory response
 
@@ -77,7 +77,7 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.21.0 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.21.1 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

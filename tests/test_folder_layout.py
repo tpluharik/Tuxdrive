@@ -1,6 +1,11 @@
 import unittest
 
-from tuxdrive.folder_layout import move_job, valid_group_id
+from tuxdrive.folder_layout import (
+    job_drag_payload,
+    job_id_from_drag_payload,
+    move_job,
+    valid_group_id,
+)
 from tuxdrive.models import FolderGroup, SyncJob
 
 
@@ -56,6 +61,18 @@ class FolderLayoutTests(unittest.TestCase):
         jobs = [job("one", "work")]
         self.assertFalse(move_job(jobs, self.groups, "one", "work", anchor_job_id="one"))
         self.assertEqual([item.id for item in jobs], ["one"])
+
+    def test_drag_payload_round_trip_uses_recognizable_text(self):
+        payload = job_drag_payload("folder-id")
+        self.assertEqual(payload, "tuxdrive-job:folder-id")
+        self.assertEqual(job_id_from_drag_payload(payload), "folder-id")
+        self.assertEqual(job_id_from_drag_payload(payload.encode("utf-8")), "folder-id")
+
+    def test_drag_payload_rejects_unrelated_or_malformed_text(self):
+        self.assertEqual(job_id_from_drag_payload("folder-id"), "")
+        self.assertEqual(job_id_from_drag_payload(b"\xff"), "")
+        self.assertEqual(job_id_from_drag_payload("tuxdrive-job:"), "")
+        self.assertEqual(job_drag_payload("bad\x00id"), "")
 
 
 if __name__ == "__main__":

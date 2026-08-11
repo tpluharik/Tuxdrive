@@ -5,6 +5,32 @@ from collections.abc import Sequence
 from .models import FolderGroup, SyncJob
 
 
+JOB_DRAG_PREFIX = "tuxdrive-job:"
+MAX_JOB_DRAG_ID_LENGTH = 256
+
+
+def job_drag_payload(job_id: str) -> str:
+    """Return a bounded text payload for an in-process folder-row drag."""
+    if not job_id or len(job_id) > MAX_JOB_DRAG_ID_LENGTH or "\x00" in job_id:
+        return ""
+    return f"{JOB_DRAG_PREFIX}{job_id}"
+
+
+def job_id_from_drag_payload(payload: str | bytes | None) -> str:
+    """Decode only a well-formed TuxDrive folder-row text payload."""
+    if isinstance(payload, bytes):
+        try:
+            payload = payload.decode("utf-8")
+        except UnicodeDecodeError:
+            return ""
+    if not isinstance(payload, str) or not payload.startswith(JOB_DRAG_PREFIX):
+        return ""
+    job_id = payload[len(JOB_DRAG_PREFIX):]
+    if not job_id or len(job_id) > MAX_JOB_DRAG_ID_LENGTH or "\x00" in job_id:
+        return ""
+    return job_id
+
+
 def valid_group_id(group_id: str, groups: Sequence[FolderGroup]) -> str:
     """Return a persisted group id only when it still names a real group."""
     return group_id if group_id and any(group.id == group_id for group in groups) else ""

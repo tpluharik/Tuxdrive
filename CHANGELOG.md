@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.21.1 — functional GTK folder drag and drop
+
+- Fixed the drag handle accepting a pointer gesture without completing a drop. The 0.21.0 source advertised a private binary target but used GTK's text conversion helpers, so the destination received no synchronized-folder identifier.
+- Folder rows now exchange a bounded, TuxDrive-prefixed payload through GTK's recognized same-application UTF-8 target. Existing-entry validation remains mandatory before any list order or group metadata changes.
+- Enlarged the drag handle's input area and added an explicit drag icon. Added payload round-trip and malformed/unrelated-data regressions; the complete suite now contains 173 automated tests.
+
 ## 0.21.0 — drag-and-drop folder organization
 
 - Added drag handles to synchronized-folder rows. Dropping a row above or below another row changes its saved position; dropping it on a group header moves it into that group. Local paths, provider paths and file content are never moved.
