@@ -1,8 +1,8 @@
 {
-  "version": "0.20.10",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.10_all.deb",
-  "sha256": "7639067a7ace86e167c48a5710464f8b06988fc31107fb69d1c888fd91ff6ed4",
-  "notes": "Fixes the provider-independent Nautilus 4.1 exception so the TuxDrive menu remains available while a streamed file is downloading and after it is kept offline.",
-  "expires_at": "2026-11-09T19:57:32.224719+00:00",
-  "signature": "fpfhJ2Nngm9GZE/Nehg6I/nWG4yx/pqZ6gPjM19YeOQ+CTzoNBRATVaH0APMeUwuDBELl4vqpPCuSK0ZMEwMBg=="
+  "version": "0.20.11",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.11_all.deb",
+  "sha256": "dbd62c7fa14a4097cb1f9707622d13458f571db491017d2b48270e963861d788",
+  "notes": "Fix Nautilus 4.1 post-download menu construction; offline files retain Free local space action",
+  "expires_at": "2026-11-09T20:19:20.391035+00:00",
+  "signature": "nUeH1W31/sDzw8OSqF1ufwMdV8mN/8mnyO7q9qJdDOCUn5UQ6GRwYuiIxj2GZ2Df+aNY3U7sRMYAAFTE+VEQDw=="
 }

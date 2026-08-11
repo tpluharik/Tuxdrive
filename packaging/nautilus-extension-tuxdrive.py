@@ -365,13 +365,15 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
                         ),
                         tip="Override a pinned parent if needed and release matching cached content",
                         icon="edit-clear-symbolic",
-                        # Nautilus.MenuItem is a GObject, not a Gtk.Widget.
-                        # Nautilus 4.1 exposes sensitivity only as a property;
-                        # calling Gtk-style set_sensitive() raises AttributeError
-                        # and makes Nautilus discard the complete TuxDrive menu
-                        # as soon as an item becomes pending or available offline.
-                        sensitive=not pending,
                     )
+                    # Nautilus.MenuItem.new() accepts exactly name, label, tip
+                    # and icon. ``sensitive`` is a writable GObject property,
+                    # not an additional constructor argument and not a GTK
+                    # widget setter. Passing it to the constructor makes the
+                    # real Nautilus 4.1 binding raise TypeError and discard the
+                    # whole provider menu as soon as this state-only branch is
+                    # entered. Set the property through GObject instead.
+                    online_only.set_property("sensitive", not pending)
                     online_only.connect("activate", lambda _item: self._activate("online-only-path", paths[0]))
                     submenu.append_item(online_only)
 

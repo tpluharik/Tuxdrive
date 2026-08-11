@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.11 — durable Nautilus constructor compatibility
+
+- Fixed the remaining provider-independent post-download menu failure. Nautilus 4.1 exposes `sensitive` as a writable GObject property, but `Nautilus.MenuItem.new()` accepts only `name`, `label`, `tip` and `icon`; passing `sensitive` as a fifth constructor keyword raised `TypeError` only when the pending/offline branch was built.
+- The availability item is now created with the documented four-argument constructor and sensitivity is applied afterward with `set_property()`. Completed files retain the enabled **Free local space (make online-only)** action, while a pending download remains visibly disabled without suppressing the TuxDrive submenu.
+- Replaced the permissive menu-item test double with the exact Nautilus 4.1 constructor boundary and added separate pending and completed regressions. The complete suite now contains 163 automated tests.
+
 ## 0.20.10 — Nautilus 4.1 offline-action compatibility
 
 - Fixed the provider-independent exception that removed the complete TuxDrive submenu after a file entered pending or verified offline state. `Nautilus.MenuItem` exposes sensitivity as a GObject property; it does not implement the GTK widget method `set_sensitive()`.

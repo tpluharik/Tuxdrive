@@ -16,8 +16,16 @@ def load_extension():
             self.items.append(item)
 
     class FakeMenuItem:
-        def __init__(self, **values):
-            self.values = values
+        def __init__(self, *, name, label, tip, icon):
+            # Mirror Nautilus.MenuItem.new() rather than accepting arbitrary
+            # kwargs like a generic GObject constructor. In particular,
+            # ``sensitive`` is a property and is not a fifth constructor arg.
+            self.values = {
+                "name": name,
+                "label": label,
+                "tip": tip,
+                "icon": icon,
+            }
             self.submenu = None
 
         def connect(self, *_args):
@@ -25,6 +33,9 @@ def load_extension():
 
         def set_submenu(self, submenu):
             self.submenu = submenu
+
+        def set_property(self, name, value):
+            self.values[name] = value
 
     gi = types.ModuleType("gi")
     repository = types.ModuleType("gi.repository")
@@ -132,7 +143,7 @@ class NautilusExtensionTests(unittest.TestCase):
         labels = [item.values["label"] for item in menu[0].submenu.items]
         self.assertIn("Free local space (make online-only)", labels)
 
-    def test_pending_file_uses_supported_sensitive_property(self):
+    def test_pending_file_sets_supported_sensitive_property_after_construction(self):
         extension = load_extension()
         provider = object.__new__(extension.TuxDriveExtension)
         job = {
@@ -163,6 +174,38 @@ class NautilusExtensionTests(unittest.TestCase):
         )
         self.assertEqual(online_only.values["label"], "Downloading for offline availability…")
         self.assertFalse(online_only.values["sensitive"])
+
+    def test_completed_file_does_not_pass_sensitive_to_nautilus_constructor(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxDriveExtension)
+        job = {
+            "id": "drive",
+            "local_path": "/mnt/Cloud",
+            "mode": "virtual_drive",
+            "offline_paths": ["folder/one.txt"],
+            "online_only_paths": [],
+        }
+        path = Path("/mnt/Cloud/folder/one.txt")
+        with patch.object(extension, "_jobs", return_value=[job]), patch.object(
+            extension,
+            "_runtime_states",
+            return_value={
+                "drive": {
+                    "offline_paths": ["folder/one.txt"],
+                    "configured_offline_paths": ["folder/one.txt"],
+                    "online_only_paths": [],
+                    "offline_pending_paths": [],
+                }
+            },
+        ), patch.object(extension, "_local_path", return_value=path):
+            menu = provider._menu_items([object()], allow_availability=True)
+
+        online_only = next(
+            item for item in menu[0].submenu.items
+            if item.values["name"] == "TuxDrive::OnlineOnly"
+        )
+        self.assertEqual(online_only.values["label"], "Free local space (make online-only)")
+        self.assertTrue(online_only.values["sensitive"])
 
     def test_metadata_burst_rebuilds_menu_and_reacquires_current_file_info(self):
         extension = load_extension()
