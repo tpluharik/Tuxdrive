@@ -1,6 +1,11 @@
 import unittest
 
-from tuxdrive.nautilus_support import availability_route, command_line_path, verified_rules_after
+from tuxdrive.nautilus_support import (
+    availability_route,
+    command_line_path,
+    is_available_offline,
+    verified_rules_after,
+)
 
 
 class OfflineActionTests(unittest.TestCase):
@@ -46,6 +51,19 @@ class OfflineActionTests(unittest.TestCase):
         self.assertEqual(
             verified_rules_after({"folder/child"}, ["."], ".", True),
             {"."},
+        )
+
+    def test_online_only_child_overrides_an_offline_parent(self):
+        self.assertTrue(is_available_offline("folder/kept.txt", ["folder"]))
+        self.assertFalse(
+            is_available_offline("folder/online.txt", ["folder"], ["folder/online.txt"])
+        )
+        self.assertTrue(
+            is_available_offline(
+                "folder/online/kept.txt",
+                ["folder", "folder/online/kept.txt"],
+                ["folder/online"],
+            )
         )
 
 

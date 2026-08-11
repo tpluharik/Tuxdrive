@@ -19,7 +19,7 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.20.2 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. It makes **Always keep available offline** durable across mount restarts: the first pin applies a pin-aware VFS retention policy, persisted rules are rehydrated after reconnect, and only content verified in the current mount receives a green badge. It retains editable internal folder groups, GitHub synchronization, the 0.19 security baseline, unbranded six-state Nautilus badges, searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization.
+Version 0.20.3 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. Streaming mounts remain files-on-demand after reconnect: saved pins are verified from local cache markers without downloading cloud content, while explicit **Keep available offline** and **Free local space (make online-only)** actions control each item. A credential-free Nautilus snapshot keeps the complete TuxDrive menu available inside mounted folders, and the app can reset a whole drive to online-only mode. It retains editable internal folder groups, GitHub synchronization, the 0.19 security baseline, unbranded six-state Nautilus badges, searchable offline documentation and persistent English, German, French, Spanish, Arabic and Hebrew localization.
 
 ### Current security baseline
 
@@ -27,7 +27,7 @@ Version 0.20.2 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and ar
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.20.2:
+The following controls are enforced in 0.20.3:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -40,9 +40,9 @@ The following controls are enforced in 0.20.2:
 - Collaborative operation logs and ODT/ODS imports have explicit count, byte, compression-ratio and schema limits; unsafe XML entities are rejected before document processing.
 - GitHub synchronization accepts only credential-free `github.com` HTTPS or SSH clone URLs, validates branch names, disables interactive credential prompts, and delegates secrets to the system SSH agent or Git credential helper.
 
-### 0.20.2 offline availability, groups and GitHub
+### 0.20.3 online-only/offline availability, groups and GitHub
 
-- Right-click a streamed file, folder, or drive root and choose **Always keep available offline**. Blue arrows remain while TuxDrive reads the complete selection into the durable VFS cache and reapplies the live mount policy; a green check appears only after the current mount verifies hydration. Persisted pins are checked again whenever the drive reconnects, while **Free local space** removes the rule and cached bytes.
+- Right-click a streamed file, folder, or drive root and choose **Keep available offline**. Blue arrows remain while TuxDrive explicitly reads the complete selection into the durable VFS cache; a green check appears only after local verification. Reconnects never start that download automatically. Choose **Free local space (make online-only)** to remove the rule and cached bytes. A child can be made online-only even when its parent is pinned. The streaming-job button in TuxDrive provides a whole-drive fallback if Nautilus integration is unavailable.
 - Select **New group** to create list-only groups such as Work, Personal, or Customers. Use **Group** on a synchronized folder to move its entry. Renaming/deleting groups never moves or deletes files.
 - Select **Connect account → GitHub**, enter a credential-free repository URL, branch, local folder, mode, and commit identity. Two-way mode automatically commits local changes, fetches, rebases and pushes. Configure an SSH key or system Git credential helper for private/write access.
 
@@ -116,7 +116,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - separate Google location browsing for My Drive, Shared with me, and every Shared Drive
 - a FUSE virtual-drive mode with full VFS caching for files-on-demand behavior
 - streaming drives expose the complete cloud tree without downloading file contents; opening a file fetches it in chunks and keeps a bounded local cache
-- Nautilus **Always keep available offline** and **Free local space** controls for individual streamed files and folders
+- Nautilus **Keep available offline** and **Free local space (make online-only)** controls for individual streamed files and folders
 - streaming mount health checks, automatic restart after an unexpected disconnect, and prevention of overlapping/non-empty mount points
 - hybrid layouts: a streaming drive may live inside a normal synchronized tree and is automatically excluded from parent full/incremental synchronization
 - automatic background synchronization at a configurable interval
@@ -149,7 +149,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.20.2_all.deb
+sudo apt install ./tuxdrive_0.20.3_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
@@ -167,7 +167,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.20.2_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.20.3_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -181,7 +181,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 140 automated tests, including offline action routing, pin-aware VFS retention/remounting, verified badge state, root/item hydration and rollback, GitHub URL/branch/command guards, synchronized-folder group migration, unbranded Nautilus SVG validation, legacy/v2 trust-channel validation, updater race-boundary, per-device peer isolation, hostile ODF/CRDT input and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 145 automated tests, including offline action routing, nested online-only exceptions, local no-download reconnect verification, pin-aware VFS retention/remounting, verified badge state, root/item hydration and rollback, GitHub URL/branch/command guards, synchronized-folder group migration, unbranded Nautilus SVG validation, legacy/v2 trust-channel validation, updater race-boundary, per-device peer isolation, hostile ODF/CRDT input and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -191,7 +191,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.20.2 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.20.3 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

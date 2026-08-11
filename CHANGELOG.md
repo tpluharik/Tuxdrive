@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.3 — explicit online-only/offline controls
+
+- Stopped reconnect-time hydration: a streaming mount now verifies existing local pin markers without opening cloud files, so an old or root-level 0.20.2 pin cannot silently download the drive after startup.
+- Restored the TuxDrive Nautilus menu through an atomic, credential-free job snapshot; the extension uses that snapshot first and falls back to the full configuration only before the app has published runtime state.
+- Added explicit **Keep available offline** and **Free local space (make online-only)** actions, including online-only child exceptions beneath an offline parent folder.
+- Added a streaming-job control in the app to keep the complete drive offline or clear every offline rule/cache when Nautilus integration is unavailable.
+- Added local pin manifests so reconnect verification performs no remote reads and green badges remain limited to locally confirmed content.
+- Added upgrade, nested-rule, cache-release, snapshot and marker-confinement regression coverage; the complete suite now contains 145 automated tests.
+
 ## 0.20.2 — durable verified offline retention
 
 - Replaced the one-time hydration heuristic with a live retention-policy transition: the first offline pin remounts the streaming drive with rclone's unaware age, size, and free-space eviction disabled, and the last unpin restores the normal bounded streaming cache.

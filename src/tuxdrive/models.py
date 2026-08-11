@@ -372,6 +372,7 @@ class SyncJob:
     peer_role: PeerRole = PeerRole.READ_WRITE
     one_time_drop_id: str = ""
     offline_paths: list[str] = field(default_factory=list)
+    online_only_paths: list[str] = field(default_factory=list)
     group_id: str = ""
     repository_url: str = ""
     repository_branch: str = "main"

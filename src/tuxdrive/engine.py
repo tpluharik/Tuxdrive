@@ -28,6 +28,7 @@ from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
 from .github_sync import GitHubSyncError, parse_repository_url, validate_branch
 from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
+from .nautilus_support import is_available_offline
 
 
 @dataclass(slots=True)
@@ -229,24 +230,140 @@ class SyncEngine:
             command.append("--vfs-fast-fingerprint")
         return command
 
+    @staticmethod
+    def _cache_relative_matches(cache_relative: str, selected: str, *, directory: bool = True) -> bool:
+        if selected == ".":
+            return True
+        parts = Path(cache_relative).parts
+        wanted = Path(selected).parts
+        for index in range(0, len(parts) - len(wanted) + 1):
+            if parts[index:index + len(wanted)] != wanted:
+                continue
+            if directory or index + len(wanted) == len(parts):
+                return True
+        return False
+
+    @staticmethod
+    def _pin_marker(job: SyncJob, relative: str) -> Path:
+        key = hashlib.sha256(relative.encode("utf-8")).hexdigest()
+        return cache_home() / "tuxdrive" / "vfs" / job.id / ".tuxdrive-pins" / f"{key}.json"
+
+    def _record_pin_cache(self, job: SyncJob, relative: str, hydrated_files: list[str]) -> None:
+        cache = cache_home() / "tuxdrive" / "vfs" / job.id
+        data_root = cache / "vfs"
+        records: list[dict[str, int | str]] = []
+        candidates = [item for item in data_root.rglob("*") if item.is_file()] if data_root.exists() else []
+        for hydrated_relative in hydrated_files:
+            mounted_relative = "/".join(
+                part for part in (job.remote_path.strip("/"), hydrated_relative.strip("/")) if part
+            )
+            matches = [
+                item for item in candidates
+                if self._cache_relative_matches(
+                    item.relative_to(data_root).as_posix(), mounted_relative, directory=False
+                )
+            ]
+            if not matches:
+                raise RuntimeError(
+                    f"TuxDrive read {hydrated_relative}, but rclone did not persist a verifiable cache file"
+                )
+            # A per-job cache should normally produce one exact suffix match.
+            # Prefer the shortest prefix if a remote path repeats names.
+            item = min(matches, key=lambda value: len(value.parts))
+            cache_relative = item.relative_to(data_root).as_posix()
+            stat = item.stat()
+            records.append({
+                "path": cache_relative,
+                "size": stat.st_size,
+                "blocks": getattr(stat, "st_blocks", 0),
+            })
+        marker = self._pin_marker(job, relative)
+        ensure_private_directory(marker.parent)
+        descriptor, temporary = tempfile.mkstemp(prefix="pin-", suffix=".json", dir=marker.parent)
+        try:
+            os.fchmod(descriptor, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+                json.dump({"relative": relative, "files": records}, handle, ensure_ascii=False)
+                handle.write("\n")
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, marker)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+
+    def verified_offline_rules(self, job: SyncJob) -> set[str]:
+        """Verify pin markers and VFS files without reading from the remote mount."""
+        data_root = cache_home() / "tuxdrive" / "vfs" / job.id / "vfs"
+        verified: set[str] = set()
+        for relative in job.offline_paths:
+            marker = self._pin_marker(job, relative)
+            try:
+                payload = json.loads(marker.read_text(encoding="utf-8"))
+                if payload.get("relative") != relative or not isinstance(payload.get("files"), list):
+                    continue
+                valid = True
+                for record in payload["files"]:
+                    cache_relative = str(record["path"])
+                    cache_path = Path(cache_relative)
+                    if cache_path.is_absolute() or ".." in cache_path.parts or not cache_path.parts:
+                        valid = False
+                        break
+                    # A more specific online-only rule deliberately releases
+                    # this part of an otherwise pinned parent.
+                    if any(
+                        self._cache_relative_matches(
+                            cache_relative,
+                            "/".join(
+                                part for part in (job.remote_path.strip("/"), rule.strip("/")) if part
+                            ),
+                        )
+                        and not is_available_offline(rule, job.offline_paths, job.online_only_paths)
+                        for rule in job.online_only_paths
+                    ):
+                        continue
+                    item = data_root / cache_path
+                    stat = item.stat()
+                    if stat.st_size != int(record["size"]):
+                        valid = False
+                        break
+                    recorded_blocks = int(record.get("blocks", 0))
+                    if recorded_blocks and getattr(stat, "st_blocks", 0) < recorded_blocks:
+                        valid = False
+                        break
+                if valid:
+                    verified.add(relative)
+            except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError):
+                continue
+        return verified
+
     def set_offline(self, job: SyncJob, relative: str, available: bool) -> str:
         relative = relative.strip("/")
-        if not relative or relative.startswith("../"):
+        relative_path = Path(relative)
+        if (
+            not relative
+            or relative_path.is_absolute()
+            or ".." in relative_path.parts
+            or (relative != "." and not relative_path.parts)
+        ):
             raise ValueError("Select a file or folder inside the streaming drive")
         if available:
             previous_rules = list(job.offline_paths)
-            already_covered = any(
-                rule == "." or relative == rule or relative.startswith(rule.rstrip("/") + "/")
-                for rule in previous_rules
-            )
+            previous_online_only = list(job.online_only_paths)
             if relative == ".":
                 job.offline_paths = ["."]
-            elif not already_covered:
+                job.online_only_paths.clear()
+            else:
                 job.offline_paths = [
                     rule for rule in previous_rules
                     if not rule.startswith(relative.rstrip("/") + "/")
                 ]
-                job.offline_paths.append(relative)
+                if relative not in job.offline_paths:
+                    job.offline_paths.append(relative)
+                job.online_only_paths = [
+                    rule for rule in previous_online_only
+                    if rule != relative and not rule.startswith(relative.rstrip("/") + "/")
+                ]
             try:
                 target = (
                     job.local.expanduser().resolve(strict=True)
@@ -255,8 +372,9 @@ class SyncEngine:
                 )
                 files = 0
                 hydrated = 0
+                hydrated_files: list[str] = []
 
-                def hydrate(item: Path) -> None:
+                def hydrate(item: Path, item_relative: str) -> None:
                     nonlocal files, hydrated
                     if item.is_symlink():
                         raise ValueError(f"Cannot pin symbolic link: {item.name}")
@@ -264,24 +382,39 @@ class SyncEngine:
                         while content := handle.read(4 * 1024 * 1024):
                             hydrated += len(content)
                     files += 1
+                    hydrated_files.append(item_relative)
 
+                is_directory = target.is_dir()
                 if target.is_file():
-                    hydrate(target)
-                elif target.is_dir():
+                    hydrate(target, relative)
+                elif is_directory:
                     for item in target.rglob("*"):
                         if item.is_file():
                             relative_item = item.relative_to(job.local)
-                            hydrate(confined_path(job.local, relative_item))
+                            hydrate(confined_path(job.local, relative_item), relative_item.as_posix())
                 else:
                     raise ValueError("The selected streaming item is no longer available")
+                self._record_pin_cache(job, relative, hydrated_files)
                 return f"Available offline · {files} file(s) · {hydrated} bytes hydrated"
             except Exception:
                 job.offline_paths = previous_rules
+                job.online_only_paths = previous_online_only
                 raise
+        previous_rules = list(job.offline_paths)
         if relative == ".":
             job.offline_paths.clear()
+            job.online_only_paths.clear()
         else:
             job.offline_paths = [item for item in job.offline_paths if item != relative and not item.startswith(relative + "/")]
+            job.online_only_paths = [
+                item for item in job.online_only_paths
+                if item != relative and not item.startswith(relative + "/")
+            ]
+            if is_available_offline(relative, job.offline_paths, job.online_only_paths):
+                job.online_only_paths.append(relative)
+        for rule in previous_rules:
+            if rule not in job.offline_paths:
+                self._pin_marker(job, rule).unlink(missing_ok=True)
         cache = cache_home() / "tuxdrive" / "vfs" / job.id
         if relative == "." and cache.exists():
             shutil.rmtree(cache)

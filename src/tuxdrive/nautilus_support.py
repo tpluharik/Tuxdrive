@@ -23,6 +23,28 @@ def availability_route(*, mounted: bool, runtime_ready: bool, enabled: bool) -> 
     return "queue"
 
 
+def rule_matches(relative: str, rule: str) -> bool:
+    """Return whether *rule* applies to a mount-relative path."""
+    return rule == "." or relative == rule or relative.startswith(rule.rstrip("/") + "/")
+
+
+def is_available_offline(
+    relative: str,
+    offline_rules: list[str] | set[str],
+    online_only_rules: list[str] | set[str] = (),
+) -> bool:
+    """Resolve nested offline/online-only rules using the most specific rule."""
+    candidates: list[tuple[int, bool]] = []
+    for rule in offline_rules:
+        if rule_matches(relative, rule):
+            candidates.append((0 if rule == "." else len(rule.split("/")), True))
+    for rule in online_only_rules:
+        if rule_matches(relative, rule):
+            # An equally specific explicit online-only rule wins.
+            candidates.append((0 if rule == "." else len(rule.split("/")), False))
+    return max(candidates, default=(-1, False), key=lambda item: (item[0], not item[1]))[1]
+
+
 def verified_rules_after(
     verified: set[str],
     configured: list[str],

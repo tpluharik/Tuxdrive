@@ -1,8 +1,8 @@
 {
-  "version": "0.20.2",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.2_all.deb",
-  "sha256": "34971c63131d35742fc13f81acd8a1895ee7a757df8060de763321d619fa7c04",
+  "version": "0.20.3",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.3_all.deb",
+  "sha256": "7d0e588c8b026ead0d14dc1520cbdc8f695e367345fb087fa7720ca6444b8dc9",
   "notes": "Security and reliability update",
-  "expires_at": "2026-11-09T06:45:59.611784+00:00",
-  "signature": "kPa0dKJy9WDl+a94qG0UKhRvFrdU7i4Q3kxtMkHYj1SUOMkS4pgUPExscJyZ9HxzliKssJ1yOwaFrN/rFkZFAg=="
+  "expires_at": "2026-11-09T07:27:47.842325+00:00",
+  "signature": "DDanPh1IKvI32kuSEDzn31Nv6wGiqLWBXuhKK+xGCES0ZXrNHb+zF9uijQQvUSD/CJED1lzpz9SfaNl22cmVAg=="
 }

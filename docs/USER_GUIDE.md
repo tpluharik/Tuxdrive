@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.20.2 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including durable and mount-verified Nautilus offline pinning, editable synchronized-folder groups, GitHub repository synchronization, searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, signed updates, peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.20.3 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including explicit online-only/offline streaming controls, locally verified Nautilus pinning, editable synchronized-folder groups, GitHub repository synchronization, searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, signed updates, peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
-Version 0.20.2 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.20.3 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.20.2 is the supported security baseline. Upgrade older installations b
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.20.2_all.deb
+sudo apt install ./tuxdrive_0.20.3_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -48,7 +48,7 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.20.2 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.20.3 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxDrive
 
@@ -323,7 +323,7 @@ TuxDrive 0.10.2 added packaged status emblems and explicit Nautilus 4 metadata c
 
 TuxDrive 0.10.3 supports the Nautilus 4.0 and 4.1 GI namespaces used across supported Ubuntu installations. It intentionally does not request an exact minor namespace because Nautilus loads its own version before importing extensions.
 
-Version 0.12.0 publishes job state through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The cache contains job identifiers and display status only—never OAuth tokens, passwords, private keys, or file content.
+TuxDrive publishes job state and a minimal job/path snapshot through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The snapshot contains job identifiers, local paths, modes and availability rules only—never OAuth tokens, passwords, private keys, provider configuration or file content. Version 0.20.3 makes this snapshot the extension's primary menu source so a transient full-configuration read cannot hide the complete TuxDrive menu inside a live FUSE folder.
 
 Version 0.19.2 removes the TuxDrive/penguin mark from these overlays and makes every badge purely functional. The mapping is deliberately redundant—each state has its own color, silhouette, and symbol:
 
@@ -362,9 +362,9 @@ A streaming drive exposes real file names, folders, sizes, and modification time
 
 ### Per-file offline availability
 
-Right-click a file, folder, or the streaming-drive root and choose **TuxDrive → Always keep available offline**. TuxDrive reads the complete selection into its private VFS cache, stores the persistent rule, and briefly remounts the drive when the first pin changes the live retention policy. While pins exist, rclone's generic age, size, and free-space eviction is disabled because it cannot distinguish pinned content from ordinary cached reads. Blue rotation arrows and **Downloading for offline availability** remain visible until hydration and the policy transition finish. A green check and **Available offline** are published only for rules verified in the current mount. Every reconnect rehydrates persisted rules, so an externally cleared or legacy-evicted cache is not trusted merely because configuration still contains a pin. A failure remains visible and never receives a false green badge. Test availability before disconnecting the network, especially for very large trees.
+Right-click a file, folder, or the streaming-drive root and choose **TuxDrive → Keep available offline**. TuxDrive reads the complete selection into its private VFS cache only after that explicit action, stores a persistent rule and local pin manifest, and briefly remounts the drive when the first pin changes the live retention policy. Blue rotation arrows and **Downloading for offline availability** remain visible until hydration finishes. A green check and **Available offline** appear only after local verification. Reconnecting a drive never opens cloud files to recreate a missing cache: it checks local manifests without a remote read, leaving an old, missing, or partially cleared pin unconfirmed until you explicitly request it again. Test availability before disconnecting the network, especially for very large trees.
 
-Choose **Free local space (online only)** to remove that rule and matching cached content. Choosing it on the streaming root clears all pin rules and the job's streaming cache. Unsynchronized local write-back content is never intentionally discarded; disconnect the drive cleanly and confirm uploads before freeing space.
+Choose **Free local space (make online-only)** to remove that rule and matching cached content. The most specific rule wins, so an individual child can be made online-only even when its parent folder remains offline; a later explicit child pin can override that exception. Choosing online-only on the streaming root clears every pin/exception and the job's streaming cache. The streaming-job button in the app offers the same whole-drive reset when Nautilus is unavailable. Unsynchronized local write-back content is never intentionally discarded; disconnect the drive cleanly and confirm uploads before freeing space.
 
 ![Streaming and hybrid folder layout](assets/04-streaming.svg)
 
@@ -538,7 +538,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.20.2_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.20.3_all.deb`.
 
 ## 13. Data safety
 
@@ -548,10 +548,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.20.2_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.20.2
+### Security upgrade checklist for 0.20.3
 
-1. Install `tuxdrive_0.20.2_all.deb` and restart TuxDrive and Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.20.2 and no signature or expiry error.
+1. Install `tuxdrive_0.20.3_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.20.3 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

@@ -111,19 +111,34 @@ class SyncEngineCommandTests(unittest.TestCase):
         self.assertIn("--vfs-fast-fingerprint", command)
 
     def test_offline_root_and_file_are_fully_hydrated_and_persisted(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
             root = Path(temporary)
             (root / "folder").mkdir()
             (root / "folder" / "one.bin").write_bytes(b"one")
             (root / "two.bin").write_bytes(b"two")
-            job = SyncJob(account_remote="google", local_path=str(root), mode=SyncMode.VIRTUAL_DRIVE)
+            job = SyncJob(
+                account_remote="google",
+                local_path=str(root),
+                remote_path="RemoteRoot",
+                mode=SyncMode.VIRTUAL_DRIVE,
+            )
+            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "RemoteRoot" / "folder"
+            cached.mkdir(parents=True)
+            (cached / "one.bin").write_bytes(b"one")
+            (cached.parent / "two.bin").write_bytes(b"two")
             message = self.engine.set_offline(job, ".", True)
+            verified = self.engine.verified_offline_rules(job)
         self.assertEqual(job.offline_paths, ["."])
+        self.assertEqual(verified, {"."})
         self.assertIn("2 file(s)", message)
         self.assertIn("6 bytes", message)
 
     def test_offline_parent_rule_replaces_redundant_children(self):
-        with tempfile.TemporaryDirectory() as temporary:
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
             root = Path(temporary)
             (root / "folder" / "child").mkdir(parents=True)
             (root / "folder" / "child" / "one.bin").write_bytes(b"one")
@@ -133,8 +148,88 @@ class SyncEngineCommandTests(unittest.TestCase):
                 mode=SyncMode.VIRTUAL_DRIVE,
                 offline_paths=["folder/child"],
             )
+            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "folder" / "child"
+            cached.mkdir(parents=True)
+            (cached / "one.bin").write_bytes(b"one")
             self.engine.set_offline(job, "folder", True)
         self.assertEqual(job.offline_paths, ["folder"])
+
+    def test_online_only_child_overrides_parent_and_releases_matching_cache(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            root = Path(temporary)
+            (root / "folder").mkdir()
+            (root / "folder" / "online.bin").write_bytes(b"online")
+            (root / "folder" / "kept.bin").write_bytes(b"kept")
+            job = SyncJob(
+                account_remote="google",
+                local_path=str(root),
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["folder"],
+            )
+            cache_files = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "folder"
+            cache_files.mkdir(parents=True)
+            (cache_files / "online.bin").write_bytes(b"online")
+            (cache_files / "kept.bin").write_bytes(b"kept")
+            message = self.engine.set_offline(job, "folder/online.bin", False)
+            self.assertFalse((cache_files / "online.bin").exists())
+            self.assertTrue((cache_files / "kept.bin").exists())
+        self.assertEqual(job.offline_paths, ["folder"])
+        self.assertEqual(job.online_only_paths, ["folder/online.bin"])
+        self.assertIn("Online only", message)
+
+    def test_online_only_root_clears_rules_cache_and_markers(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            root = Path(temporary)
+            (root / "one.bin").write_bytes(b"one")
+            job = SyncJob(account_remote="google", local_path=str(root), mode=SyncMode.VIRTUAL_DRIVE)
+            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google"
+            cached.mkdir(parents=True)
+            (cached / "one.bin").write_bytes(b"one")
+            self.engine.set_offline(job, ".", True)
+            cache_root = Path(cache) / "tuxdrive" / "vfs" / job.id
+            self.assertTrue((cache_root / ".tuxdrive-pins").exists())
+            self.engine.set_offline(job, ".", False)
+            self.assertFalse(cache_root.exists())
+        self.assertEqual(job.offline_paths, [])
+        self.assertEqual(job.online_only_paths, [])
+
+    def test_old_pin_without_marker_is_not_downloaded_or_verified(self):
+        with tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            job = SyncJob(
+                account_remote="google",
+                local_path="/mnt/Google",
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["."],
+            )
+            with patch.object(
+                self.engine, "set_offline", side_effect=AssertionError("mount must not be read")
+            ):
+                verified = self.engine.verified_offline_rules(job)
+        self.assertEqual(verified, set())
+
+    def test_tampered_pin_marker_cannot_escape_cache_root(self):
+        with tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            job = SyncJob(
+                account_remote="google",
+                local_path="/mnt/Google",
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["folder"],
+            )
+            marker = self.engine._pin_marker(job, "folder")
+            marker.parent.mkdir(parents=True)
+            marker.write_text(
+                '{"relative":"folder","files":[{"path":"../../outside","size":1,"blocks":1}]}',
+                encoding="utf-8",
+            )
+            self.assertEqual(self.engine.verified_offline_rules(job), set())
 
     def test_restart_mount_applies_changed_vfs_policy(self):
         job = SyncJob(

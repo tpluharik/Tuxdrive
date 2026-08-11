@@ -110,6 +110,15 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("self.activate()\n        if not self._runtime_ready_once:\n            self._pending_nautilus_online", app)
         self.assertIn("_publish_nautilus_state", app)
         self.assertIn("_pending_nautilus_paths", app)
+        self.assertIn('"configured_offline_paths"', app)
+        self.assertIn('"online_only_paths"', app)
+        self.assertIn('"__tuxdrive__"', extension)
+        self.assertIn("Prefer the small extension snapshot", extension)
+        self.assertIn("Reconnects must never trigger an implicit download", app)
+        self.assertIn("Do not mount the cloud merely to make it online-only", app)
+        self.assertIn("dispatch that exact", app)
+        self.assertIn("verified_offline_rules(job)", app)
+        self.assertNotIn("for relative in list(job.offline_paths)", app)
 
     def test_nautilus_info_provider_completes_and_packages_emblems(self):
         extension = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")

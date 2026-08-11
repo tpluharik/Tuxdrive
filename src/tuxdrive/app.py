@@ -70,7 +70,11 @@ from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
 from .migration import MigrationError, ProfileManager
 from .platform_support import format_report, inspect_host
-from .nautilus_support import availability_route, command_line_path, verified_rules_after
+from .nautilus_support import (
+    availability_route,
+    command_line_path,
+    verified_rules_after,
+)
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -793,6 +797,7 @@ class SyncJobDialog(Gtk.Dialog):
             value.last_status = self.existing.last_status
             value.last_error = self.existing.last_error
             value.offline_paths = list(self.existing.offline_paths)
+            value.online_only_paths = list(self.existing.online_only_paths)
             value.peer_role = self.existing.peer_role
             value.one_time_drop_id = self.existing.one_time_drop_id
             return [value]
@@ -2720,6 +2725,21 @@ class MainWindow(Gtk.ApplicationWindow):
             label=tr("disconnect") if job.mode is SyncMode.VIRTUAL_DRIVE else tr("stop")
         )
         cancel.connect("clicked", lambda _button: self.controller.stop_job(job))
+        availability_button = None
+        if job.mode is SyncMode.VIRTUAL_DRIVE:
+            keep_offline = not bool(job.offline_paths)
+            availability_button = Gtk.Button(label=(
+                tr("keep_drive_offline") if keep_offline else tr("make_drive_online_only")
+            ))
+            availability_button.set_tooltip_text(
+                tr("keep_drive_offline_hint") if keep_offline else tr("make_drive_online_only_hint")
+            )
+            availability_button.connect(
+                "clicked",
+                lambda _button, available=keep_offline: self.controller._request_offline_path(
+                    str(job.local), available
+                ),
+            )
         open_button = Gtk.Button(label=tr("open_folder"))
         open_button.connect("clicked", lambda _button: self._open_path(job.local))
         log_button = Gtk.Button(label=tr("view_log"))
@@ -2758,7 +2778,9 @@ class MainWindow(Gtk.ApplicationWindow):
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
         remove.set_tooltip_text(tr("remove_sync"))
         remove.connect("clicked", self._remove_job, job)
-        for widget in (sync, cancel, open_button, share_button, history_button, verify_button, conflicts_button, group_button, rename_button, edit_button, log_button):
+        for widget in (sync, cancel, availability_button, open_button, share_button, history_button, verify_button, conflicts_button, group_button, rename_button, edit_button, log_button):
+            if widget is None:
+                continue
             actions.pack_start(widget, False, False, 0)
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
@@ -3587,6 +3609,12 @@ class TuxDriveApplication(Gtk.Application):
                 "The selected path is not inside a configured streaming drive."
             )
             return
+        if not available:
+            # Releasing a saved pin/cache is a local operation and must remain
+            # available from the app even while the streaming drive is
+            # disconnected. Do not mount the cloud merely to make it online-only.
+            self._set_offline_path(value, False)
+            return
         mounted = job.id in self.engine.mounted_jobs or os.path.ismount(job.local)
         route = availability_route(
             mounted=mounted,
@@ -3646,7 +3674,9 @@ class TuxDriveApplication(Gtk.Application):
     ) -> str:
         """Hydrate/release content and apply the matching live VFS policy."""
         previous_rules = list(job.offline_paths)
+        previous_online_only = list(job.online_only_paths)
         previously_pinned = bool(previous_rules)
+        was_mounted = job.id in self.engine.mounted_jobs or os.path.ismount(job.local)
 
         if available and not previously_pinned:
             # Apply the no-eviction policy *before* reading the first pin.  If
@@ -3654,9 +3684,14 @@ class TuxDriveApplication(Gtk.Application):
             # hydrated, early files could otherwise be evicted before the
             # action finished and the badge would be wrong.
             job.offline_paths = [relative]
+            job.online_only_paths = [
+                rule for rule in previous_online_only
+                if rule != relative and not rule.startswith(relative.rstrip("/") + "/")
+            ]
             policy_result = self.engine.restart_mount(job, self._job_finished)
             if not policy_result.success:
                 job.offline_paths = previous_rules
+                job.online_only_paths = previous_online_only
                 recovery = self.engine.restart_mount(job, self._job_finished)
                 recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
                 raise RuntimeError(
@@ -3667,6 +3702,7 @@ class TuxDriveApplication(Gtk.Application):
                 message = self.engine.set_offline(job, relative, True)
             except Exception:
                 job.offline_paths = previous_rules
+                job.online_only_paths = previous_online_only
                 self.engine.restart_mount(job, self._job_finished)
                 raise
             return f"{message} · durable offline retention active"
@@ -3675,6 +3711,8 @@ class TuxDriveApplication(Gtk.Application):
         now_pinned = bool(job.offline_paths)
         if previously_pinned == now_pinned:
             return message
+        if not was_mounted:
+            return f"{message} · streaming policy will apply on the next connection"
 
         result = self.engine.restart_mount(job, self._job_finished)
         if result.success:
@@ -3684,6 +3722,7 @@ class TuxDriveApplication(Gtk.Application):
         # Keep the in-memory/configured rule consistent with the active policy
         # and make one best-effort attempt to restore the prior mount.
         job.offline_paths = previous_rules
+        job.online_only_paths = previous_online_only
         recovery = self.engine.restart_mount(job, self._job_finished)
         recovery_detail = "previous streaming policy restored" if recovery.success else "streaming drive also needs reconnection"
         raise RuntimeError(
@@ -3719,6 +3758,7 @@ class TuxDriveApplication(Gtk.Application):
             LOGGER.info("Offline availability changed: %s", result)
             self.save()
         if self.window:
+            self.window.refresh()
             self.window.message(str(error) if error else str(result), Gtk.MessageType.ERROR if error else Gtk.MessageType.INFO)
         if error:
             self._offline_request_failed(str(error), show_window=False)
@@ -3897,8 +3937,24 @@ class TuxDriveApplication(Gtk.Application):
                 # This prevents a stale rule or externally-cleared VFS cache
                 # from receiving a misleading green badge.
                 "offline_paths": sorted(self._offline_verified_paths.get(job.id, set())),
+                "configured_offline_paths": sorted(job.offline_paths),
+                "online_only_paths": sorted(job.online_only_paths),
                 "offline_pending_paths": sorted(self._offline_pending_paths.get(job.id, set())),
             }
+        payload["__tuxdrive__"] = {
+            "nautilus_integration": self.config.settings.nautilus_integration,
+            "jobs": [
+                {
+                    "id": job.id,
+                    "local_path": job.local_path,
+                    "mode": job.mode.value,
+                    "enabled": job.enabled,
+                    "offline_paths": list(job.offline_paths),
+                    "online_only_paths": list(job.online_only_paths),
+                }
+                for job in self.config.jobs
+            ],
+        }
         descriptor, temporary = tempfile.mkstemp(
             prefix="nautilus-state-", suffix=".json", dir=target.parent
         )
@@ -4032,14 +4088,26 @@ class TuxDriveApplication(Gtk.Application):
         self.save()
         if result.success and not result.incremental:
             self.start_callbacks(job)
-        if result.success and job.mode is SyncMode.VIRTUAL_DRIVE and job.offline_paths:
-            # A cache may have been cleared outside TuxDrive or partially
-            # evicted by an older release.  Re-read every durable rule after a
-            # mount starts and keep the badge in the downloading state until
-            # the content is confirmed again.
-            for relative in list(job.offline_paths):
-                selected = job.local if relative == "." else job.local / relative
-                self._set_offline_path(str(selected), True)
+        if result.success and job.mode is SyncMode.VIRTUAL_DRIVE:
+            # Reconnects must never trigger an implicit download.  Verify only
+            # TuxDrive's local cache markers; a missing/old 0.20.2 marker stays
+            # unconfirmed until the user explicitly chooses Keep available
+            # offline again.
+            verified = self.engine.verified_offline_rules(job)
+            if verified:
+                self._offline_verified_paths[job.id] = verified
+            else:
+                self._offline_verified_paths.pop(job.id, None)
+            self._publish_nautilus_state()
+            # A user may request Keep available offline while the drive is
+            # disconnected. run_job is asynchronous, so dispatch that exact
+            # queued request only after this mount has actually succeeded.
+            for request in list(self._pending_offline_requests):
+                value, available = request
+                requested_job = self._job_for_local_path(value)
+                if requested_job and requested_job.id == job.id:
+                    self._pending_offline_requests.remove(request)
+                    self._set_offline_path(value, available)
         if result.mount_lost and job.enabled:
             recent = self._mount_failures.setdefault(job.id, [])
             cutoff = now.timestamp() - 300
