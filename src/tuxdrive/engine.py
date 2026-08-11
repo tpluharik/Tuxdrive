@@ -287,9 +287,14 @@ class SyncEngine:
         data_root = cache / "vfs"
         records: list[dict[str, int | str]] = []
         for hydrated_relative, hydrated_size in hydrated_files:
-            mounted_relative = "/".join(
-                part for part in (job.remote_path.strip("/"), hydrated_relative.strip("/")) if part
-            )
+            # rclone's cache namespace is private to this job, but the object
+            # path below the provider prefix is relative to the mounted root.
+            # When the mount itself targets ``remote:Cloud/Subfolder``, rclone
+            # does not consistently repeat ``Cloud/Subfolder`` in that object
+            # path. Matching the configured remote path therefore rejected a
+            # fully cached object even though the exact selected file was
+            # present. Use the mount-relative path that TuxDrive actually read.
+            mounted_relative = hydrated_relative.strip("/")
             item = self._cached_file_after_hydration(
                 data_root, mounted_relative, hydrated_size
             )
@@ -302,6 +307,7 @@ class SyncEngine:
             stat = item.stat()
             records.append({
                 "path": cache_relative,
+                "relative": hydrated_relative,
                 "size": stat.st_size,
                 "blocks": getattr(stat, "st_blocks", 0),
             })
@@ -311,7 +317,11 @@ class SyncEngine:
         try:
             os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump({"relative": relative, "files": records}, handle, ensure_ascii=False)
+                json.dump(
+                    {"version": 2, "relative": relative, "files": records},
+                    handle,
+                    ensure_ascii=False,
+                )
                 handle.write("\n")
                 handle.flush()
                 os.fsync(handle.fileno())
@@ -337,19 +347,64 @@ class SyncEngine:
                     if cache_path.is_absolute() or ".." in cache_path.parts or not cache_path.parts:
                         valid = False
                         break
-                    # A more specific online-only rule deliberately releases
-                    # this part of an otherwise pinned parent.
-                    if any(
-                        self._cache_relative_matches(
-                            cache_relative,
-                            "/".join(
-                                part for part in (job.remote_path.strip("/"), rule.strip("/")) if part
-                            ),
+                    if "relative" in record:
+                        record_relative = str(record["relative"]).strip("/") or "."
+                        record_path = Path(record_relative)
+                        if (
+                            record_path.is_absolute()
+                            or ".." in record_path.parts
+                            or not record_path.parts
+                            or not self._cache_relative_matches(
+                                cache_relative, record_relative, directory=False
+                            )
+                            or (
+                                relative != "."
+                                and record_relative != relative
+                                and not record_relative.startswith(relative.rstrip("/") + "/")
+                            )
+                        ):
+                            valid = False
+                            break
+                        # A more specific online-only rule deliberately
+                        # releases this part of an otherwise pinned parent.
+                        if not is_available_offline(
+                            record_relative, job.offline_paths, job.online_only_paths
+                        ):
+                            continue
+                    else:
+                        # Version-1 manifests did not store the mount-relative
+                        # object path. Accept either historical cache layout so
+                        # upgrading does not discard a still-complete pin.
+                        historical = "/".join(
+                            part for part in (job.remote_path.strip("/"), relative.strip("/")) if part
                         )
-                        and not is_available_offline(rule, job.offline_paths, job.online_only_paths)
-                        for rule in job.online_only_paths
-                    ):
-                        continue
+                        if not (
+                            self._cache_relative_matches(cache_relative, relative)
+                            or (
+                                historical
+                                and self._cache_relative_matches(cache_relative, historical)
+                            )
+                        ):
+                            valid = False
+                            break
+                        if any(
+                            (
+                                self._cache_relative_matches(cache_relative, rule)
+                                or self._cache_relative_matches(
+                                    cache_relative,
+                                    "/".join(
+                                        part for part in (
+                                            job.remote_path.strip("/"), rule.strip("/")
+                                        ) if part
+                                    ),
+                                )
+                            )
+                            and not is_available_offline(
+                                rule, job.offline_paths, job.online_only_paths
+                            )
+                            for rule in job.online_only_paths
+                        ):
+                            continue
                     item = data_root / cache_path
                     stat = item.stat()
                     if stat.st_size != int(record["size"]):

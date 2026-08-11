@@ -17,6 +17,7 @@ from gi.repository import Gio, GLib, GObject, Nautilus
 APP_ID = "io.github.tuxdrive.TuxDrive"
 APP_PATH = "/io/github/tuxdrive/TuxDrive"
 _LAST_VALID_JOBS: list[dict] = []
+_LAST_VALID_STATE: dict = {}
 
 
 def _config_path() -> Path:
@@ -60,11 +61,20 @@ def _state_path() -> Path:
 
 
 def _state_document() -> dict:
+    global _LAST_VALID_STATE
     try:
         value = json.loads(_state_path().read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
+        meta = value.get("__tuxdrive__", {}) if isinstance(value, dict) else {}
+        # The app always publishes the job snapshot and runtime states in one
+        # atomic document. Treat only that complete shape as a new snapshot;
+        # a short ENOENT/partial observation during replacement must not erase
+        # already verified badges until the next metadata event.
+        if isinstance(meta, dict) and isinstance(meta.get("jobs"), list):
+            _LAST_VALID_STATE = value
+            return value
+        return _LAST_VALID_STATE
     except (OSError, ValueError, TypeError):
-        return {}
+        return _LAST_VALID_STATE
 
 
 def _runtime_states() -> dict[str, dict]:
@@ -209,7 +219,12 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
 
         GLib.timeout_add(150, retry)
 
-    def get_file_items(self, files: list[Nautilus.FileInfo]) -> list[Nautilus.MenuItem]:
+    def _menu_items(
+        self,
+        files: list[Nautilus.FileInfo],
+        *,
+        allow_availability: bool,
+    ) -> list[Nautilus.MenuItem]:
         if not files:
             return []
         paths = [_local_path(item) for item in files]
@@ -259,7 +274,11 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             )
             online.connect("activate", lambda _item: self._activate("open-online-path", paths[0]))
             submenu.append_item(online)
-            if len(paths) == 1 and jobs[0].get("mode") == "virtual_drive":
+            if (
+                allow_availability
+                and len(paths) == 1
+                and jobs[0].get("mode") == "virtual_drive"
+            ):
                 relative = _relative_path(paths[0], jobs[0])
                 runtime = _runtime_states().get(str(jobs[0].get("id", "")), {})
                 pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))
@@ -309,8 +328,15 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         root.set_submenu(submenu)
         return [root]
 
+    def get_file_items(self, files: list[Nautilus.FileInfo]) -> list[Nautilus.MenuItem]:
+        # Availability actions must have an explicit selected file/folder.
+        # Nautilus also asks providers for background items using the current
+        # folder itself; treating that callback as a selection silently turns
+        # one intended file pin into a recursive folder/drive hydration.
+        return self._menu_items(files, allow_availability=True)
+
     def get_background_items(self, current_folder: Nautilus.FileInfo) -> list[Nautilus.MenuItem]:
-        return self.get_file_items([current_folder])
+        return self._menu_items([current_folder], allow_availability=False)
 
     def _apply_file_info(self, file_info: Nautilus.FileInfo) -> None:
         path = _local_path(file_info)

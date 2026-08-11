@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.20.5 suite contains **151 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxDrive 0.20.6 suite contains **155 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -83,9 +83,9 @@ The TuxDrive 0.20.5 suite contains **151 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.20.5_all.deb
-dpkg-deb --contents dist/tuxdrive_0.20.5_all.deb
-sha256sum dist/tuxdrive_0.20.5_all.deb
+dpkg-deb --info dist/tuxdrive_0.20.6_all.deb
+dpkg-deb --contents dist/tuxdrive_0.20.6_all.deb
+sha256sum dist/tuxdrive_0.20.6_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -100,8 +100,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.20.5 \
-  --package dist/tuxdrive_0.20.5_all.deb \
+python3 scripts/sign-update.py --version 0.20.6 \
+  --package dist/tuxdrive_0.20.6_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```

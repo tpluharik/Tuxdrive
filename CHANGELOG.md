@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.6 — exact cache verification and durable badges
+
+- Matched pin manifests to rclone's real mount-relative VFS layout, including mounts rooted at a cloud subfolder, so completed file downloads no longer time out or lose their saved offline state.
+- Added versioned pin-manifest records while preserving locally complete 0.20.5 manifests during upgrade.
+- Restricted availability actions to explicitly selected Nautilus files/folders; the folder-background menu can no longer accidentally request recursive hydration of the current folder or drive root. Whole-drive offline retention remains an explicit in-app action.
+- Retained the last complete runtime badge snapshot through atomic state-file replacement, so locally verified files do not revert to cloud-only icons while their cache remains valid.
+- Added regression coverage for the real rclone cache layout, legacy manifest migration, background-menu isolation and persistent verified badges. The complete suite now contains 155 automated tests.
+
 ## 0.20.5 — stable per-file pinning and persistent Nautilus menu
 
 - Removed the first/last-pin FUSE remount. The streaming mount now starts with one stable retention policy, so pinning one file does not detach Nautilus, rebuild the folder view, or cause adjacent files to be read while the view reconnects.

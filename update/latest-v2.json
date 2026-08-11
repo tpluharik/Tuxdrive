@@ -1,8 +1,8 @@
 {
-  "version": "0.20.5",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.5_all.deb",
-  "sha256": "ce08d8780cb2af4066b5dd034dacec9e5b139a5d3f7a3a88155e20995f7820fa",
-  "notes": "Keep per-file offline rules exact without remounting the streaming drive, and preserve the TuxDrive Nautilus menu across atomic state refreshes.",
-  "expires_at": "2027-02-07T17:58:39.026803+00:00",
-  "signature": "xkUWGdilsQMs0on4Md97TDGkax0vNPXSkmqTVe9ac3dCgOOw/tUkD7YbTh+L1gxZMtUukGjsZKgzf6ZuqZpwDg=="
+  "version": "0.20.6",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.6_all.deb",
+  "sha256": "292f8d6b4e63d9c8034c0af5bb3f5d372fca08b30d67625333f709dcc34ee43c",
+  "notes": "Keep per-file offline state exact by verifying rclone's real mount-relative cache, prevent accidental background-folder hydration, and retain verified Nautilus badges across atomic refreshes.",
+  "expires_at": "2027-02-07T18:20:46.720069+00:00",
+  "signature": "dMb3uBaA65cwnylPHemz7GGEplEJtuZXOreVWfKxV5bmWvfW2NHEEkYJo4LDqQmuhWGoSjazuOnInr5aAFhxCA=="
 }

@@ -56,6 +56,32 @@ class NautilusExtensionTests(unittest.TestCase):
         ):
             self.assertEqual(extension._jobs(), [job])
 
+    def test_transient_state_read_keeps_verified_badges(self):
+        extension = load_extension()
+        state = {
+            "drive": {"offline_paths": ["folder/one.txt"]},
+            "__tuxdrive__": {
+                "nautilus_integration": True,
+                "jobs": [{"id": "drive", "local_path": "/mnt/Cloud"}],
+            },
+        }
+        with tempfile.TemporaryDirectory() as temporary, patch.object(
+            extension, "_state_path", return_value=Path(temporary) / "state.json"
+        ):
+            path = extension._state_path()
+            path.write_text(__import__("json").dumps(state), encoding="utf-8")
+            self.assertEqual(extension._runtime_states()["drive"]["offline_paths"], ["folder/one.txt"])
+            path.unlink()
+            self.assertEqual(extension._runtime_states()["drive"]["offline_paths"], ["folder/one.txt"])
+
+    def test_background_menu_cannot_trigger_recursive_offline_action(self):
+        source = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")
+        self.assertIn("return self._menu_items(files, allow_availability=True)", source)
+        self.assertIn(
+            "return self._menu_items([current_folder], allow_availability=False)",
+            source,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

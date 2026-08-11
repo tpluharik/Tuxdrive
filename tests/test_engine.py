@@ -1,3 +1,4 @@
+import json
 import os
 import tempfile
 import threading
@@ -191,6 +192,76 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertEqual(job.offline_paths, ["folder/one.bin"])
             self.assertEqual(self.engine.verified_offline_rules(job), {"folder/one.bin"})
             self.assertIn("1 file(s)", message)
+
+    def test_single_file_pin_matches_real_mount_relative_rclone_cache(self):
+        with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            root = Path(temporary)
+            source = root / "one.bin"
+            source.write_bytes(b"one")
+            job = SyncJob(
+                account_remote="google,team_drive=,root_folder_id=root",
+                local_path=str(root),
+                remote_path="Cloud/Subfolder",
+                mode=SyncMode.VIRTUAL_DRIVE,
+            )
+            # A mount rooted at remote:Cloud/Subfolder stores the selected
+            # object relative to that mount. It need not repeat Cloud/Subfolder
+            # in the per-job VFS cache path.
+            cached = (
+                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                "google,team_drive=,root_folder_id=root" / "one.bin"
+            )
+            cached.parent.mkdir(parents=True)
+            cached.write_bytes(b"one")
+
+            message = self.engine.set_offline(job, "one.bin", True)
+            marker = json.loads(
+                self.engine._pin_marker(job, "one.bin").read_text(encoding="utf-8")
+            )
+
+            self.assertEqual(job.offline_paths, ["one.bin"])
+            self.assertEqual(self.engine.verified_offline_rules(job), {"one.bin"})
+            self.assertEqual(marker["files"][0]["relative"], "one.bin")
+            self.assertEqual(marker["version"], 2)
+            self.assertIn("1 file(s)", message)
+
+    def test_version_one_pin_marker_survives_mount_relative_cache_upgrade(self):
+        with tempfile.TemporaryDirectory() as cache, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": cache}
+        ):
+            job = SyncJob(
+                account_remote="google",
+                local_path="/mnt/Cloud",
+                remote_path="Cloud/Subfolder",
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["folder"],
+            )
+            cached = (
+                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                "google" / "folder" / "one.bin"
+            )
+            cached.parent.mkdir(parents=True)
+            cached.write_bytes(b"one")
+            stat = cached.stat()
+            marker = self.engine._pin_marker(job, "folder")
+            marker.parent.mkdir(parents=True)
+            marker.write_text(
+                json.dumps({
+                    "relative": "folder",
+                    "files": [{
+                        "path": cached.relative_to(
+                            Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs"
+                        ).as_posix(),
+                        "size": stat.st_size,
+                        "blocks": getattr(stat, "st_blocks", 0),
+                    }],
+                }),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(self.engine.verified_offline_rules(job), {"folder"})
 
     def test_online_only_child_overrides_parent_and_releases_matching_cache(self):
         with tempfile.TemporaryDirectory() as temporary, tempfile.TemporaryDirectory() as cache, patch.dict(
