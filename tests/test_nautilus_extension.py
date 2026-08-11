@@ -38,9 +38,10 @@ def load_extension():
     repository.Nautilus = types.SimpleNamespace(
         MenuProvider=type("MenuProvider", (), {}),
         InfoProvider=type("InfoProvider", (), {}),
-        FileInfo=object,
+        FileInfo=types.SimpleNamespace(lookup_for_uri=lambda _uri: None),
         Menu=FakeMenu,
         MenuItem=FakeMenuItem,
+        menu_provider_emit_items_updated_signal=lambda _provider: None,
         OperationResult=types.SimpleNamespace(COMPLETE=0),
     )
     gi.repository = repository
@@ -135,11 +136,11 @@ class NautilusExtensionTests(unittest.TestCase):
         labels = [item.values["label"] for item in menu[0].submenu.items]
         self.assertIn("Free local space (make online-only)", labels)
 
-    def test_metadata_burst_is_coalesced_and_stale_handles_are_dropped_first(self):
+    def test_metadata_burst_rebuilds_menu_and_reacquires_current_file_info(self):
         extension = load_extension()
         provider = object.__new__(extension.TuxDriveExtension)
         provider._invalidation_source = 0
-        provider._known_files = {}
+        provider._known_uris = {}
         changed = types.SimpleNamespace(get_basename=lambda: "nautilus-state.json")
         with patch.object(
             extension.GLib, "timeout_add", return_value=41, create=True
@@ -149,17 +150,71 @@ class NautilusExtensionTests(unittest.TestCase):
         timeout_add.assert_called_once_with(200, provider._refresh_metadata)
         self.assertEqual(provider._invalidation_source, 41)
 
-        class ReentrantFile:
-            def invalidate_extension_info(inner_self):
-                self.assertEqual(provider._known_files, {})
+        class CurrentFile:
+            def __init__(inner_self):
+                inner_self.invalidated = False
 
-        provider._known_files = {"file:///one": ReentrantFile()}
+            def is_gone(inner_self):
+                return False
+
+            def invalidate_extension_info(inner_self):
+                inner_self.invalidated = True
+
+        current = CurrentFile()
+        provider._known_uris = {"file:///one": None}
         extension.GLib.SOURCE_REMOVE = False
         with patch.object(extension, "_state_document", return_value={}), patch.object(
             extension, "_jobs", return_value=[]
-        ):
+        ), patch.object(
+            extension.Nautilus, "menu_provider_emit_items_updated_signal"
+        ) as menu_updated, patch.object(
+            extension.Nautilus.FileInfo, "lookup_for_uri", return_value=current
+        ) as lookup:
             self.assertFalse(provider._refresh_metadata())
-        self.assertEqual(provider._known_files, {})
+        menu_updated.assert_called_once_with(provider)
+        lookup.assert_called_once_with("file:///one")
+        self.assertTrue(current.invalidated)
+        self.assertEqual(provider._known_uris, {"file:///one": None})
+
+    def test_info_provider_retains_only_uri_not_caller_owned_file_info(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxDriveExtension)
+        provider._known_uris = {}
+
+        class Location:
+            def get_path(self):
+                return "/mnt/Cloud/folder/one.txt"
+
+        class CallerOwnedFile:
+            def get_location(self):
+                return Location()
+
+            def get_uri(self):
+                return "file:///mnt/Cloud/folder/one.txt"
+
+            def add_string_attribute(self, *_args):
+                pass
+
+            def add_emblem(self, *_args):
+                pass
+
+        file_info = CallerOwnedFile()
+        job = {
+            "id": "drive",
+            "local_path": "/mnt/Cloud",
+            "mode": "virtual_drive",
+            "enabled": True,
+        }
+        with patch.object(extension, "_jobs", return_value=[job]), patch.object(
+            extension, "_runtime_states", return_value={"drive": {"state": "streaming"}}
+        ):
+            provider._apply_file_info(file_info)
+
+        self.assertEqual(
+            provider._known_uris,
+            {"file:///mnt/Cloud/folder/one.txt": None},
+        )
+        self.assertTrue(all(value is None for value in provider._known_uris.values()))
 
 
 if __name__ == "__main__":

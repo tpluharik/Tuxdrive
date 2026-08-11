@@ -1,8 +1,8 @@
 {
-  "version": "0.20.8",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.8_all.deb",
-  "sha256": "f875e37d7f05eccfb49d1567e564bb0a1cfd1c4ea6b5b5c7b20dc152a0454557",
-  "notes": "Reliable offline hydration and persistent Nautilus actions",
-  "expires_at": "2026-11-09T19:01:17.059546+00:00",
-  "signature": "DErGp1//Jgui2xUmWFj9kqO26GV3K2RukNqmnb2u/qhnrQUUKNeTXpEqnXzPnMVssRGpnwO2xYlmAoqCr0bRCg=="
+  "version": "0.20.9",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.9_all.deb",
+  "sha256": "98569a929cb61d8179df84efa80ef0059ecdc318b25d52e5a4880011280a5dfa",
+  "notes": "Keeps the TuxDrive Nautilus menu available after a streamed file is localized by using URI-safe badge refresh and the dedicated menu-update signal.",
+  "expires_at": "2026-11-09T19:28:07.120220+00:00",
+  "signature": "OLmsKizlZT9QlHkOt+EysZcnrV4tjHkILB5UFlEcYRpsH1GqgAGKTZBqE6N39N/pqxSx0wtIvxCuQhoYgNMxBA=="
 }

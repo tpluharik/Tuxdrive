@@ -1,10 +1,10 @@
-# TuxDrive 0.20.8 security hardening and secure operation
+# TuxDrive 0.20.9 security hardening and secure operation
 
-This document explains the controls retained through TuxDrive 0.20.8, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls retained through TuxDrive 0.20.9, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.20.8** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, coalesced last-known-good credential-free Nautilus menu/badge refresh and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version **0.20.9** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, URI-safe Nautilus menu/badge refresh and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
@@ -12,7 +12,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 
 ## Security control inventory
 
-| Area | 0.20.8 behavior | Security purpose |
+| Area | 0.20.9 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
@@ -77,7 +77,7 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.20.8 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.20.9 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

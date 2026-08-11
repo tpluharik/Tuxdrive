@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.9 — durable post-localization Nautilus menu
+
+- Replaced retained caller-owned `Nautilus.FileInfo` wrappers with stable URI keys. Completion refreshes now reacquire the current file object from Nautilus's cache before invalidating its badge metadata, avoiding stale FUSE wrappers after a streamed file becomes local.
+- Added the dedicated MenuProvider `items-updated` signal and full Nautilus 4 menu callbacks, so the TuxDrive submenu is rebuilt independently of badge invalidation and continues to expose **Free local space (make online-only)** after localization.
+- Added regression coverage proving the extension retains no caller-owned file objects, reacquires the live cache entry, emits a menu refresh, and preserves the completed-file online-only action. The complete suite now contains 161 automated tests.
+
 ## 0.20.8 — terminal offline hydration and persistent Nautilus actions
 
 - Moved each offline file read into an isolated helper with a progress-based inactivity watchdog. A responsive large transfer may run for any duration, while a provider read that makes no progress for 60 seconds is terminated and retried once.

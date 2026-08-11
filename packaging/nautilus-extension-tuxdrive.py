@@ -151,7 +151,12 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
 
     def __init__(self) -> None:
         super().__init__()
-        self._known_files: dict[str, Nautilus.FileInfo] = {}
+        # FileInfo values passed to InfoProvider are owned by Nautilus. Keeping
+        # those wrappers after the callback can leave Python holding a stale
+        # object when a FUSE file changes from streamed to locally cached.
+        # Remember only stable URIs and reacquire the current cached FileInfo
+        # immediately before requesting a badge refresh.
+        self._known_uris: dict[str, None] = {}
         self._monitors: list[Gio.FileMonitor] = []
         self._invalidation_source = 0
         for directory in {_config_path().parent, _state_path().parent}:
@@ -194,16 +199,27 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         # from Keep offline to Make online-only without losing the root menu.
         _state_document()
         _jobs()
-        known_files = list(self._known_files.values())
-        # Clear stale handles before invalidation. invalidate_extension_info()
-        # may synchronously call this provider again and repopulate the map.
-        self._known_files.clear()
-        for file_info in known_files:
+        # MenuProvider has its own refresh signal. Using it prevents badge
+        # invalidation from being (incorrectly) relied on to rebuild a context
+        # menu after Keep available offline completes.
+        try:
+            Nautilus.menu_provider_emit_items_updated_signal(self)
+        except (AttributeError, TypeError):
+            # Older bindings may omit the helper; menus are still rebuilt on
+            # the next selection change or right-click.
+            pass
+
+        for uri in list(self._known_uris):
             try:
+                file_info = Nautilus.FileInfo.lookup_for_uri(uri)
+                if file_info is None or file_info.is_gone():
+                    self._known_uris.pop(uri, None)
+                    continue
                 file_info.invalidate_extension_info()
             except Exception:
-                # A FileInfo from an earlier FUSE view may already be invalid;
-                # it must never prevent later context-menu callbacks.
+                # A URI can leave Nautilus' cache while a view changes. Drop
+                # it without affecting subsequent menu-provider callbacks.
+                self._known_uris.pop(uri, None)
                 continue
         return GLib.SOURCE_REMOVE
 
@@ -370,7 +386,19 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         # one intended file pin into a recursive folder/drive hydration.
         return self._menu_items(files, allow_availability=True)
 
+    def get_file_items_full(self, _provider, files: list[Nautilus.FileInfo]) -> list[Nautilus.MenuItem]:
+        """Nautilus 4 menu callback paired with the items-updated signal."""
+        return self._menu_items(files, allow_availability=True)
+
     def get_background_items(self, current_folder: Nautilus.FileInfo) -> list[Nautilus.MenuItem]:
+        return self._menu_items([current_folder], allow_availability=False)
+
+    def get_background_items_full(
+        self,
+        _provider,
+        current_folder: Nautilus.FileInfo,
+    ) -> list[Nautilus.MenuItem]:
+        """Nautilus 4 background callback paired with the update signal."""
         return self._menu_items([current_folder], allow_availability=False)
 
     def _apply_file_info(self, file_info: Nautilus.FileInfo) -> None:
@@ -378,11 +406,11 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         job = _containing_job(path) if path else None
         if not job:
             return
-        self._known_files[file_info.get_uri()] = file_info
-        # Retain enough live objects for normal directories without allowing a
+        self._known_uris[file_info.get_uri()] = None
+        # Retain enough URI keys for normal directories without allowing a
         # long Nautilus session to grow without bound.
-        while len(self._known_files) > 2048:
-            self._known_files.pop(next(iter(self._known_files)))
+        while len(self._known_uris) > 2048:
+            self._known_uris.pop(next(iter(self._known_uris)))
         mode = job.get("mode")
         runtime = _runtime_states().get(str(job.get("id", "")), {})
         relative = _relative_path(path, job)
