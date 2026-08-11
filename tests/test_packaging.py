@@ -1,4 +1,5 @@
 import unittest
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
@@ -111,6 +112,30 @@ class PackagingTests(unittest.TestCase):
         for state in ("synced", "syncing", "streaming", "paused", "pending", "error"):
             self.assertTrue(Path(f"packaging/emblem-tuxdrive-{state}.svg").exists())
         self.assertIn("scalable/emblems", build_script)
+
+    def test_nautilus_emblems_are_unbranded_and_visually_distinct(self):
+        palette = {
+            "synced": "#15803D",
+            "syncing": "#1565C0",
+            "streaming": "#00838F",
+            "paused": "#6D28D9",
+            "pending": "#D97706",
+            "error": "#C62828",
+        }
+        descriptions: set[str] = set()
+        for state, color in palette.items():
+            path = Path(f"packaging/emblem-tuxdrive-{state}.svg")
+            source = path.read_text(encoding="utf-8")
+            root = ET.fromstring(source)
+            self.assertEqual(root.attrib.get("data-state"), state)
+            self.assertIn(color, source)
+            self.assertNotIn("#20252b", source.lower())
+            self.assertNotIn("#f4a51c", source.lower())
+            description = root.find("{http://www.w3.org/2000/svg}desc")
+            self.assertIsNotNone(description)
+            descriptions.add(description.text or "")
+        self.assertEqual(len(set(palette.values())), len(palette))
+        self.assertEqual(len(descriptions), len(palette))
 
     def test_optional_integrations_do_not_block_core_install(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")

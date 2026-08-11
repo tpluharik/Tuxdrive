@@ -1,6 +1,6 @@
 # Platform support and adaptive installation
 
-TuxDrive 0.19.1 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxDrive does not publish a macOS package.
+TuxDrive 0.19.2 uses one Debian package across supported Debian-family GNOME desktops. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxDrive does not publish a macOS package.
 
 ## Compatibility matrix
 

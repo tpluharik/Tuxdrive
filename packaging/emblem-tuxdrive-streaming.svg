@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="#fff" stroke="#20252b" stroke-width="4"/><path d="M20 24c3-11 21-11 24 0l-4 20H24z" fill="#20252b"/><ellipse cx="32" cy="35" rx="9" ry="12" fill="#fff"/><path d="m27 25 5-4 5 4-5 4z" fill="#f4a51c"/><circle cx="49" cy="49" r="13" fill="#2476d2" stroke="#fff" stroke-width="3"/><path d="M42 50c1-5 5-8 10-7m4 5-4-5 5-3" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" data-state="streaming">
+  <title>Files on demand</title>
+  <desc>Teal rounded-square status badge with a white cloud download symbol</desc>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#00838F" stroke="#FFFFFF" stroke-width="4"/>
+  <path d="M19 43h28a9 9 0 0 0 1-17.9A16 16 0 0 0 18.2 22 11 11 0 0 0 19 43Z" fill="none" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M32 21v15m-7-7 7 7 7-7" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

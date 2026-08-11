@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive 0.19.1 suite contains **126 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate both the original-key legacy bridge and the rotated-key v2 channel against the exact packaged release.
+The TuxDrive 0.19.2 suite contains **127 automated tests**. Tests use temporary directories and mocked cloud/Tor processes where possible, so they do not require or expose real OAuth tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -32,7 +32,7 @@ The TuxDrive 0.19.1 suite contains **126 automated tests**. Tests use temporary 
 | `test_engine.py` | 20 | Two-way initialization, one-way direction, rename tracking, deletion ceilings, conflict flags, selective Google scopes, incremental changed-path commands, transient-file suppression, streaming commands, safe folder overlap, stale-mount startup recovery, unexpected-exit and orderly-shutdown cleanup, peer-lease metadata exclusion, blocked Google-file recovery, failure summaries and transfer-engine replacement. |
 | `test_i18n_help.py` | 2 | Six-language UI fallback, Arabic/Hebrew RTL detection and complete localized in-app help topics. |
 | `test_migration.py` | 5 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
-| `test_packaging.py` | 10 | Debian launcher/layout checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion and packaged emblems. |
+| `test_packaging.py` | 11 | Debian launcher/layout checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion, packaged emblems, and unbranded color/shape/glyph-distinct badge metadata. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
 | `test_peer.py` | 19 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, isolated per-device role/root enforcement, multi-device authorization, legacy migration, host-key pinning, edit leases and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
@@ -79,9 +79,9 @@ The TuxDrive 0.19.1 suite contains **126 automated tests**. Tests use temporary 
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.19.1_all.deb
-dpkg-deb --contents dist/tuxdrive_0.19.1_all.deb
-sha256sum dist/tuxdrive_0.19.1_all.deb
+dpkg-deb --info dist/tuxdrive_0.19.2_all.deb
+dpkg-deb --contents dist/tuxdrive_0.19.2_all.deb
+sha256sum dist/tuxdrive_0.19.2_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -96,8 +96,9 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.19.1 \
-  --package dist/tuxdrive_0.19.1_all.deb \
+python3 scripts/sign-update.py --version 0.19.2 \
+  --package dist/tuxdrive_0.19.2_all.deb \
+  --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
 

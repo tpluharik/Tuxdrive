@@ -1,8 +1,8 @@
 {
-  "version": "0.19.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.19.1_all.deb",
-  "sha256": "6da2566fcbde5836c82c91d782862322ac718467ad63c52b55c2bd085e856be4",
-  "notes": "Signed updater trust bridge and complete 0.19 security remediation",
-  "expires_at": "2026-11-09T04:11:54.151380+00:00",
-  "signature": "NkN4lS/EDWvuaC8hZtUtN/D//SK9PKsXc4UOLOg4xfpI2Sn5EG+AzLWYYeduYLfeC1SO01LOBOtIlwMV3tfhBA=="
+  "version": "0.19.2",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.19.2_all.deb",
+  "sha256": "3b67b6894ddbb3cdbab47693f741e441ecb85b3f546a5a9eb08dc69b30168f2a",
+  "notes": "Unbranded high-visibility functional Nautilus status badges",
+  "expires_at": "2026-11-09T04:53:25.925942+00:00",
+  "signature": "ygp38SrYwiMOY0mytTNicC7ytCTCFXbjtyjeWnvBJ4sk0N5g0uRtI451Tn5adzTnHoausFRFKnWlzie7O+UBAg=="
 }

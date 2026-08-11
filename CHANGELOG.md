@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.19.2 — visible functional Nautilus status badges
+
+- Replaced the penguin-branded Nautilus status emblems with six compact functional badges designed to remain readable at normal Files icon sizes.
+- Assigned every state a dedicated color, silhouette, and white foreground symbol: green check for synchronized, blue rotation arrows for synchronizing, teal cloud/download for files on demand, purple pause bars for paused, amber clock/diamond for pending, and red exclamation/octagon for error.
+- Kept the existing Nautilus state mapping, live cache refresh, context actions, provider identity, and application branding unchanged.
+- Added an SVG regression test that rejects a reused state color, missing accessibility description, wrong state identity, or return of the former penguin palette.
+- Updated the illustrated user guide, roadmap, release packaging, and signed v2 update channel.
+
 ## 0.19.1 — signed updater trust bridge
 
 - Restored automatic updates for 0.18.1 without weakening signature checks. The legacy `latest.json` channel remains signed by the original offline key and points only to 0.19.1.

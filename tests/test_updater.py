@@ -63,14 +63,12 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
         self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
 
-    def test_legacy_bridge_manifest_targets_current_release(self):
-        """Keep 0.18.1 on its old trust root without weakening the new channel."""
-        from tuxdrive import __version__
-
+    def test_legacy_bridge_manifest_remains_fixed_at_0191(self):
+        """Keep 0.18.1 on its one-step bridge without moving the old trust root."""
         old_public = "xyquZ4Mp8SGBpNiNjEcjhkeaPxBkAOwiBT0AhdhjolU="
         release = UpdateManager.parse_manifest(Path("update/latest.json").read_bytes(), old_public)
-        self.assertEqual(release.version, __version__)
-        self.assertEqual(release.url.rsplit("/", 1)[-1], f"tuxdrive_{__version__}_all.deb")
+        self.assertEqual(release.version, "0.19.1")
+        self.assertEqual(release.url.rsplit("/", 1)[-1], "tuxdrive_0.19.1_all.deb")
 
     def test_manifest_rejects_untrusted_download(self):
         payload = self.release_payload().replace(b"raw.githubusercontent.com/tpluharik/Tuxdrive", b"example.com")

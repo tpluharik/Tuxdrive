@@ -1,1 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><circle cx="32" cy="32" r="29" fill="#fff" stroke="#20252b" stroke-width="4"/><path d="M20 24c3-11 21-11 24 0l-4 20H24z" fill="#20252b"/><ellipse cx="32" cy="35" rx="9" ry="12" fill="#fff"/><path d="m27 25 5-4 5 4-5 4z" fill="#f4a51c"/><circle cx="49" cy="49" r="13" fill="#747b85" stroke="#fff" stroke-width="3"/><path d="M45 43v12m8-12v12" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" data-state="paused">
+  <title>Paused</title>
+  <desc>Purple square status badge with two white pause bars</desc>
+  <rect x="5" y="5" width="54" height="54" rx="7" fill="#6D28D9" stroke="#FFFFFF" stroke-width="4"/>
+  <rect x="20" y="17" width="8" height="30" rx="2" fill="#FFFFFF"/>
+  <rect x="36" y="17" width="8" height="30" rx="2" fill="#FFFFFF"/>
+</svg>

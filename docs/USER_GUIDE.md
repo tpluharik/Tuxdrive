@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.19.1 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted migration, Nautilus integration, multi-peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.19.2 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including searchable in-app documentation, six UI languages with Arabic/Hebrew RTL text, local-first collaborative documents, signed updates, hardened Tor workspaces, encrypted migration, Nautilus integration, multi-peer sharing, selective synchronization, streaming and recovery. TuxDrive distributes a `.deb` package only.
 
 Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
 
-Version 0.19.1 is the minimum supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.19.2 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.19.1 is the minimum supported security baseline. Upgrade older install
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.19.1_all.deb
+sudo apt install ./tuxdrive_0.19.2_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -48,7 +48,7 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1 to 0.19.1, use **Settings → Check for updates** again. The legacy channel is signed by the key already trusted by 0.18.1 and points to 0.19.1. After installation, 0.19.1 uses the separately signed v2 channel for future releases. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs 0.19.2. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxDrive
 
@@ -303,12 +303,23 @@ Version 0.10.0 installs a native extension for Ubuntu Files (Nautilus 4). Right-
 - **Open TuxDrive activity logs** opens the diagnostic log directory.
 - **Open online/cloud folder** opens the matching private provider page where the backend exposes a safe item ID/path. Google Drive, Dropbox, Box, and supported OneDrive configurations can open exact items; other providers open their account root when available. This action never creates a public sharing link.
 
-Configured paths expose TuxDrive status metadata and a synchronized/error emblem to Nautilus. Files-on-demand drives show their streaming status; their content is still fetched by opening the file, so the explicit synchronization action is intentionally omitted.
-TuxDrive 0.10.2 includes its own green synchronized, blue streaming, and red error emblems and completes Nautilus 4 metadata requests explicitly, so badge availability no longer depends on the desktop icon theme.
+Configured paths expose TuxDrive status metadata and a live state emblem to Nautilus. Files-on-demand drives show their streaming status; their content is still fetched by opening the file, so the explicit synchronization action is intentionally omitted.
+TuxDrive 0.10.2 added packaged status emblems and explicit Nautilus 4 metadata completion, so badge availability no longer depends on the desktop icon theme.
 
 TuxDrive 0.10.3 supports the Nautilus 4.0 and 4.1 GI namespaces used across supported Ubuntu installations. It intentionally does not request an exact minor namespace because Nautilus loads its own version before importing extensions.
 
 Version 0.12.0 publishes job state through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The cache contains job identifiers and display status only—never OAuth tokens, passwords, private keys, or file content.
+
+Version 0.19.2 removes the TuxDrive/penguin mark from these overlays and makes every badge purely functional. The mapping is deliberately redundant—each state has its own color, silhouette, and symbol:
+
+| State | Badge | Meaning |
+|---|---|---|
+| Synchronized | Green circle with check | The normal synchronization baseline has completed. |
+| Synchronizing | Blue circle with rotation arrows | A transfer is currently running. |
+| Files on demand | Teal rounded square with cloud/download | The path is a connected streaming drive. |
+| Paused | Purple square with pause bars | Automatic operation is disabled or stopped. |
+| Pending | Amber diamond with clock | The job has not completed its initial synchronization. |
+| Error | Red octagon with exclamation | The job needs attention; open TuxDrive or its logs for detail. |
 
 Nautilus integration is enabled by default. Disable **Settings → Enable Nautilus integration** to hide all TuxDrive menus, metadata and emblems; restart Files with `nautilus -q` after changing the flag. Synchronization and streaming continue without the extension.
 
@@ -512,7 +523,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.19.1_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.19.2_all.deb`.
 
 ## 13. Data safety
 
@@ -522,10 +533,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.19.1_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.19.1
+### Security upgrade checklist for 0.19.2
 
-1. Install `tuxdrive_0.19.1_all.deb` and restart TuxDrive and Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.19.1 and no signature or expiry error.
+1. Install `tuxdrive_0.19.2_all.deb` and restart TuxDrive and Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.19.2 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.
