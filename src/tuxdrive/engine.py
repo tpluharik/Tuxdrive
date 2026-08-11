@@ -4,9 +4,11 @@ import errno
 import os
 import platform
 import re
+import selectors
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 import json
@@ -47,6 +49,9 @@ class JobResult:
 
 
 class SyncEngine:
+    _OFFLINE_READ_INACTIVITY_TIMEOUT = 60.0
+    _OFFLINE_READ_ATTEMPTS = 2
+
     def __init__(self, rclone_path: str = "rclone") -> None:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
@@ -330,6 +335,112 @@ class SyncEngine:
             if os.path.exists(temporary):
                 os.unlink(temporary)
 
+    @staticmethod
+    def _stop_hydration_process(process: subprocess.Popen[str]) -> None:
+        """Stop a blocked FUSE reader without leaving a child behind."""
+        if process.poll() is not None:
+            return
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+            process.wait(timeout=2)
+        except ProcessLookupError:
+            return
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            process.wait(timeout=2)
+
+    def _hydrate_file(self, item: Path, item_relative: str) -> int:
+        """Read one FUSE object with bounded inactivity and one clean retry.
+
+        A cloud provider can leave a FUSE read blocked indefinitely. Running
+        the reader in its own process lets TuxDrive cancel that kernel wait,
+        close rclone's in-use cache object and always return a terminal result
+        to Nautilus. The timeout is based on inactivity rather than total
+        duration, so large files may download for as long as they keep making
+        progress.
+        """
+        if item.is_symlink():
+            raise ValueError(f"Cannot pin symbolic link: {item.name}")
+        expected_size = item.stat().st_size
+        helper = (
+            "import os,sys\n"
+            "flags=os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)\n"
+            "fd=os.open(sys.argv[1],flags)\n"
+            "total=0\n"
+            "try:\n"
+            " while True:\n"
+            "  chunk=os.read(fd,1024*1024)\n"
+            "  if not chunk: break\n"
+            "  total+=len(chunk)\n"
+            "  print(total,flush=True)\n"
+            "finally:\n"
+            " os.close(fd)\n"
+        )
+        failure = "the cloud provider stopped responding"
+        for attempt in range(self._OFFLINE_READ_ATTEMPTS):
+            process = subprocess.Popen(
+                [sys.executable, "-I", "-c", helper, str(item)],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
+            )
+            total = 0
+            deadline = time.monotonic() + self._OFFLINE_READ_INACTIVITY_TIMEOUT
+            assert process.stdout is not None
+            selector = selectors.DefaultSelector()
+            selector.register(process.stdout, selectors.EVENT_READ)
+            timed_out = False
+            try:
+                while process.poll() is None:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0:
+                        timed_out = True
+                        break
+                    for _key, _events in selector.select(min(remaining, 0.5)):
+                        line = process.stdout.readline()
+                        if not line:
+                            continue
+                        try:
+                            total = int(line.strip())
+                        except ValueError:
+                            continue
+                        deadline = time.monotonic() + self._OFFLINE_READ_INACTIVITY_TIMEOUT
+                if timed_out:
+                    failure = (
+                        f"the cloud provider made no download progress for "
+                        f"{int(self._OFFLINE_READ_INACTIVITY_TIMEOUT)} seconds"
+                    )
+                    self._stop_hydration_process(process)
+                else:
+                    # Drain a final progress line written immediately before
+                    # the helper exited.
+                    output, error = process.communicate(timeout=2)
+                    for line in output.splitlines():
+                        try:
+                            total = max(total, int(line.strip()))
+                        except ValueError:
+                            continue
+                    if process.returncode == 0 and total == expected_size:
+                        return total
+                    if process.returncode == 0:
+                        failure = f"only {total} of {expected_size} bytes were read"
+                    else:
+                        detail = error.strip().splitlines()[-1] if error.strip() else "reader exited"
+                        failure = detail[:240]
+            finally:
+                selector.close()
+                self._stop_hydration_process(process)
+            if attempt + 1 < self._OFFLINE_READ_ATTEMPTS:
+                time.sleep(0.25)
+        raise RuntimeError(
+            f"Could not keep {item_relative} offline: {failure}. "
+            "TuxDrive cancelled the stalled download and reset its badge; retry the action."
+        )
+
     def verified_offline_rules(self, job: SyncJob) -> set[str]:
         """Verify pin markers and VFS files without reading from the remote mount."""
         data_root = cache_home() / "tuxdrive" / "vfs" / job.id / "vfs"
@@ -459,11 +570,7 @@ class SyncEngine:
 
                 def hydrate(item: Path, item_relative: str) -> None:
                     nonlocal files, hydrated
-                    if item.is_symlink():
-                        raise ValueError(f"Cannot pin symbolic link: {item.name}")
-                    with item.open("rb") as handle:
-                        while content := handle.read(4 * 1024 * 1024):
-                            hydrated += len(content)
+                    hydrated += self._hydrate_file(item, item_relative)
                     files += 1
                     hydrated_files.append((item_relative, item.stat().st_size))
 

@@ -8,6 +8,42 @@ if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database -q /usr/share/applications || true
 fi
 
+# A running Gtk.Application keeps its imported Python modules in memory across
+# a dpkg upgrade. The next Nautilus action would otherwise be forwarded to the
+# old process while the new extension reads the new state schema. Stop only the
+# exact TuxDrive application command on upgrades; the next desktop/Nautilus
+# action starts the newly installed version, whose stale-mount recovery safely
+# detaches any FUSE endpoint left by an interrupted older process.
+if [ "${1:-}" = "configure" ] && [ -n "${2:-}" ]; then
+  tuxdrive_pids=""
+  for tuxdrive_proc in /proc/[0-9]*; do
+    [ -r "$tuxdrive_proc/cmdline" ] || continue
+    tuxdrive_cmd=$(tr '\000' ' ' < "$tuxdrive_proc/cmdline" 2>/dev/null || true)
+    case "$tuxdrive_cmd" in
+      *'runpy.run_module("tuxdrive.app",run_name="__main__")'*)
+        tuxdrive_pid=${tuxdrive_proc##*/}
+        kill -INT "$tuxdrive_pid" 2>/dev/null || true
+        tuxdrive_pids="$tuxdrive_pids $tuxdrive_pid"
+        ;;
+    esac
+  done
+  # Give Gtk/GApplication a brief opportunity to run do_shutdown(), which
+  # terminates rclone process groups and unmounts streaming folders cleanly.
+  for tuxdrive_wait in 1 2 3 4 5; do
+    tuxdrive_alive=""
+    for tuxdrive_pid in $tuxdrive_pids; do
+      if kill -0 "$tuxdrive_pid" 2>/dev/null; then
+        tuxdrive_alive="$tuxdrive_alive $tuxdrive_pid"
+      fi
+    done
+    [ -z "$tuxdrive_alive" ] && break
+    sleep 1
+  done
+  for tuxdrive_pid in $tuxdrive_alive; do
+    kill -TERM "$tuxdrive_pid" 2>/dev/null || true
+  done
+fi
+
 # Maintainer scripts run without the eventual user's graphical environment.
 # Record machine-wide capabilities here; TuxDrive repeats the check in the
 # user's session where GNOME, D-Bus and tray details are visible.

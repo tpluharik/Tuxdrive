@@ -1,8 +1,8 @@
 {
-  "version": "0.20.6",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.6_all.deb",
-  "sha256": "292f8d6b4e63d9c8034c0af5bb3f5d372fca08b30d67625333f709dcc34ee43c",
-  "notes": "Keep per-file offline state exact by verifying rclone's real mount-relative cache, prevent accidental background-folder hydration, and retain verified Nautilus badges across atomic refreshes.",
-  "expires_at": "2027-02-07T18:20:46.720069+00:00",
-  "signature": "dMb3uBaA65cwnylPHemz7GGEplEJtuZXOreVWfKxV5bmWvfW2NHEEkYJo4LDqQmuhWGoSjazuOnInr5aAFhxCA=="
+  "version": "0.20.8",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.20.8_all.deb",
+  "sha256": "f875e37d7f05eccfb49d1567e564bb0a1cfd1c4ea6b5b5c7b20dc152a0454557",
+  "notes": "Reliable offline hydration and persistent Nautilus actions",
+  "expires_at": "2026-11-09T19:01:17.059546+00:00",
+  "signature": "DErGp1//Jgui2xUmWFj9kqO26GV3K2RukNqmnb2u/qhnrQUUKNeTXpEqnXzPnMVssRGpnwO2xYlmAoqCr0bRCg=="
 }

@@ -227,6 +227,66 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertEqual(marker["version"], 2)
             self.assertIn("1 file(s)", message)
 
+    def test_stalled_offline_reader_is_killed_retried_and_returns_an_error(self):
+        class StalledStream:
+            def fileno(self):
+                return 7
+
+            def readline(self):
+                return ""
+
+        class StalledProcess:
+            next_pid = 4000
+
+            def __init__(self):
+                self.pid = self.next_pid
+                StalledProcess.next_pid += 1
+                self.returncode = None
+                self.stdout = StalledStream()
+                self.stderr = StalledStream()
+
+            def poll(self):
+                return self.returncode
+
+            def wait(self, timeout=None):
+                self.returncode = -15
+                return self.returncode
+
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary) / "stalled.pdf"
+            source.write_bytes(b"pdf")
+            self.engine._OFFLINE_READ_INACTIVITY_TIMEOUT = 0.001
+            self.engine._OFFLINE_READ_ATTEMPTS = 2
+            processes = [StalledProcess(), StalledProcess()]
+            with patch("tuxdrive.engine.subprocess.Popen", side_effect=processes) as popen, \
+                 patch("tuxdrive.engine.selectors.DefaultSelector") as selector_type, \
+                 patch("tuxdrive.engine.os.killpg") as killpg:
+                selector = selector_type.return_value
+                selector.select.return_value = []
+                with self.assertRaisesRegex(RuntimeError, "cancelled the stalled download"):
+                    self.engine._hydrate_file(source, "stalled.pdf")
+            self.assertEqual(popen.call_count, 2)
+            self.assertEqual(killpg.call_count, 2)
+
+    def test_hydration_timeout_rolls_back_file_rule(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "stalled.pdf").write_bytes(b"pdf")
+            job = SyncJob(
+                account_remote="google",
+                local_path=str(root),
+                mode=SyncMode.VIRTUAL_DRIVE,
+                offline_paths=["already.pdf"],
+            )
+            with patch.object(
+                self.engine,
+                "_hydrate_file",
+                side_effect=RuntimeError("cancelled the stalled download"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "cancelled the stalled download"):
+                    self.engine.set_offline(job, "stalled.pdf", True)
+            self.assertEqual(job.offline_paths, ["already.pdf"])
+
     def test_version_one_pin_marker_survives_mount_relative_cache_upgrade(self):
         with tempfile.TemporaryDirectory() as cache, patch.dict(
             os.environ, {"XDG_CACHE_HOME": cache}

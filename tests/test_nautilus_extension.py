@@ -8,6 +8,28 @@ from unittest.mock import patch
 
 
 def load_extension():
+    class FakeMenu:
+        def __init__(self):
+            self.items = []
+
+        def append_item(self, item):
+            self.items.append(item)
+
+    class FakeMenuItem:
+        def __init__(self, **values):
+            self.values = values
+            self.submenu = None
+            self.sensitive = True
+
+        def connect(self, *_args):
+            return None
+
+        def set_submenu(self, submenu):
+            self.submenu = submenu
+
+        def set_sensitive(self, value):
+            self.sensitive = value
+
     gi = types.ModuleType("gi")
     repository = types.ModuleType("gi.repository")
     repository.Gio = types.SimpleNamespace()
@@ -17,7 +39,8 @@ def load_extension():
         MenuProvider=type("MenuProvider", (), {}),
         InfoProvider=type("InfoProvider", (), {}),
         FileInfo=object,
-        MenuItem=object,
+        Menu=FakeMenu,
+        MenuItem=FakeMenuItem,
         OperationResult=types.SimpleNamespace(COMPLETE=0),
     )
     gi.repository = repository
@@ -81,6 +104,62 @@ class NautilusExtensionTests(unittest.TestCase):
             "return self._menu_items([current_folder], allow_availability=False)",
             source,
         )
+
+    def test_completed_file_keeps_root_menu_and_exposes_online_only_action(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxDriveExtension)
+        job = {
+            "id": "drive",
+            "local_path": "/mnt/Cloud",
+            "mode": "virtual_drive",
+            "offline_paths": ["folder/one.txt"],
+            "online_only_paths": [],
+        }
+        path = Path("/mnt/Cloud/folder/one.txt")
+        with patch.object(extension, "_jobs", return_value=[job]), patch.object(
+            extension,
+            "_runtime_states",
+            return_value={
+                "drive": {
+                    "offline_paths": ["folder/one.txt"],
+                    "configured_offline_paths": ["folder/one.txt"],
+                    "online_only_paths": [],
+                    "offline_pending_paths": [],
+                }
+            },
+        ), patch.object(extension, "_local_path", return_value=path):
+            menu = provider._menu_items([object()], allow_availability=True)
+
+        self.assertEqual(len(menu), 1)
+        self.assertEqual(menu[0].values["label"], "TuxDrive")
+        labels = [item.values["label"] for item in menu[0].submenu.items]
+        self.assertIn("Free local space (make online-only)", labels)
+
+    def test_metadata_burst_is_coalesced_and_stale_handles_are_dropped_first(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxDriveExtension)
+        provider._invalidation_source = 0
+        provider._known_files = {}
+        changed = types.SimpleNamespace(get_basename=lambda: "nautilus-state.json")
+        with patch.object(
+            extension.GLib, "timeout_add", return_value=41, create=True
+        ) as timeout_add:
+            provider._metadata_changed(None, changed, None, None)
+            provider._metadata_changed(None, changed, None, None)
+        timeout_add.assert_called_once_with(200, provider._refresh_metadata)
+        self.assertEqual(provider._invalidation_source, 41)
+
+        class ReentrantFile:
+            def invalidate_extension_info(inner_self):
+                self.assertEqual(provider._known_files, {})
+
+        provider._known_files = {"file:///one": ReentrantFile()}
+        extension.GLib.SOURCE_REMOVE = False
+        with patch.object(extension, "_state_document", return_value={}), patch.object(
+            extension, "_jobs", return_value=[]
+        ):
+            self.assertFalse(provider._refresh_metadata())
+        self.assertEqual(provider._known_files, {})
 
 
 if __name__ == "__main__":

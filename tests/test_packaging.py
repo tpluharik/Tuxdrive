@@ -14,6 +14,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('tuxdrive-doctor', launcher)
         self.assertIn('run_module("tuxdrive.platform_support"', launcher)
 
+    def test_upgrade_stops_only_the_exact_old_tuxdrive_application(self):
+        postinst = Path("packaging/DEBIAN/postinst").read_text(encoding="utf-8")
+        self.assertIn('if [ "${1:-}" = "configure" ] && [ -n "${2:-}" ]', postinst)
+        self.assertIn('runpy.run_module("tuxdrive.app",run_name="__main__")', postinst)
+        self.assertIn('kill -INT "$tuxdrive_pid"', postinst)
+        self.assertIn('kill -TERM "$tuxdrive_pid"', postinst)
+
     def test_build_has_installed_layout_import_smoke_test(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
         self.assertIn('PYTHONPATH="$PACKAGE_ROOT/usr/lib"', build_script)

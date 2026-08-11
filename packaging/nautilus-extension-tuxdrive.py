@@ -20,6 +20,20 @@ _LAST_VALID_JOBS: list[dict] = []
 _LAST_VALID_STATE: dict = {}
 
 
+def _dict_list(value) -> list[dict]:
+    """Return only complete mapping entries from an external JSON list."""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
+def _rule_list(value) -> list[str]:
+    """Normalize availability rules without letting bad state unload Nautilus."""
+    if not isinstance(value, (list, tuple, set)):
+        return []
+    return [item for item in value if isinstance(item, str)]
+
+
 def _config_path() -> Path:
     return Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")) / "tuxdrive" / "config.json"
 
@@ -34,7 +48,7 @@ def _jobs() -> list[dict]:
         if not meta.get("nautilus_integration", True):
             _LAST_VALID_JOBS = []
             return []
-        _LAST_VALID_JOBS = list(meta["jobs"])
+        _LAST_VALID_JOBS = _dict_list(meta["jobs"])
         return list(_LAST_VALID_JOBS)
     try:
         value = json.loads(_config_path().read_text(encoding="utf-8"))
@@ -43,7 +57,7 @@ def _jobs() -> list[dict]:
             return []
         jobs = value.get("jobs", [])
         if isinstance(jobs, list):
-            _LAST_VALID_JOBS = list(jobs)
+            _LAST_VALID_JOBS = _dict_list(jobs)
             return list(_LAST_VALID_JOBS)
         return list(_LAST_VALID_JOBS)
     except (OSError, ValueError, TypeError):
@@ -139,6 +153,7 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         super().__init__()
         self._known_files: dict[str, Nautilus.FileInfo] = {}
         self._monitors: list[Gio.FileMonitor] = []
+        self._invalidation_source = 0
         for directory in {_config_path().parent, _state_path().parent}:
             try:
                 monitor = Gio.File.new_for_path(str(directory)).monitor_directory(Gio.FileMonitorFlags.NONE, None)
@@ -163,14 +178,34 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             for name in basenames if isinstance(name, str)
         ):
             return
-        for uri, file_info in list(self._known_files.items()):
+        # State and config are both replaced atomically when an availability
+        # action completes. Invalidating FileInfo objects synchronously from
+        # each directory-monitor callback can re-enter Nautilus' provider while
+        # it is still rebuilding the context menu. Nautilus 4.1 may then
+        # suppress the provider for that item. Coalesce the burst and perform
+        # one refresh from the main loop after the final document is visible.
+        if not self._invalidation_source:
+            self._invalidation_source = GLib.timeout_add(200, self._refresh_metadata)
+
+    def _refresh_metadata(self) -> bool:
+        self._invalidation_source = 0
+        # Prime the last-known-good snapshots before asking Nautilus to query
+        # the provider again. A completed pin can therefore change its action
+        # from Keep offline to Make online-only without losing the root menu.
+        _state_document()
+        _jobs()
+        known_files = list(self._known_files.values())
+        # Clear stale handles before invalidation. invalidate_extension_info()
+        # may synchronously call this provider again and repopulate the map.
+        self._known_files.clear()
+        for file_info in known_files:
             try:
                 file_info.invalidate_extension_info()
             except Exception:
-                # FileInfo objects from an earlier FUSE view become invalid
-                # when a provider disconnects. Never let one stale object
-                # break future menu callbacks.
-                self._known_files.pop(uri, None)
+                # A FileInfo from an earlier FUSE view may already be invalid;
+                # it must never prevent later context-menu callbacks.
+                continue
+        return GLib.SOURCE_REMOVE
 
     def _activate(self, action: str, path: Path | None = None) -> None:
         if action == "open-online-path":
@@ -232,7 +267,7 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             return []
         configured_jobs = _jobs()
         jobs = [_containing_job(path, configured_jobs) for path in paths if path]
-        if not any(jobs):
+        if not jobs or any(job is None for job in jobs):
             return []
 
         submenu = Nautilus.Menu()
@@ -281,12 +316,12 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
             ):
                 relative = _relative_path(paths[0], jobs[0])
                 runtime = _runtime_states().get(str(jobs[0].get("id", "")), {})
-                pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))
-                configured_rules = list(runtime.get(
+                pending = _matches_rule(relative, _rule_list(runtime.get("offline_pending_paths", [])))
+                configured_rules = _rule_list(runtime.get(
                     "configured_offline_paths", jobs[0].get("offline_paths", [])
                 ))
-                verified_rules = list(runtime.get("offline_paths", []))
-                online_only_rules = list(runtime.get(
+                verified_rules = _rule_list(runtime.get("offline_paths", []))
+                online_only_rules = _rule_list(runtime.get(
                     "online_only_paths", jobs[0].get("online_only_paths", [])
                 ))
                 configured_offline = _available_offline(
@@ -351,11 +386,11 @@ class TuxDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoPro
         mode = job.get("mode")
         runtime = _runtime_states().get(str(job.get("id", "")), {})
         relative = _relative_path(path, job)
-        pending = _matches_rule(relative, list(runtime.get("offline_pending_paths", [])))
+        pending = _matches_rule(relative, _rule_list(runtime.get("offline_pending_paths", [])))
         pinned = _available_offline(
             relative,
-            list(runtime.get("offline_paths", [])),
-            list(runtime.get("online_only_paths", job.get("online_only_paths", []))),
+            _rule_list(runtime.get("offline_paths", [])),
+            _rule_list(runtime.get("online_only_paths", job.get("online_only_paths", []))),
         )
         state = str(("syncing" if pending else "synced" if pinned else "") or runtime.get("state") or (
             "error" if job.get("last_error") else

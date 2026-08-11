@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.20.8 — terminal offline hydration and persistent Nautilus actions
+
+- Moved each offline file read into an isolated helper with a progress-based inactivity watchdog. A responsive large transfer may run for any duration, while a provider read that makes no progress for 60 seconds is terminated and retried once.
+- Guaranteed a terminal availability state: after both attempts stall or fail, TuxDrive rolls back the rule, clears the pending badge and reports an actionable retry error instead of leaving Nautilus spinning indefinitely.
+- Added an upgrade transition that stops only the exact older TuxDrive application process, preventing a newly installed Nautilus extension from forwarding actions to an older in-memory engine.
+- Coalesced the config/state metadata burst after a completed pin, primed the last-known-good snapshot before refreshing badges, and discarded stale FUSE `FileInfo` handles before Nautilus re-enters the provider. The TuxDrive menu now remains present and changes from **Keep available offline** to **Free local space (make online-only)** after the download completes.
+- Normalized external job and availability-rule lists so malformed or mixed-version metadata cannot raise an exception that makes Nautilus suppress the provider.
+- Added regression coverage for stalled-reader termination, retry, rule rollback, package-upgrade process matching, coalesced metadata refresh and the pending-to-verified menu transition. The complete suite now contains 160 automated tests.
+
 ## 0.20.6 — exact cache verification and durable badges
 
 - Matched pin manifests to rclone's real mount-relative VFS layout, including mounts rooted at a cloud subfolder, so completed file downloads no longer time out or lose their saved offline state.
