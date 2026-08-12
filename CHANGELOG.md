@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.25.2 — durable two-way sync recovery
+
+- Store rclone bisync baselines in durable application data instead of the disposable cache, while migrating valid existing baseline pairs automatically.
+- Detect initialized two-way jobs whose baseline pair is missing or incomplete and recover them with the conservative `newer` resynchronization mode.
+- Recover the same state-loss race when it is reported by the safety preview, while keeping authentication and all other preview failures fail-closed.
+- Report successful automatic reinitialization explicitly in the job status and synchronization log.
+
 ## 0.25.1 — Nautilus emblems and online-folder action
 
 - Cached Nautilus's credential-free state snapshot and normalized job roots in memory, invalidating them only when the atomic metadata monitor fires, so status emblems appear quickly even in large directories.

@@ -7,7 +7,11 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.25.1
+## Current baseline: 0.25.2
+
+### Completed in 0.25.2
+
+Version 0.25.2 moves essential two-way synchronization baselines out of disposable cache storage, migrates valid legacy state, and automatically performs a conservative newer-copy reinitialization when an initialized job has lost its baseline pair. Authentication and unrelated safety-preview failures remain fail-closed.
 
 ### Completed in 0.25.1
 

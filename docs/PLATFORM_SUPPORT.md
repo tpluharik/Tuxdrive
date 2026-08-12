@@ -1,6 +1,6 @@
 # Platform support and adaptive installation
 
-TuxInDrive 0.25.1 uses one Debian package across supported Debian-family GNOME desktops. Git is required for the GitHub backend; repository authentication remains in the user's SSH agent or system Git credential helper. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxInDrive does not publish a macOS package.
+TuxInDrive 0.25.2 uses one Debian package across supported Debian-family GNOME desktops. Git is required for the GitHub backend; repository authentication remains in the user's SSH agent or system Git credential helper. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxInDrive does not publish a macOS package.
 
 ## Compatibility matrix
 

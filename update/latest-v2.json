@@ -1,8 +1,8 @@
 {
-  "version": "0.25.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.1_all.deb",
-  "sha256": "46c79e9cc0f8f3c2fe7630e45a263d23efc1f536bc4244adff7b7d68fe094ca8",
-  "notes": "Faster Nautilus status icons and safe online-folder navigation",
-  "expires_at": "2026-11-10T10:28:16.517638+00:00",
-  "signature": "wWp5S1EC8ZQWBL9UYmxZC3WgazGZm7csvMVGcfuPcb9JXQ9NQomQjkVBaK/IlInnJbitZL3s3sYDlgBlNWYpDA=="
+  "version": "0.25.2",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.2_all.deb",
+  "sha256": "7a54665f20b7b70da7c5d2124a501ddd1a6434053b99e2edbd90119153c1482a",
+  "notes": "Durable two-way sync state and automatic safe reinitialization",
+  "expires_at": "2026-11-10T14:20:52.242000+00:00",
+  "signature": "cgiEOkTvpsPEa8b/fS57XiO4xnGjSa1i7BP9lVfXvaDLbrlbgXdYjSE9+dtpjj0o+H/UQrP6+2S+NKVfX3PcBw=="
 }
