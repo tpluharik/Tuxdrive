@@ -10,6 +10,7 @@ on:
       - "branding/**"
       - "packaging/windows/**"
       - "scripts/build-windows.ps1"
+      - "scripts/build-windows-msys2.sh"
       - "scripts/build-macos.sh"
       - "pyproject.toml"
       - ".github/workflows/platform-packages.yml"
@@ -39,9 +40,12 @@ jobs:
         shell: msys2 {0}
         run: |
           python -m pip install --break-system-packages --no-deps .
+      - name: Freeze Windows application in the configured MSYS2 environment
+        shell: msys2 {0}
+        run: sh scripts/build-windows-msys2.sh
       - name: Build Windows installer and portable archive
         shell: pwsh
-        run: scripts/build-windows.ps1
+        run: scripts/build-windows.ps1 -PackageOnly
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-windows-x64
