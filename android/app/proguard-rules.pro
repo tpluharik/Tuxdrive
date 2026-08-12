@@ -1,0 +1,2 @@
+-keep class org.rclone.** { *; }
+-keep class go.** { *; }

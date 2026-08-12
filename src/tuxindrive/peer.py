@@ -4,6 +4,7 @@ import json
 import base64
 import hashlib
 import os
+import platform
 import re
 import shutil
 import signal
@@ -25,6 +26,7 @@ from .audit import AuditTimeline
 from .models import AuthorizedPeer, OneTimeDrop, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from .tor import ONION_V3, TorError, TorServiceManager, enforce_transport_policy
 from .security import confined_path, confined_parent, ensure_private_directory, prepare_private_file, verify_signed_json
+from .process_control import new_process_group, terminate_process
 
 
 class PeerError(RuntimeError):
@@ -518,7 +520,10 @@ class PeerManager:
                 if read_only:
                     command.append("--read-only")
                 try:
-                    process = subprocess.Popen(command, stdout=log, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+                    process = subprocess.Popen(
+                        command, stdout=log, stderr=subprocess.STDOUT, text=True,
+                        **new_process_group(),
+                    )
                 except Exception:
                     log.close()
                     raise
@@ -564,7 +569,7 @@ class PeerManager:
         tunnel = self._tunnels.pop(share_id, None)
         if tunnel and tunnel.poll() is None:
             try:
-                os.killpg(tunnel.pid, signal.SIGTERM)
+                terminate_process(tunnel)
             except ProcessLookupError:
                 pass
         with self._lock:
@@ -574,13 +579,13 @@ class PeerManager:
             if process.poll() is None:
                 stopped = True
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    terminate_process(process)
                 except ProcessLookupError:
                     pass
                 try:
                     process.wait(timeout=8)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
+                    terminate_process(process, force=True)
             self._close_log(endpoint_id)
         return stopped
 
@@ -627,7 +632,10 @@ class PeerManager:
         for endpoint_port in endpoint_ports:
             command.extend(("-R", f"{self._relay_port(share, endpoint_port)}:127.0.0.1:{validate_port(endpoint_port)}"))
         command.append(f"{share.relay_user}@{validate_host(share.relay_host)}")
-        process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        process = subprocess.Popen(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            **new_process_group(),
+        )
         self._tunnels[share.id] = process
         try:
             process.wait(timeout=1.0)
@@ -828,6 +836,37 @@ class PeerManager:
         blocks_value = value.get("blocks", [])
         if expected_size < 0 or expected_size > 16 * 1024 * 1024 * 1024 or len(blocks_value) > 65536:
             raise ValueError("delta transaction exceeds safety limits")
+        if platform.system() == "Windows":
+            target = confined_path(root, relative, create_parents=True)
+            temporary = target.with_name(f".{target.name}.{uuid4().hex}.tuxdrive-delta")
+            try:
+                with temporary.open("xb+") as handle:
+                    if target.exists():
+                        with target.open("rb") as source:
+                            shutil.copyfileobj(source, handle)
+                    for block in blocks_value:
+                        offset, size = int(block["offset"]), int(block["size"])
+                        if offset < 0 or size < 0 or size > 64 * 1024 * 1024 or offset + size > expected_size:
+                            raise ValueError("invalid delta block bounds")
+                        content = (transaction / "blocks" / f"{offset:016x}.block").read_bytes()
+                        if len(content) != size or hashlib.blake2b(content, digest_size=32).hexdigest() != block["digest"]:
+                            raise ValueError("delta block integrity failure")
+                        handle.seek(offset)
+                        handle.write(content)
+                    handle.truncate(expected_size)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                    handle.seek(0)
+                    digest = hashlib.sha256()
+                    while chunk := handle.read(4 * 1024 * 1024):
+                        digest.update(chunk)
+                if digest.hexdigest() != value["sha256"]:
+                    raise ValueError("delta file integrity failure")
+                os.replace(temporary, target)
+                shutil.rmtree(transaction)
+                return target.relative_to(root.resolve(strict=True)).as_posix()
+            finally:
+                temporary.unlink(missing_ok=True)
         with confined_parent(root, relative, create_parents=True) as (parent_fd, target_name, normalized):
             temporary_name = f".{target_name}.{uuid4().hex}.tuxdrive-delta"
             temporary_fd = os.open(temporary_name, os.O_CREAT | os.O_EXCL | os.O_RDWR | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=parent_fd)

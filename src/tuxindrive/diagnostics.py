@@ -18,6 +18,11 @@ LOGGER_NAME = "tuxindrive"
 
 
 def state_home() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Logs"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Logs"
     configured = os.environ.get("XDG_STATE_HOME")
     return Path(configured) if configured else Path.home() / ".local" / "state"
 

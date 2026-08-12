@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.0 — Windows, macOS, and Android packages
+
+- Added Windows x64 setup/portable packages and a macOS application image built from the same GTK desktop UI as Linux.
+- Added native Windows/macOS configuration, cache and log locations, native credential-store protection, portable process cancellation, verified Windows rclone bootstrap, WinFsp streaming support, and platform-safe update routing.
+- Added a native Android Material UI for accounts, synchronized folders, cloud browsing, activity and transfer policies.
+- Integrated the official pinned rclone 1.75.0 gomobile library in-process on Android, including encrypted configuration import/unlock, real cloud listing, SAF folder grants, WorkManager transfers, durable bisync state, keep-both conflicts and mass-deletion stops.
+- Added reproducible CI jobs for Windows installer/portable ZIP, macOS DMG and installable Android APK. Developer artifacts are ad-hoc/debug signed until platform release certificates are configured.
+- Expanded portability and native-key-store regressions; the Python suite now contains 250 tests.
+
 ## 0.25.3 — renamed GitHub repository recovery
 
 - Recognize GitHub's verified HTTPS rename redirects when a saved repository URL and the checkout origin use the old and new repository names.

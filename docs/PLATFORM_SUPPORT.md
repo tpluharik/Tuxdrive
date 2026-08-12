@@ -1,13 +1,16 @@
 # Platform support and adaptive installation
 
-TuxInDrive 0.25.3 uses one Debian package across supported Debian-family GNOME desktops. Git is required for the GitHub backend; repository authentication remains in the user's SSH agent or system Git credential helper. The installer keeps the secure graphical core mandatory and treats desktop/file-manager, streaming, peer-network and privacy transports as optional capabilities. A missing optional integration no longer makes the package uninstallable or disables unrelated synchronization. TuxInDrive does not publish a macOS package.
+TuxInDrive 0.26.0 publishes native packages for Debian-family Linux, Windows x64, macOS and Android. Linux, Windows and macOS use the same GTK desktop UI; Android uses a Material mobile UI backed by rclone's in-process gomobile library. Credentials remain in GNOME Secret Service, Windows Credential Manager, macOS Keychain, or Android's private application sandbox. A missing optional integration disables only that feature.
 
 ## Compatibility matrix
 
-The supported design baseline is Ubuntu 24.04/26.04 and Debian 12/13 on amd64 or arm64. Automated clean-package core installation covers Ubuntu 24.04 and Debian 12/13; Ubuntu 26.04 remains the primary GNOME desktop target and requires the release VM gate described below. Ubuntu derivatives can run the core application when they provide Python 3.10+, PyGObject/GTK 3, Python cryptography, `defusedxml`, Secret Service and XDG utilities. Only amd64 and arm64 can use TuxInDrive's verified rclone bootstrap; other architectures are reported as unsupported before a cloud job starts.
+The desktop baseline is Ubuntu 24.04/26.04, Debian 12/13, Windows 10/11 x64 and macOS 12+. Android targets API 26 (Android 8) and newer. Linux desktop packages support amd64 and arm64; the first Windows installer is x64. Platform CI creates developer-signed artifacts, while public distribution requires the platform-owner signing identities listed below.
 
 | Distribution / desktop | Core cloud sync | Streaming | File-manager status/actions | Support level and limitations |
 | --- | --- | --- | --- | --- |
+| Windows 10/11 x64 | Native package CI | WinFsp optional | Application controls | Same GTK UI; Git must be installed for GitHub jobs. Explorer overlays are not included. |
+| macOS 12+ | Native package CI | macFUSE optional | Application controls | Same GTK UI; Finder overlays and Apple notarization require the release signing gate. |
+| Android 8+ phone/tablet | Native librclone + SAF | Offline selected folders | Native mobile controls | Material UI, encrypted config import, cloud browsing and WorkManager two-way sync; no transparent FUSE drive. |
 | Ubuntu 26.04 GNOME | Expected | Expected with FUSE 3 | Nautilus 4.1 design target | Primary target; complete GNOME/Wayland VM release test required. |
 | Ubuntu 24.04 LTS GNOME | CI-installed | Expected with FUSE 3 | Nautilus 4.x | Supported; verify AppIndicator extension and unlocked GNOME Keyring in the user session. |
 | Debian 13 GNOME | CI-installed | Expected with FUSE 3 | Nautilus 4.x | Supported core; integration package versions come from Debian repositories. |
@@ -24,7 +27,14 @@ The supported design baseline is Ubuntu 24.04/26.04 and Debian 12/13 on amd64 or
 | Raspberry Pi OS 64-bit | Best effort | Hardware/kernel dependent | No native default file-manager integration | arm64 rclone is supported, but the default desktop is outside the GNOME/Nautilus matrix. 32-bit ARM is unsupported. |
 | Other Debian derivatives | Unverified | Unverified | Unverified | Requires Python 3.10+, GTK 3/PyGObject, Secret Service and supported amd64/arm64 runtime; run `tuxindrive --system-check`. |
 
-“CI-installed” means the package was built and installed with mandatory dependencies in the repository's container matrix. It does not replace a graphical VM test. “Expected” and “best effort” describe code/dependency compatibility, not a completed release certification.
+“Native package CI” means the platform build completes on that operating system. “CI-installed” means the Debian package was installed with mandatory dependencies in the repository's container matrix. Neither replaces a graphical/device acceptance test.
+
+## Package outputs and signing
+
+- Windows CI produces a per-user Inno Setup executable and portable ZIP. Production releases need an Authenticode certificate.
+- macOS CI produces an ad-hoc signed application DMG. Public distribution needs an Apple Developer ID, hardened-runtime signing and notarization.
+- Android CI produces an installable debug-signed APK. Store or managed distribution needs a private Android upload/release keystore.
+- No private signing key is stored in the repository. A missing signing identity must never be silently replaced for a production release.
 
 ## Checks performed
 

@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .config import data_root
+from .file_permissions import private_descriptor
 
 
 @dataclass(frozen=True, slots=True)
@@ -67,7 +68,7 @@ class AuditTimeline:
         lines = self.path.read_text(encoding="utf-8").splitlines()[-self.limit:]
         descriptor, temporary = tempfile.mkstemp(prefix="audit-", suffix=".jsonl", dir=self.path.parent)
         try:
-            os.fchmod(descriptor, 0o600)
+            private_descriptor(descriptor)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write("\n".join(lines) + ("\n" if lines else ""))
             os.replace(temporary, self.path)

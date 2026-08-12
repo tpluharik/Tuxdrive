@@ -1,0 +1,112 @@
+name: Build desktop packages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "android/**"
+      - "branding/**"
+      - "packaging/windows/**"
+      - "scripts/build-windows.ps1"
+      - "scripts/build-macos.sh"
+      - "pyproject.toml"
+      - ".github/workflows/platform-packages.yml"
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: msys2/setup-msys2@fb197b72ce45fb24f17bf3f807a388985654d1f2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            git
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-pyinstaller
+      - name: Install Python application dependencies
+        shell: msys2 {0}
+        run: |
+          python -m pip install --break-system-packages cryptography defusedxml keyring pywin32-ctypes
+          python -m pip install --break-system-packages --no-deps .
+      - name: Build Windows installer and portable archive
+        shell: pwsh
+        run: scripts/build-windows.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tuxindrive-windows-x64
+          path: |
+            dist/TuxInDrive-*-windows-x64-setup.exe
+            dist/TuxInDrive-*-windows-x64-portable.zip
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Install GTK desktop runtime
+        run: brew install gtk+3 pygobject3
+      - name: Install Python application dependencies
+        run: |
+          python3 -m venv --system-site-packages .venv-macos
+          .venv-macos/bin/python -m pip install --upgrade pip
+          .venv-macos/bin/python -m pip install . pyinstaller
+      - name: Build ad-hoc signed macOS application image
+        env:
+          PYTHON_BIN: .venv-macos/bin/python
+        run: sh scripts/build-macos.sh
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tuxindrive-macos
+          path: dist/TuxInDrive-*-macos-*.dmg
+
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16
+        with:
+          go-version: "1.25.x"
+          cache: false
+      - uses: gradle/actions/setup-gradle@ed408507eac070d1f99cc633dbcf757c94c7933a
+        with:
+          gradle-version: "8.9"
+      - name: Build pinned native rclone Android library
+        run: |
+          git clone --depth 1 --branch v1.75.0 https://github.com/rclone/rclone.git build/rclone-android
+          test "$(git -C build/rclone-android rev-parse HEAD)" = "9ee9d0a0cafd5e5fe3b271d2280b090ab6e64048"
+          cp android/native/gomobile.go build/rclone-android/librclone/gomobile/gomobile.go
+          cd build/rclone-android
+          go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260709172247-6129f5bee9d5
+          go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260709172247-6129f5bee9d5
+          "${HOME}/go/bin/gomobile" init
+          "${HOME}/go/bin/gomobile" bind -androidapi 26 -target=android -javapkg=org.rclone \
+            -ldflags "-s -X github.com/rclone/rclone/fs.Version=v1.75.0" \
+            -o "${GITHUB_WORKSPACE}/android/app/libs/rclone.aar" \
+            github.com/rclone/rclone/librclone/gomobile
+      - name: Build Android APK
+        run: |
+          gradle -p android --no-daemon :app:lintDebug :app:assembleDebug
+          version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
+          mkdir -p dist
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/TuxInDrive-${version}-android.apk"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tuxindrive-android
+          path: dist/TuxInDrive-*-android.apk

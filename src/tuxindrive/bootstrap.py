@@ -22,6 +22,8 @@ RCLONE_SHA256 = {
     ("linux", "arm64"): "d0ad88ba4c8e285b7c9efa591e0ab643280a91741e13c27f3a9c0957ccfa5203",
     ("osx", "amd64"): "19edbb8e5e73096eb66e92a42abbc5c34bfa8981ea3986a53872c7eef85a22f4",
     ("osx", "arm64"): "35e8f2a666ce789b29111db0dd843ddabc0d59c6b609d07bcaae5d1a07cba6f8",
+    ("windows", "amd64"): "203581f0a7baeae873f2347483a798c79e2eaf5c384a4e9d866aa374f1c89ac0",
+    ("windows", "arm64"): "bcf628fa6bb3b6ae9fdf105d04acafb40ec77841f686dc6dd7d126dde04c5f6a",
 }
 
 _COMPATIBILITY_CACHE: dict[tuple[str, int, int, int, int], bool] = {}
@@ -33,7 +35,11 @@ class BootstrapError(RuntimeError):
 
 
 def user_rclone_path() -> Path:
-    if platform.system() == "Darwin":
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+        return base / "TuxInDrive" / "bin" / "rclone.exe"
+    if system == "Darwin":
         return Path.home() / "Library" / "Application Support" / "TuxInDrive" / "bin" / "rclone"
     current = Path.home() / ".local" / "lib" / "tuxindrive" / "rclone"
     legacy = Path.home() / ".local" / "lib" / "tuxdrive" / "rclone"
@@ -124,7 +130,7 @@ def install_rclone(progress: Callable[[str], None] | None = None) -> str:
     }.get(machine)
     if not architecture:
         raise BootstrapError(f"Unsupported CPU architecture: {machine}")
-    operating_system = {"Linux": "linux", "Darwin": "osx"}.get(platform.system())
+    operating_system = {"Linux": "linux", "Darwin": "osx", "Windows": "windows"}.get(platform.system())
     if not operating_system:
         raise BootstrapError(f"Unsupported operating system: {platform.system()}")
     filename = f"rclone-v{RCLONE_VERSION}-{operating_system}-{architecture}.zip"
@@ -153,7 +159,8 @@ def install_rclone(progress: Callable[[str], None] | None = None) -> str:
         if progress:
             progress("Installing verified transfer engine…")
         with zipfile.ZipFile(archive) as package:
-            members = [item for item in package.infolist() if item.filename.endswith("/rclone")]
+            executable_name = "rclone.exe" if operating_system == "windows" else "rclone"
+            members = [item for item in package.infolist() if item.filename.endswith(f"/{executable_name}")]
             if len(members) != 1 or members[0].file_size > 128 * 1024 * 1024:
                 raise BootstrapError("The rclone archive did not contain the expected executable")
             temporary_target = destination.with_suffix(".new")

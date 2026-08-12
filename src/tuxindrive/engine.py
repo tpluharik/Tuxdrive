@@ -33,6 +33,8 @@ from .security import UnsafePathError, confined_path, ensure_private_directory, 
 from .nautilus_support import is_available_offline
 from .cache_manager import CacheCleanupResult, StreamingCacheManager
 from .proton import ProtonDriveClient, ProtonDriveError
+from .process_control import new_process_group, terminate_process
+from .file_permissions import private_descriptor
 
 
 @dataclass(slots=True)
@@ -421,7 +423,7 @@ class SyncEngine:
         ensure_private_directory(marker.parent)
         descriptor, temporary = tempfile.mkstemp(prefix="pin-", suffix=".json", dir=marker.parent)
         try:
-            os.fchmod(descriptor, 0o600)
+            private_descriptor(descriptor)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 json.dump(
                     {"version": 2, "relative": relative, "files": records},
@@ -442,13 +444,13 @@ class SyncEngine:
         if process.poll() is not None:
             return
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_process(process)
             process.wait(timeout=2)
         except ProcessLookupError:
             return
         except subprocess.TimeoutExpired:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                terminate_process(process, force=True)
             except ProcessLookupError:
                 pass
             process.wait(timeout=2)
@@ -487,7 +489,7 @@ class SyncEngine:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                start_new_session=True,
+                **new_process_group(),
             )
             total = 0
             deadline = time.monotonic() + self._OFFLINE_READ_INACTIVITY_TIMEOUT
@@ -870,7 +872,7 @@ class SyncEngine:
         if not process or process.poll() is not None:
             return native
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_process(process)
         except ProcessLookupError:
             return False
         return True
@@ -918,11 +920,22 @@ class SyncEngine:
                     log_path,
                 )
         prepare_private_file(log_path)
-        is_macos = platform.system() == "Darwin"
+        system = platform.system()
+        is_macos = system == "Darwin"
+        is_windows = system == "Windows"
+        windows_fsp = Path(
+            os.environ.get("ProgramFiles(x86)", os.environ.get("ProgramFiles", "C:/Program Files"))
+        ) / "WinFsp"
         fuse_available = (
-            Path("/Library/Filesystems/macfuse.fs").exists() if is_macos else Path("/dev/fuse").exists()
+            windows_fsp.exists() if is_windows else
+            Path("/Library/Filesystems/macfuse.fs").exists() if is_macos else
+            Path("/dev/fuse").exists()
         )
-        unmount_tool = shutil.which("umount") if is_macos else (shutil.which("fusermount3") or shutil.which("fusermount"))
+        unmount_tool = (
+            "rclone-process" if is_windows else
+            shutil.which("umount") if is_macos else
+            (shutil.which("fusermount3") or shutil.which("fusermount"))
+        )
         with log_path.open("a", encoding="utf-8") as diagnostic:
             diagnostic.write(
                 f"\n[{datetime.now(timezone.utc).isoformat()}] Streaming preflight\n"
@@ -933,7 +946,7 @@ class SyncEngine:
         if not fuse_available:
             return JobResult(
                 job.id, False,
-                "Streaming requires macFUSE on macOS or /dev/fuse on Linux, but it is unavailable. See the job log.",
+                "Streaming requires WinFsp on Windows, macFUSE on macOS, or /dev/fuse on Linux, but it is unavailable. See the job log.",
                 log_path,
             )
         if not unmount_tool:
@@ -955,17 +968,20 @@ class SyncEngine:
                 stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 text=True,
-                start_new_session=True,
+                **new_process_group(),
             )
         except OSError as exc:
             log_handle.close()
             return JobResult(job.id, False, str(exc), log_path)
         log_handle.close()
-        deadline = time.monotonic() + 45
+        mount_started = time.monotonic()
+        deadline = mount_started + 45
         while time.monotonic() < deadline:
             if process.poll() is not None:
                 return JobResult(job.id, False, self._mount_failure_summary(log_path), log_path)
-            if os.path.ismount(job.local):
+            if os.path.ismount(job.local) or (
+                is_windows and time.monotonic() - mount_started >= 2
+            ):
                 with self._lock:
                     self._mounts[job.id] = process
                     self._mount_paths[job.id] = job.local
@@ -977,7 +993,7 @@ class SyncEngine:
                 )
             time.sleep(0.1)
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_process(process)
         except ProcessLookupError:
             pass
         return JobResult(
@@ -1004,7 +1020,16 @@ class SyncEngine:
 
     @staticmethod
     def _unmount_path(path: Path) -> bool:
-        if platform.system() == "Darwin":
+        system = platform.system()
+        if system == "Windows":
+            mountvol = shutil.which("mountvol.exe")
+            if not mountvol:
+                return False
+            result = subprocess.run(
+                [mountvol, str(path), "/D"], check=False, capture_output=True, text=True
+            )
+            return result.returncode == 0
+        if system == "Darwin":
             unmount = shutil.which("umount")
             if not unmount:
                 return False
@@ -1029,7 +1054,7 @@ class SyncEngine:
                 self._intentional_unmounts.add(job.id)
         if process and process.poll() is None:
             try:
-                os.killpg(process.pid, signal.SIGTERM)
+                terminate_process(process)
                 process.wait(timeout=5)
                 stopped_process = True
             except (ProcessLookupError, subprocess.TimeoutExpired):
@@ -1107,7 +1132,7 @@ class SyncEngine:
                 try:
                     with self._lock:
                         self._intentional_unmounts.add(job_id)
-                    os.killpg(process.pid, signal.SIGTERM)
+                    terminate_process(process)
                 except ProcessLookupError:
                     pass
             if path is not None:
@@ -1245,7 +1270,7 @@ class SyncEngine:
                             stdout=log,
                             stderr=subprocess.STDOUT,
                             text=True,
-                            start_new_session=True,
+                            **new_process_group(),
                         )
                         with self._lock:
                             self._processes[job.id] = process
@@ -1397,7 +1422,7 @@ class SyncEngine:
                     stdout=log,
                     stderr=subprocess.STDOUT,
                     text=True,
-                    start_new_session=True,
+                    **new_process_group(),
                 )
                 with self._lock:
                     self._processes[job.id] = process
@@ -1631,7 +1656,7 @@ class SyncEngine:
             stdout=log,
             stderr=subprocess.STDOUT,
             text=True,
-            start_new_session=True,
+            **new_process_group(),
         )
         with self._lock:
             self._processes[job.id] = process

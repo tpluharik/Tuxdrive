@@ -3,12 +3,26 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from tuxindrive.config import ConfigStore, branded_root
+from tuxindrive.config import ConfigStore, branded_root, cache_home, config_home, data_home
 from tuxindrive.models import Account, AppConfig, ConflictPolicy, FolderGroup, PeerShare, Provider, SyncJob, SyncMode
 
 
 class ConfigStoreTests(unittest.TestCase):
+    def test_native_desktop_directories_are_used_outside_linux(self):
+        with patch("tuxindrive.config.platform.system", return_value="Windows"), patch.dict(
+            os.environ, {"APPDATA": "C:/Users/test/AppData/Roaming", "LOCALAPPDATA": "C:/Users/test/AppData/Local"}
+        ):
+            self.assertEqual(config_home(), Path("C:/Users/test/AppData/Roaming"))
+            self.assertEqual(cache_home(), Path("C:/Users/test/AppData/Local/Cache"))
+            self.assertEqual(data_home(), Path("C:/Users/test/AppData/Local"))
+        with patch("tuxindrive.config.platform.system", return_value="Darwin"), patch(
+            "tuxindrive.config.Path.home", return_value=Path("/Users/test")
+        ):
+            self.assertEqual(config_home(), Path("/Users/test/Library/Application Support"))
+            self.assertEqual(cache_home(), Path("/Users/test/Library/Caches"))
+
     def test_existing_legacy_directory_is_used_without_copying_or_losing_state(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

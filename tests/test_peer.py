@@ -139,6 +139,40 @@ class PeerSharingTests(unittest.TestCase):
             self.assertEqual(target.read_bytes(), expected)
             self.assertFalse(transaction.exists())
 
+    def test_peer_applies_verified_changed_block_transaction_on_windows(self):
+        import hashlib
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "tuxindrive.peer.platform.system", return_value="Windows"
+        ), patch("tuxindrive.security.platform.system", return_value="Windows"):
+            root = Path(temporary)
+            target = root / "project.bin"
+            target.write_bytes(b"A" * 8 + b"B" * 8)
+            transaction = root / ".tuxdrive-delta" / "tx1"
+            blocks = transaction / "blocks"
+            blocks.mkdir(parents=True)
+            replacement = b"X" * 8
+            (blocks / "0000000000000008.block").write_bytes(replacement)
+            expected = b"A" * 8 + replacement
+            instruction = {
+                "version": 1, "path": "project.bin", "size": len(expected),
+                "sha256": hashlib.sha256(expected).hexdigest(),
+                "blocks": [{
+                    "offset": 8, "size": 8,
+                    "digest": hashlib.blake2b(replacement, digest_size=32).hexdigest(),
+                }],
+            }
+            private = Ed25519PrivateKey.generate()
+            private_path = root / "identity"
+            private_path.write_bytes(private.private_bytes(
+                serialization.Encoding.PEM, serialization.PrivateFormat.OpenSSH,
+                serialization.NoEncryption(),
+            ))
+            signer, signature = sign_json(instruction, private_path)
+            (transaction / "instruction.json").write_text(json.dumps({**instruction, "signer": signer, "signature": signature}), encoding="utf-8")
+            PeerManager._apply_delta_transaction(root, transaction, [signer])
+            self.assertEqual(target.read_bytes(), expected)
+            self.assertFalse(transaction.exists())
+
     def test_legacy_invitation_and_share_configuration_remain_compatible(self):
         legacy = json.dumps({"tuxdrive_peer": 1, "name": "Old", "host": "192.0.2.5", "port": 22022, "host_key": KEY})
         self.assertEqual(PeerInvitation.decode(legacy).name, "Old")

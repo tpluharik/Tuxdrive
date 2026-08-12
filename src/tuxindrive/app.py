@@ -28,6 +28,7 @@ from .diagnostics import (
     log_boot_failure,
     log_directory,
 )
+from .file_permissions import private_descriptor
 
 LOGGER = configure_logging(__version__)
 install_crash_handlers(LOGGER)
@@ -91,7 +92,12 @@ JOB_DND_TARGET = "UTF8_STRING"
 
 
 def _desktop_open_command(target: str) -> list[str]:
-    return ["open", target] if platform.system() == "Darwin" else ["xdg-open", target]
+    system = platform.system()
+    if system == "Darwin":
+        return ["open", target]
+    if system == "Windows":
+        return ["explorer.exe", target]
+    return ["xdg-open", target]
 
 
 def _run_thread(function: Callable, callback: Callable, *args) -> None:
@@ -3562,7 +3568,7 @@ class MainWindow(Gtk.ApplicationWindow):
         identity = Gtk.Box(spacing=12)
         identity.pack_start(Gtk.Image.new_from_icon_name("tuxindrive", Gtk.IconSize.DIALOG), False, False, 0)
         version = Gtk.Label(xalign=0)
-        version.set_markup(f"<b>TuxInDrive {GLib.markup_escape_text(__version__)}</b>\n<small>Ubuntu cloud desktop client</small>")
+        version.set_markup(f"<b>TuxInDrive {GLib.markup_escape_text(__version__)}</b>\n<small>Cloud desktop client</small>")
         identity.pack_start(version, True, True, 0)
         dialog.get_content_area().pack_start(identity, False, False, 6)
         launch = Gtk.CheckButton(label="Start TuxInDrive automatically after sign-in")
@@ -3623,7 +3629,10 @@ class MainWindow(Gtk.ApplicationWindow):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
-        dialog.add_button("Check for updates", 2)
+        dialog.add_button(
+            "Check for updates" if platform.system() == "Linux" else "Download updates online",
+            2,
+        )
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Save", Gtk.ResponseType.OK)
         dialog.show_all()
@@ -3661,7 +3670,10 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.controller.apply_visual_theme(selected_theme)
         dialog.destroy()
         if response == 2:
-            self._check_for_updates()
+            if platform.system() == "Linux":
+                self._check_for_updates()
+            else:
+                webbrowser.open("https://github.com/tpluharik/TuxInDrive/releases")
         elif response == 3:
             self._show_peer_sharing(_button)
         elif response == 4:
@@ -4433,7 +4445,7 @@ class TuxInDriveApplication(Gtk.Application):
             prefix="nautilus-state-", suffix=".json", dir=target.parent
         )
         try:
-            os.fchmod(descriptor, 0o600)
+            private_descriptor(descriptor)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(serialized.decode("utf-8"))
             os.replace(temporary, target)
@@ -4779,7 +4791,23 @@ class TuxInDriveApplication(Gtk.Application):
         self.send_notification(None, notification)
 
     def configure_autostart(self) -> None:
-        if platform.system() == "Darwin":
+        system = platform.system()
+        if system == "Windows":
+            import winreg
+
+            with winreg.CreateKey(
+                winreg.HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Run"
+            ) as key:
+                if self.config.settings.launch_at_login:
+                    executable = str(Path(sys.executable).resolve())
+                    winreg.SetValueEx(key, "TuxInDrive", 0, winreg.REG_SZ, f'"{executable}" --background')
+                else:
+                    try:
+                        winreg.DeleteValue(key, "TuxInDrive")
+                    except FileNotFoundError:
+                        pass
+            return
+        if system == "Darwin":
             target = Path.home() / "Library" / "LaunchAgents" / f"{APP_ID}.plist"
             if self.config.settings.launch_at_login:
                 target.parent.mkdir(parents=True, exist_ok=True)

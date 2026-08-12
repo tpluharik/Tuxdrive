@@ -7,7 +7,11 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.25.3
+## Current baseline: 0.26.0
+
+### Completed in 0.26.0
+
+Version 0.26.0 introduces reproducible Windows, macOS and Android packaging. Windows and macOS retain the GTK desktop experience over portable OS integration, while Android uses a native Material layout, official in-process rclone library, Storage Access Framework roots and WorkManager-governed synchronization.
 
 ### Completed in 0.25.3
 

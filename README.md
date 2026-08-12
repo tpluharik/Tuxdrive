@@ -2,7 +2,7 @@
 
 <p align="center"><img src="branding/tuxindrive-logo.png" width="180" alt="TuxInDrive black-and-white penguin head logo"></p>
 
-TuxInDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. It combines a GTK desktop interface with rclone's mature cloud backends, Proton's official browser-authenticated Drive CLI, system Git, and provider-native authorization.
+TuxInDrive is a native Linux, Windows, macOS and Android client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. Linux, Windows and macOS share the GTK desktop interface; Android uses a native mobile layout over the same rclone synchronization engine and platform-safe storage controls.
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
@@ -12,7 +12,7 @@ TuxInDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDr
 
 ## TuxInDrive rebrand and upgrade compatibility
 
-Version 0.25.3 recognizes GitHub's verified repository-rename redirects and safely updates matching saved job URLs to the checkout's canonical origin. Version 0.25.2 keeps essential two-way synchronization baselines in durable application data and automatically repairs missing baseline state with a conservative newer-copy reinitialization. Version 0.25.1 restored Nautilus status overlays across both fresh sessions and live upgrades. Existing installations continue to read their private legacy configuration/state directories, Secret Service entry, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
+Version 0.26.0 adds Windows, macOS and Android packages, native credential stores, portable process control and Android SAF/WorkManager synchronization. Version 0.25.3 recognizes GitHub's verified repository-rename redirects and safely updates matching saved job URLs to the checkout's canonical origin. Existing installations continue to read their private legacy configuration/state directories, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
 
 The old `tuxdrive` executable and user-service names remain aliases for upgrade continuity. The Debian package identity and signed download alias intentionally remain legacy compatibility identifiers so the already released 0.24.x updater can authenticate and install 0.25.0 after the GitHub repository rename.
 
@@ -37,7 +37,7 @@ Version 0.24.1 makes the official Proton CLI usable on a clean installation. **C
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.25.3:
+The following controls are enforced in 0.26.0:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -167,12 +167,21 @@ TuxInDrive Profile links the application to an existing Google Drive, OneDrive, 
 - streaming preflight diagnostics, stale FUSE mount recovery, detailed mount logs, and a 45-second connection window
 - startup, application, thread-exception, and native crash logging
 
-## Install on Ubuntu
+## Install
+
+| Platform | Package | Notes |
+| --- | --- | --- |
+| Ubuntu/Debian | tuxindrive_0.26.0_all.deb | Signed in-app Debian updates remain supported. |
+| Windows 10/11 x64 | TuxInDrive-0.26.0-windows-x64-setup.exe | Same GTK desktop UI; install WinFsp for streaming drives. |
+| macOS 12+ | TuxInDrive-0.26.0-macos-*.dmg | Same GTK desktop UI; install macFUSE for streaming drives. |
+| Android 8+ | TuxInDrive-0.26.0-android.apk | Native phone/tablet UI, SAF folder access and OS-managed background sync. |
+
+### Ubuntu and Debian
 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxindrive_0.25.3_all.deb
+sudo apt install ./tuxindrive_0.26.0_all.deb
 ```
 
 Open **TuxInDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
@@ -190,7 +199,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxindrive_0.25.3_all.deb`. TuxInDrive publishes Debian packages only.
+The Debian installer is written to `dist/tuxindrive_0.26.0_all.deb`. Windows, macOS and Android artifacts are built by `.github/workflows/platform-packages.yml` on their native build hosts.
 
 ### Local-first collaborative documents
 
@@ -214,7 +223,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxInDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxInDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.25.3 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.26.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

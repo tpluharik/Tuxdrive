@@ -24,6 +24,8 @@ from xml.etree import ElementTree as OutputET
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
+from .file_permissions import private_descriptor
+
 
 ROOT = "ROOT"
 OFFICE = "urn:oasis:names:tc:opendocument:xmlns:office:1.0"
@@ -53,7 +55,7 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     fd, temporary = tempfile.mkstemp(prefix=".tuxdrive-", dir=path.parent)
     try:
-        os.fchmod(fd, 0o600)
+        private_descriptor(fd)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             json.dump(value, handle, sort_keys=True, separators=(",", ":"))
             handle.flush()

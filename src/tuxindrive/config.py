@@ -2,23 +2,40 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import tempfile
 from pathlib import Path
 
 from .models import AppConfig
+from .file_permissions import private_descriptor
 
 
 def config_home() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        return Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support"
     root = os.environ.get("XDG_CONFIG_HOME")
     return Path(root) if root else Path.home() / ".config"
 
 
 def cache_home() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Cache"
+    if system == "Darwin":
+        return Path.home() / "Library" / "Caches"
     root = os.environ.get("XDG_CACHE_HOME")
     return Path(root) if root else Path.home() / ".cache"
 
 
 def data_home() -> Path:
+    system = platform.system()
+    if system == "Windows":
+        return Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local"))
+    if system == "Darwin":
+        return Path.home() / "Library" / "Application Support"
     root = os.environ.get("XDG_DATA_HOME")
     return Path(root) if root else Path.home() / ".local" / "share"
 
@@ -89,7 +106,7 @@ class ConfigStore:
             prefix="config-", suffix=".json", dir=self.path.parent
         )
         try:
-            os.fchmod(descriptor, 0o600)
+            private_descriptor(descriptor)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(serialized.decode("utf-8"))
                 handle.flush()

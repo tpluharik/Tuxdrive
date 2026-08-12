@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import platform
 import stat
 import base64
 import json
@@ -14,6 +15,11 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey,
 
 class UnsafePathError(ValueError):
     """Raised when an untrusted relative path can escape its configured root."""
+
+
+def _is_reparse_point(path: Path) -> bool:
+    is_junction = getattr(path, "is_junction", lambda: False)
+    return path.is_symlink() or is_junction()
 
 
 def safe_relative(value: str | Path) -> Path:
@@ -30,6 +36,27 @@ def confined_path(root: Path, relative: str | Path, *, create_parents: bool = Fa
     """Return a path beneath root while rejecting symlinked components."""
     root = root.expanduser().resolve(strict=True)
     relative_path = safe_relative(relative)
+    if platform.system() == "Windows":
+        parent = root
+        for component in relative_path.parts[:-1]:
+            candidate = parent / component
+            if _is_reparse_point(candidate):
+                raise UnsafePathError("Reparse-point parents are not allowed")
+            if candidate.exists():
+                if not candidate.is_dir():
+                    raise UnsafePathError("Reparse-point parents are not allowed")
+            elif create_parents:
+                candidate.mkdir(mode=0o700)
+            else:
+                raise UnsafePathError("A parent directory does not exist")
+            parent = candidate
+        final = parent / relative_path.name
+        if _is_reparse_point(final):
+            raise UnsafePathError("Reparse-point targets are not allowed")
+        resolved_parent = parent.resolve(strict=True)
+        if root != resolved_parent and root not in resolved_parent.parents:
+            raise UnsafePathError("Path escaped its configured root")
+        return final
     flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(root, flags)
     try:
@@ -97,6 +124,18 @@ def prepare_private_file(path: Path) -> Path:
 
 def install_confined(source: Path, root: Path, relative: str | Path) -> Path:
     """Atomically copy source below root without following destination symlinks."""
+    if platform.system() == "Windows":
+        target = confined_path(root, relative, create_parents=True)
+        temporary = target.with_name(f".{target.name}.{os.getpid()}.tuxindrive-install")
+        try:
+            with source.open("rb") as input_file, temporary.open("xb") as output_file:
+                shutil.copyfileobj(input_file, output_file)
+                output_file.flush()
+                os.fsync(output_file.fileno())
+            os.replace(temporary, target)
+        finally:
+            temporary.unlink(missing_ok=True)
+        return target
     with confined_parent(root, relative, create_parents=True) as (parent_fd, name, normalized):
         temporary = f".{name}.{os.getpid()}.tuxindrive-install"
         descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0), 0o600, dir_fd=parent_fd)
@@ -116,6 +155,9 @@ def install_confined(source: Path, root: Path, relative: str | Path) -> Path:
 
 
 def unlink_confined(root: Path, relative: str | Path) -> None:
+    if platform.system() == "Windows":
+        confined_path(root, relative).unlink(missing_ok=True)
+        return
     with confined_parent(root, relative) as (parent_fd, name, _normalized):
         try:
             os.unlink(name, dir_fd=parent_fd)
@@ -124,6 +166,12 @@ def unlink_confined(root: Path, relative: str | Path) -> None:
 
 
 def copy_from_confined(root: Path, relative: str | Path, destination: Path) -> None:
+    if platform.system() == "Windows":
+        source = confined_path(root, relative)
+        destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        with source.open("rb") as input_file, destination.open("xb") as output_file:
+            shutil.copyfileobj(input_file, output_file)
+        return
     with confined_parent(root, relative) as (parent_fd, name, _normalized):
         source_fd = os.open(name, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0), dir_fd=parent_fd)
         try:

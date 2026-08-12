@@ -42,6 +42,16 @@ class PlatformSupportTests(unittest.TestCase):
         self.assertEqual(report["installation"]["application"], "/Applications/TuxInDrive.app")
         self.assertEqual(report["features"][1]["name"], "security")
 
+    @patch("tuxindrive.platform_support.platform.system", return_value="Windows")
+    @patch("tuxindrive.platform_support.platform.machine", return_value="AMD64")
+    @patch("tuxindrive.platform_support.shutil.which", return_value="C:/Windows/explorer.exe")
+    def test_windows_report_uses_native_installation_paths(self, _which, _machine, _system):
+        report = inspect_host()
+        self.assertTrue(report["required_ready"])
+        self.assertEqual(report["distribution_id"], "windows")
+        self.assertIn("TuxInDrive.exe", report["installation"]["launcher"])
+        self.assertEqual(report["features"][1]["name"], "Windows Credential Manager")
+
 
 if __name__ == "__main__":
     unittest.main()

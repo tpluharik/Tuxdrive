@@ -24,6 +24,8 @@ from typing import Callable, Iterable
 from .config import data_root
 from .models import ConflictPolicy, SyncJob, SyncMode
 from .security import ensure_private_directory
+from .process_control import new_process_group, terminate_process
+from .file_permissions import private_descriptor
 
 
 class ProtonDriveError(RuntimeError):
@@ -213,7 +215,7 @@ class ProtonDriveClient:
                     response.close()
                 output.flush()
                 os.fsync(output.fileno())
-                os.fchmod(output.fileno(), 0o700)
+                private_descriptor(output.fileno(), 0o700)
             if not received:
                 raise ProtonDriveError("Proton CLI download was empty")
             if not hmac.compare_digest(digest.hexdigest(), expected):
@@ -332,7 +334,7 @@ class ProtonDriveClient:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                start_new_session=True,
+                **new_process_group(),
                 env=self._environment(),
             )
             self._login_process = process
@@ -614,7 +616,7 @@ class ProtonDriveClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            start_new_session=True,
+            **new_process_group(),
             env=self._environment(),
         )
         if process_callback:
@@ -658,11 +660,11 @@ class ProtonDriveClient:
     @staticmethod
     def _terminate(process: subprocess.Popen[str]) -> None:
         try:
-            os.killpg(process.pid, signal.SIGTERM)
+            terminate_process(process)
             process.wait(timeout=5)
         except (ProcessLookupError, subprocess.TimeoutExpired):
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                terminate_process(process, force=True)
             except ProcessLookupError:
                 pass
 
@@ -763,7 +765,7 @@ class ProtonDriveClient:
         payload = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
         descriptor, temporary = tempfile.mkstemp(prefix="proton-state-", suffix=".json", dir=path.parent)
         try:
-            os.fchmod(descriptor, 0o600)
+            private_descriptor(descriptor)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
                 handle.write(payload)
                 handle.flush()

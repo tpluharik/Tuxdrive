@@ -7,6 +7,7 @@ import signal
 import shutil
 import socket
 import subprocess
+import sys
 import threading
 import ctypes
 from urllib.parse import quote
@@ -16,6 +17,7 @@ from typing import Any, Iterable
 
 from .models import Provider
 from .bootstrap import install_rclone, resolve_rclone
+from .process_control import new_process_group, terminate_process
 
 
 class RcloneError(RuntimeError):
@@ -436,8 +438,8 @@ class RcloneClient:
                 stderr=subprocess.PIPE,
                 text=True,
                 env=environment,
-                start_new_session=True,
-                preexec_fn=_protect_sensitive_child,
+                **new_process_group(),
+                **({"preexec_fn": _protect_sensitive_child} if platform.system() == "Linux" else {}),
             )
             self._oauth_process = process
             self._oauth_session = session_id
@@ -462,14 +464,14 @@ class RcloneClient:
             if process is None or self._oauth_session != session_id or process.poll() is not None:
                 return
             try:
-                os.killpg(process.pid, signal.SIGTERM)
+                terminate_process(process)
             except ProcessLookupError:
                 return
         try:
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                terminate_process(process, force=True)
             except ProcessLookupError:
                 pass
 
@@ -504,9 +506,13 @@ class RcloneClient:
         if self._config_security_checked and not force:
             return
         config = rclone_config_path()
+        system = platform.system()
         default_helper = (
             "/Applications/TuxInDrive.app/Contents/Resources/rclone-password"
-            if platform.system() == "Darwin" else "/usr/lib/tuxindrive/rclone-password"
+            if system == "Darwin" else
+            str(Path(sys.executable).with_name("tuxindrive-rclone-password.exe"))
+            if system == "Windows" else
+            "/usr/lib/tuxindrive/rclone-password"
         )
         helper = Path(
             os.environ.get("TUXINDRIVE_PASSWORD_HELPER")
@@ -527,7 +533,10 @@ class RcloneClient:
             return
         if not helper.is_file() or not os.access(helper, os.X_OK):
             return
-        ensured = subprocess.run([str(helper), "--ensure"], capture_output=True, text=True, timeout=30, check=False, preexec_fn=_protect_sensitive_child)
+        ensured = subprocess.run(
+            [str(helper), "--ensure"], capture_output=True, text=True, timeout=30, check=False,
+            **({"preexec_fn": _protect_sensitive_child} if platform.system() == "Linux" else {}),
+        )
         if ensured.returncode:
             raise RcloneError("Could not store the rclone configuration key in the system credential store")
         environment = os.environ.copy()
@@ -535,7 +544,7 @@ class RcloneClient:
         result = subprocess.run(
             [self.executable, "config", "encryption", "set", "--password-command", str(helper)],
             capture_output=True, text=True, timeout=30, check=False, env=environment,
-            preexec_fn=_protect_sensitive_child,
+            **({"preexec_fn": _protect_sensitive_child} if platform.system() == "Linux" else {}),
         )
         if result.returncode:
             raise RcloneError("Could not encrypt the rclone credential configuration")
@@ -583,8 +592,14 @@ def rclone_config_path() -> Path:
     configured = os.environ.get("RCLONE_CONFIG")
     if configured:
         return Path(configured)
-    xdg = os.environ.get("XDG_CONFIG_HOME")
-    base = Path(xdg) if xdg else Path.home() / ".config"
+    system = platform.system()
+    if system == "Windows":
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
+    elif system == "Darwin":
+        base = Path.home() / "Library" / "Application Support"
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME")
+        base = Path(xdg) if xdg else Path.home() / ".config"
     return base / "rclone" / "rclone.conf"
 
 

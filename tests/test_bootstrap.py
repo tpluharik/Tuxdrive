@@ -28,7 +28,7 @@ class BootstrapTests(unittest.TestCase):
             self.assertIsNone(resolve_rclone())
 
     def test_release_checksums_cover_supported_architectures(self):
-        for system in ("linux", "osx"):
+        for system in ("linux", "osx", "windows"):
             self.assertEqual(len(RCLONE_SHA256[(system, "amd64")]), 64)
             self.assertEqual(len(RCLONE_SHA256[(system, "arm64")]), 64)
 
@@ -44,6 +44,19 @@ class BootstrapTests(unittest.TestCase):
             with self.assertRaises(BootstrapError):
                 install_rclone()
         self.assertIn("rclone-v1.75.0-osx-arm64.zip", urlopen.call_args.args[0])
+
+    @patch("tuxindrive.bootstrap.resolve_rclone", return_value=None)
+    @patch("tuxindrive.bootstrap.platform.system", return_value="Windows")
+    @patch("tuxindrive.bootstrap.platform.machine", return_value="AMD64")
+    @patch("tuxindrive.bootstrap.urllib.request.urlopen")
+    def test_windows_bootstrap_selects_verified_exe_archive(self, urlopen, _machine, _system, _resolve):
+        urlopen.side_effect = OSError("offline test")
+        with tempfile.TemporaryDirectory() as temporary, patch(
+            "tuxindrive.bootstrap.user_rclone_path", return_value=Path(temporary) / "rclone.exe"
+        ):
+            with self.assertRaises(BootstrapError):
+                install_rclone()
+        self.assertIn("rclone-v1.75.0-windows-amd64.zip", urlopen.call_args.args[0])
 
     @patch("tuxindrive.bootstrap.resolve_rclone", return_value=None)
     @patch("tuxindrive.bootstrap.platform.machine", return_value="mips64")

@@ -35,7 +35,7 @@ class PackagingTests(unittest.TestCase):
     def test_debian_identity_is_an_explicit_signed_updater_compatibility_abi(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         self.assertIn("Package: tuxdrive", control)
-        self.assertIn("Provides: tuxindrive (= 0.25.3)", control)
+        self.assertIn("Provides: tuxindrive (= 0.26.0)", control)
         helper = Path("packaging/tuxindrive-rclone-password").read_text(encoding="utf-8")
         self.assertIn("lookup application tuxdrive purpose rclone-config", helper)
 
@@ -227,11 +227,17 @@ class PackagingTests(unittest.TestCase):
             self.assertIn(package, recommends)
         self.assertIn("install-capabilities.json", Path("packaging/DEBIAN/postinst").read_text(encoding="utf-8"))
 
-    def test_release_workflow_builds_debian_only(self):
+    def test_release_workflows_cover_all_packaged_platforms(self):
         workflow = Path(".github/workflows/build.yml").read_text(encoding="utf-8")
         self.assertIn("Build Debian package", workflow)
-        self.assertNotIn("macos-experimental-package", workflow)
-        self.assertFalse(Path("scripts/build-macos-pkg.sh").exists())
+        platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
+        self.assertIn("runs-on: windows-latest", platforms)
+        self.assertIn("runs-on: macos-14", platforms)
+        self.assertIn("name: tuxindrive-android", platforms)
+        self.assertTrue(Path("scripts/build-windows.ps1").is_file())
+        self.assertTrue(Path("scripts/build-macos.sh").is_file())
+        self.assertTrue(Path("packaging/windows/TuxInDrive.iss").is_file())
+        self.assertTrue(Path("android/app/src/main/AndroidManifest.xml").is_file())
 
 
 if __name__ == "__main__":

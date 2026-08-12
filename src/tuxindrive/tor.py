@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from .models import AuthorizedPeer, PeerShare, PeerTransportPolicy
+from .process_control import new_process_group, reload_process, terminate_process
 
 
 ONION_V3 = re.compile(r"^[a-z2-7]{56}\.onion$")
@@ -106,7 +107,10 @@ class TorServiceManager:
             lines.extend(f"Bridge {self._safe_profile(value)}" for value in share.tor_bridge_lines)
             lines.extend(f"ClientTransportPlugin {self._safe_transport_plugin(value)}" for value in share.tor_pluggable_transports)
         self._private_write(config, "\n".join(lines) + "\n")
-        process = subprocess.Popen([binary, "-f", str(config)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, text=True, start_new_session=True)
+        process = subprocess.Popen(
+            [binary, "-f", str(config)], stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, text=True, **new_process_group(),
+        )
         self._processes[share.id] = process
         hostname = service / "hostname"
         deadline = time.monotonic() + timeout
@@ -144,7 +148,7 @@ class TorServiceManager:
         )) + "\n")
         process = subprocess.Popen(
             [binary, "-f", str(torrc)], stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL, text=True, start_new_session=True,
+            stderr=subprocess.DEVNULL, text=True, **new_process_group(),
         )
         self._client_processes[remote] = process
         self._client_ports[remote] = port
@@ -164,13 +168,13 @@ class TorServiceManager:
     def reload(self, share_id: str) -> None:
         process = self._processes.get(share_id)
         if process and process.poll() is None:
-            os.killpg(process.pid, signal.SIGHUP)
+            reload_process(process)
 
     def stop(self, share_id: str) -> None:
         process = self._processes.pop(share_id, None)
         if process and process.poll() is None:
             try:
-                os.killpg(process.pid, signal.SIGTERM)
+                terminate_process(process)
             except ProcessLookupError:
                 pass
         shutil.rmtree(self.root / "ephemeral" / share_id, ignore_errors=True)
@@ -181,7 +185,7 @@ class TorServiceManager:
         for remote, process in list(self._client_processes.items()):
             if process.poll() is None:
                 try:
-                    os.killpg(process.pid, signal.SIGTERM)
+                    terminate_process(process)
                 except ProcessLookupError:
                     pass
             self._client_processes.pop(remote, None)
