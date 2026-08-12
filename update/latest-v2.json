@@ -1,8 +1,8 @@
 {
-  "version": "0.25.2",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.2_all.deb",
-  "sha256": "7a54665f20b7b70da7c5d2124a501ddd1a6434053b99e2edbd90119153c1482a",
-  "notes": "Durable two-way sync state and automatic safe reinitialization",
-  "expires_at": "2026-11-10T14:20:52.242000+00:00",
-  "signature": "cgiEOkTvpsPEa8b/fS57XiO4xnGjSa1i7BP9lVfXvaDLbrlbgXdYjSE9+dtpjj0o+H/UQrP6+2S+NKVfX3PcBw=="
+  "version": "0.25.3",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.3_all.deb",
+  "sha256": "d9564b593babc81e7c12e14c7b4cdb68f634060bced494421cd624c66ceae413",
+  "notes": "Safe synchronization after GitHub repository renames",
+  "expires_at": "2026-11-10T14:36:12.546450+00:00",
+  "signature": "Bw+qoFHaEGQCi+Ycjs2AsTfiiIVwi1VJD/NARfj9p+CyH1pi2oQG2C3IJhuJniSN7I9y3SMyyLeIfQemIl8KAw=="
 }

@@ -35,7 +35,7 @@ class PackagingTests(unittest.TestCase):
     def test_debian_identity_is_an_explicit_signed_updater_compatibility_abi(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         self.assertIn("Package: tuxdrive", control)
-        self.assertIn("Provides: tuxindrive (= 0.25.2)", control)
+        self.assertIn("Provides: tuxindrive (= 0.25.3)", control)
         helper = Path("packaging/tuxindrive-rclone-password").read_text(encoding="utf-8")
         self.assertIn("lookup application tuxdrive purpose rclone-config", helper)
 

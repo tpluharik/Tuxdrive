@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.25.3 — renamed GitHub repository recovery
+
+- Recognize GitHub's verified HTTPS rename redirects when a saved repository URL and the checkout origin use the old and new repository names.
+- Keep rejecting unrelated repositories, redirects outside GitHub, and malformed canonical destinations.
+- Persist the checkout's canonical origin after a verified rename so subsequent scheduled synchronization does not require another network identity check.
+
 ## 0.25.2 — durable two-way sync recovery
 
 - Store rclone bisync baselines in durable application data instead of the disposable cache, while migrating valid existing baseline pairs automatically.
