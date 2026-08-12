@@ -8,7 +8,7 @@ mkdir -p build/windows dist
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name TuxInDrive \
   --distpath build/windows --workpath build/pyinstaller-windows --specpath build \
   --collect-all gi --hidden-import=keyring.backends.Windows \
-  --add-data "branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
+  --add-data "../branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
 python -m PyInstaller --noconfirm --clean --console --onefile \
   --name tuxindrive-rclone-password --distpath build/windows/TuxInDrive \
   --workpath build/pyinstaller-password-windows --specpath build \
