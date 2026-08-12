@@ -71,6 +71,30 @@ class ConfigStoreTests(unittest.TestCase):
                 ConfigStore(path).load()
             self.assertTrue(path.with_suffix(".json.invalid").exists())
 
+    def test_unchanged_save_does_not_replace_or_touch_configuration(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "config.json"
+            store = ConfigStore(path)
+            config = AppConfig()
+            store.save(config)
+            first = path.stat()
+            store.save(config)
+            second = path.stat()
+            path.chmod(0o644)
+            store.save(config)
+            repaired_mode = path.stat().st_mode & 0o777
+        self.assertEqual(first.st_ino, second.st_ino)
+        self.assertEqual(first.st_mtime_ns, second.st_mtime_ns)
+        self.assertEqual(repaired_mode, 0o600)
+
+    def test_cache_limits_from_manual_config_are_bounded(self):
+        config = AppConfig.from_dict({"settings": {
+            "streaming_cache_max_gib": -10,
+            "streaming_cache_min_free_gib": "not-a-number",
+        }})
+        self.assertEqual(config.settings.streaming_cache_max_gib, 1)
+        self.assertEqual(config.settings.streaming_cache_min_free_gib, 5)
+
 
 if __name__ == "__main__":
     unittest.main()

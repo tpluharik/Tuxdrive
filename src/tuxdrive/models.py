@@ -429,6 +429,8 @@ class AppSettings:
     schedule_end: str = ""
     profile_remote: str = ""
     profile_last_backup: str = ""
+    streaming_cache_max_gib: int = 20
+    streaming_cache_min_free_gib: int = 5
     config_version: int = 1
 
     @classmethod
@@ -438,6 +440,14 @@ class AppSettings:
         allowed = set(cls.__dataclass_fields__)
         data = {key: item for key, item in value.items() if key in allowed}
         data["visual_theme"] = normalize_theme(data.get("visual_theme"))
+        for key, default in (
+            ("streaming_cache_max_gib", 20),
+            ("streaming_cache_min_free_gib", 5),
+        ):
+            try:
+                data[key] = min(1024, max(1, int(data.get(key, default))))
+            except (TypeError, ValueError):
+                data[key] = default
         return cls(**data)
 
 

@@ -19,7 +19,9 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.22.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
+Version 0.23.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
+
+Version 0.23.0 also contains the completed performance redesign: event-driven local monitoring with overflow reconciliation, adaptive remote polling, incremental/coalesced GTK updates, visibility-aware activity tails, unchanged-state write suppression, conditional LAN discovery, executable-identity validation caching and conservative pin-aware streaming-cache quotas. These optimizations retain full reconciliation, atomic changed-state writes, signed update verification, mass-change protection, conflict handling and path-confinement controls.
 
 ### Current security baseline
 
@@ -156,7 +158,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.22.0_all.deb
+sudo apt install ./tuxdrive_0.23.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
@@ -174,7 +176,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.22.0_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.23.0_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -198,7 +200,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.22.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.23.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

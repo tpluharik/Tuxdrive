@@ -42,15 +42,30 @@ class ConfigStore:
             raise RuntimeError(f"Invalid TuxDrive configuration; moved to {backup}") from exc
 
     def save(self, config: AppConfig) -> None:
+        serialized = (
+            json.dumps(config.to_dict(), indent=2, ensure_ascii=False) + "\n"
+        ).encode("utf-8")
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(self.path.parent, 0o700)
+        try:
+            if self.path.read_bytes() == serialized:
+                # Keep durability for changed configuration, but avoid an
+                # fsync/rename and downstream filesystem notifications when
+                # callers save an identical object.
+                os.chmod(self.path, 0o600)
+                return
+        except FileNotFoundError:
+            pass
+        except OSError:
+            # A failed comparison must never suppress the authoritative write.
+            pass
         descriptor, temporary = tempfile.mkstemp(
             prefix="config-", suffix=".json", dir=self.path.parent
         )
         try:
             os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(config.to_dict(), handle, indent=2, ensure_ascii=False)
-                handle.write("\n")
+                handle.write(serialized.decode("utf-8"))
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temporary, self.path)

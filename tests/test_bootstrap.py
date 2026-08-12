@@ -5,9 +5,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tuxdrive.bootstrap import BootstrapError, RCLONE_SHA256, install_rclone, resolve_rclone
+from tuxdrive import bootstrap
 
 
 class BootstrapTests(unittest.TestCase):
+    def tearDown(self):
+        bootstrap._COMPATIBILITY_CACHE.clear()
     def test_explicit_executable_is_preferred(self):
         with tempfile.TemporaryDirectory() as temporary:
             executable = Path(temporary) / "rclone"
@@ -47,6 +50,22 @@ class BootstrapTests(unittest.TestCase):
     def test_unsupported_architecture_is_explained(self, _machine, _resolve):
         with self.assertRaisesRegex(BootstrapError, "Unsupported CPU architecture"):
             install_rclone()
+
+    def test_compatibility_check_is_cached_and_invalidated_by_binary_change(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            executable = Path(temporary) / "rclone"
+            executable.write_text("one", encoding="utf-8")
+            executable.chmod(0o755)
+            version = unittest.mock.MagicMock(returncode=0, stdout="rclone v1.75.0\n", stderr="")
+            help_result = unittest.mock.MagicMock(returncode=0, stdout="--resilient --recover --resync-mode", stderr="")
+            with patch("tuxdrive.bootstrap.subprocess.run", side_effect=[version, help_result]) as run:
+                self.assertTrue(bootstrap.rclone_compatible(executable))
+                self.assertTrue(bootstrap.rclone_compatible(executable))
+                self.assertEqual(run.call_count, 2)
+            executable.write_text("replacement-longer", encoding="utf-8")
+            with patch("tuxdrive.bootstrap.subprocess.run", side_effect=[version, help_result]) as run:
+                self.assertTrue(bootstrap.rclone_compatible(executable))
+                self.assertEqual(run.call_count, 2)
 
 
 if __name__ == "__main__":

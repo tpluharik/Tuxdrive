@@ -12,6 +12,7 @@ import subprocess
 import sys
 import threading
 import tempfile
+import time
 import uuid
 import webbrowser
 from datetime import datetime, timedelta, timezone
@@ -53,9 +54,7 @@ except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host d
 
 from .audit import AuditTimeline
 from .capabilities import CAPABILITIES, capabilities_for
-from .collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, document_capability
 from .config import ConfigStore, cache_home
-from .help_content import topics as help_topics
 from .i18n import LANGUAGES, LANGUAGE_CODES, get_language, is_rtl, set_language, tr
 from .engine import JobResult, SyncEngine
 from .models import (
@@ -1233,6 +1232,20 @@ class CollaborativeEditorDialog(Gtk.Dialog):
     """Local-first editor whose immutable operation files travel with a shared folder."""
 
     def __init__(self, parent: Gtk.Window) -> None:
+        # Defused XML and the CRDT/ODF stack are optional dialog costs; keep
+        # normal startup lean and load them only when collaboration is opened.
+        from .collaboration import (
+            CollaborationError as _CollaborationError,
+            CollaborationWorkspace as _CollaborationWorkspace,
+            ODFAdapter as _ODFAdapter,
+            document_capability as _document_capability,
+        )
+        globals().update({
+            "CollaborationError": _CollaborationError,
+            "CollaborationWorkspace": _CollaborationWorkspace,
+            "ODFAdapter": _ODFAdapter,
+            "document_capability": _document_capability,
+        })
         super().__init__(title="Collaborative document", transient_for=parent, modal=False)
         self.set_icon_name("tuxdrive")
         self.set_default_size(820, 700)
@@ -2373,6 +2386,7 @@ class HelpCenterDialog(Gtk.Dialog):
     """Searchable offline documentation in the selected UI language."""
 
     def __init__(self, parent: Gtk.Window) -> None:
+        from .help_content import topics as help_topics
         super().__init__(title=tr("documentation"), transient_for=parent, modal=False)
         self.set_icon_name("tuxdrive")
         self.set_default_size(900, 700)
@@ -2566,6 +2580,7 @@ class MainWindow(Gtk.ApplicationWindow):
         main.pack_start(scroll, True, True, 0)
 
         activity = Gtk.Expander(label=tr("live_log"))
+        self.activity_panel = activity
         activity.get_style_context().add_class("activity-panel")
         activity.set_expanded(True)
         self.activity_view = Gtk.TextView()
@@ -2589,6 +2604,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.infobar.connect("response", lambda bar, _response: bar.hide())
         root.pack_end(self.infobar, False, False, 0)
         self._activity_content = ""
+        self._activity_files: dict[Path, tuple[int, int, int, str]] = {}
+        self._refresh_source = 0
+        self._render_signature: tuple | None = None
+        self._job_widgets: dict[str, dict[str, object]] = {}
+        self._account_widgets: dict[str, dict[str, Gtk.Widget]] = {}
         self.update_dialog: Gtk.Dialog | None = None
         self.update_status: Gtk.Label | None = None
         self.update_progress: Gtk.ProgressBar | None = None
@@ -2597,7 +2617,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self._pending_update: UpdateRelease | None = None
         self._update_pulsing = False
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
-        self.refresh()
+        self._refresh_now()
 
     def apply_visual_theme(self, key: str) -> None:
         """Apply the small structural differences that CSS alone cannot express."""
@@ -2612,9 +2632,75 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.change_language(code)
 
     def refresh(self) -> None:
+        """Coalesce bursts of state notifications into one GTK update."""
+        if not self._refresh_source:
+            self._refresh_source = GLib.timeout_add(75, self._run_scheduled_refresh)
+
+    def _run_scheduled_refresh(self) -> bool:
+        self._refresh_source = 0
+        self._refresh_now()
+        return False
+
+    def _structure_signature(self) -> tuple:
+        return (
+            tuple((item.remote, item.display_name, item.provider.value) for item in self.controller.config.accounts),
+            tuple((item.id, item.name, item.collapsed) for item in self.controller.config.folder_groups),
+            tuple(
+                (job.id, job.name, job.account_remote, job.local_path, job.remote_path,
+                 job.remote_scope, job.cloud_location_name, job.mode.value, job.group_id,
+                 job.repository_url, job.repository_branch, tuple(job.offline_paths))
+                for job in self.controller.config.jobs
+            ),
+        )
+
+    def _update_dynamic_rows(self) -> None:
         self.summary_values["services"].set_text(str(len(self.controller.config.accounts)))
         self.summary_values["active"].set_text(str(len(self.controller.engine.running_jobs)))
         self.summary_values["protected"].set_text(str(len(self.controller.config.jobs)))
+        running = self.controller.engine.running_jobs
+        mounted = self.controller.engine.mounted_jobs
+        for account in self.controller.config.accounts:
+            widgets = self._account_widgets.get(account.remote)
+            if not widgets:
+                continue
+            jobs = [job for job in self.controller.config.jobs if job.account_remote == account.remote]
+            state = (
+                tr("synchronizing") if any(job.id in running for job in jobs) else
+                tr("attention") if any(job.last_error for job in jobs) else tr("connected")
+            )
+            widgets["label"].set_markup(
+                f"<b>{GLib.markup_escape_text(account.display_name)}</b>\n"
+                f"<small>{account.provider.label} · {state}</small>"
+            )
+            widgets["icon"].set_tooltip_text(f"{account.provider.label} · {state}")
+        for job in self.controller.config.jobs:
+            widgets = self._job_widgets.get(job.id)
+            if not widgets:
+                continue
+            widgets["status"].set_text(job.last_status)
+            toggle = widgets["toggle"]
+            if toggle.get_active() != job.enabled:
+                toggle.handler_block(widgets["toggle_handler"])
+                try:
+                    toggle.set_active(job.enabled)
+                finally:
+                    toggle.handler_unblock(widgets["toggle_handler"])
+            widgets["sync"].set_label(
+                tr("open_drive") if job.id in mounted else
+                tr("start_streaming") if job.mode is SyncMode.VIRTUAL_DRIVE else tr("sync_now")
+            )
+
+    def _refresh_now(self) -> None:
+        signature = self._structure_signature()
+        if signature == self._render_signature:
+            self._update_dynamic_rows()
+            self.apply_visual_theme(self.controller.config.settings.visual_theme)
+            self.infobar.hide()
+            return
+        self._render_signature = signature
+        self._job_widgets.clear()
+        self._account_widgets.clear()
+        self._update_dynamic_rows()
         for child in self.account_list.get_children():
             self.account_list.remove(child)
         for account in self.controller.config.accounts:
@@ -2652,6 +2738,7 @@ class MainWindow(Gtk.ApplicationWindow):
             popup.append(remove)
             popup.show_all()
             menu.set_popup(popup)
+            self._account_widgets[account.remote] = {"label": text, "icon": icon}
             box.pack_start(icon, False, False, 0)
             box.pack_start(text, True, True, 0)
             box.pack_end(menu, False, False, 0)
@@ -2794,7 +2881,7 @@ class MainWindow(Gtk.ApplicationWindow):
         toggle.set_valign(Gtk.Align.CENTER)
         toggle.set_halign(Gtk.Align.END)
         toggle.set_tooltip_text(tr("automatic_sync"))
-        toggle.connect("notify::active", self._toggle_job, job)
+        toggle_handler = toggle.connect("notify::active", self._toggle_job, job)
         top.pack_end(toggle, False, False, 0)
         outer.pack_start(top, False, False, 0)
         actions = Gtk.Box(spacing=8)
@@ -2879,6 +2966,10 @@ class MainWindow(Gtk.ApplicationWindow):
         actions.pack_end(remove, False, False, 0)
         outer.pack_start(actions, False, False, 0)
         row.add(outer)
+        self._job_widgets[job.id] = {
+            "status": status, "toggle": toggle, "toggle_handler": toggle_handler,
+            "sync": sync,
+        }
         self._enable_job_drag_source(drag_handle, job)
         self._enable_job_drop_target(row, job.group_id, job)
         return row
@@ -3374,13 +3465,24 @@ class MainWindow(Gtk.ApplicationWindow):
         battery = Gtk.SpinButton.new_with_range(0, 100, 5)
         battery.set_value(self.controller.config.settings.pause_below_battery_percent)
         battery.set_tooltip_text("0 disables battery pausing")
+        cache_max = Gtk.SpinButton.new_with_range(1, 1024, 1)
+        cache_max.set_value(self.controller.config.settings.streaming_cache_max_gib)
+        cache_max.set_tooltip_text("Maximum unpinned streaming cache for each drive (GiB)")
+        cache_free = Gtk.SpinButton.new_with_range(1, 1024, 1)
+        cache_free.set_value(self.controller.config.settings.streaming_cache_min_free_gib)
+        cache_free.set_tooltip_text("Minimum free disk space retained by cache cleanup (GiB)")
+        cache_row = Gtk.Grid(column_spacing=12, row_spacing=6)
+        cache_row.attach(Gtk.Label(label="Streaming cache maximum (GiB)", xalign=0), 0, 0, 1, 1)
+        cache_row.attach(cache_max, 1, 0, 1, 1)
+        cache_row.attach(Gtk.Label(label="Keep disk space free (GiB)", xalign=0), 0, 1, 1, 1)
+        cache_row.attach(cache_free, 1, 1, 1, 1)
         schedule_start = Gtk.Entry()
         schedule_start.set_placeholder_text("Allowed from HH:MM (blank = anytime)")
         schedule_start.set_text(self.controller.config.settings.schedule_start)
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, policy, metered, battery, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, policy, metered, battery, cache_row, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxDrive Profile / migrate…", 4)
@@ -3412,6 +3514,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.network_policy = policy.get_active_id() or "maximum"
             self.controller.config.settings.allow_metered_networks = metered.get_active()
             self.controller.config.settings.pause_below_battery_percent = battery.get_value_as_int()
+            self.controller.config.settings.streaming_cache_max_gib = cache_max.get_value_as_int()
+            self.controller.config.settings.streaming_cache_min_free_gib = cache_free.get_value_as_int()
             self.controller.config.settings.schedule_start = start_value
             self.controller.config.settings.schedule_end = end_value
             self.controller.save()
@@ -3610,15 +3714,34 @@ class MainWindow(Gtk.ApplicationWindow):
         self.controller.run_job(job)
 
     def _refresh_activity_log(self) -> bool:
+        if not self.get_visible() or not self.activity_panel.get_expanded():
+            return True
         sources = [application_log_path()]
         sync_directory = cache_home() / "tuxdrive" / "logs"
         if sync_directory.exists():
             sources.extend(
                 sorted(sync_directory.glob("*.log"), key=lambda item: item.stat().st_mtime)[-3:]
             )
+        active = set(sources)
+        self._activity_files = {
+            path: value for path, value in self._activity_files.items() if path in active
+        }
         sections: list[str] = []
         for source in sources:
-            content = self._tail_file(source)
+            try:
+                stat = source.stat()
+                fingerprint = (stat.st_ino, stat.st_size, stat.st_mtime_ns)
+            except OSError:
+                continue
+            cached = self._activity_files.get(source)
+            if cached and cached[:3] == fingerprint:
+                content = cached[3]
+            elif cached and cached[0] == stat.st_ino and stat.st_size > cached[1]:
+                content = self._append_tail(source, cached[1], cached[3])
+                self._activity_files[source] = (*fingerprint, content)
+            else:
+                content = self._tail_file(source)
+                self._activity_files[source] = (*fingerprint, content)
             if content:
                 sections.append(f"── {source.name} ──\n{content.strip()}")
         combined = "\n\n".join(sections) or "No activity recorded yet."
@@ -3642,6 +3765,27 @@ class MainWindow(Gtk.ApplicationWindow):
             return data.decode("utf-8", errors="replace")
         except OSError:
             return ""
+
+    @staticmethod
+    def _append_tail(
+        path: Path, offset: int, previous: str, limit: int = 32 * 1024
+    ) -> str:
+        """Read only newly appended log bytes and retain a bounded tail."""
+        try:
+            with path.open("rb") as handle:
+                handle.seek(max(0, offset))
+                appended = handle.read(limit + 1)
+                if len(appended) > limit:
+                    # A single update exceeded the display budget. Read the
+                    # authoritative tail rather than allocating unbounded text.
+                    return MainWindow._tail_file(path, limit)
+            combined = previous.encode("utf-8", errors="replace") + appended
+            if len(combined) > limit:
+                combined = combined[-limit:]
+                combined = combined.split(b"\n", 1)[-1]
+            return combined.decode("utf-8", errors="replace")
+        except OSError:
+            return previous
 
     def _confirm(self, text: str) -> bool:
         dialog = Gtk.MessageDialog(
@@ -3703,6 +3847,9 @@ class TuxDriveApplication(Gtk.Application):
         self._last_started: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
         self._css_provider: Gtk.CssProvider | None = None
+        self._last_nautilus_state: bytes | None = None
+        self._last_cache_maintenance = 0.0
+        self._cache_maintenance_running = False
 
     def change_language(self, code: str) -> None:
         if code not in LANGUAGE_CODES:
@@ -4078,6 +4225,7 @@ class TuxDriveApplication(Gtk.Application):
     def _publish_nautilus_state(self) -> None:
         target = cache_home() / "tuxdrive" / "nautilus-state.json"
         target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        os.chmod(target.parent, 0o700)
         mounted = self.engine.mounted_jobs
         payload: dict[str, dict[str, object]] = {}
         for job in self.config.jobs:
@@ -4114,15 +4262,29 @@ class TuxDriveApplication(Gtk.Application):
                 for job in self.config.jobs
             ],
         }
+        serialized = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+        if self._last_nautilus_state == serialized:
+            try:
+                os.chmod(target, 0o600)
+                return
+            except OSError:
+                pass
+        try:
+            if target.read_bytes() == serialized:
+                os.chmod(target, 0o600)
+                self._last_nautilus_state = serialized
+                return
+        except OSError:
+            pass
         descriptor, temporary = tempfile.mkstemp(
             prefix="nautilus-state-", suffix=".json", dir=target.parent
         )
         try:
             os.fchmod(descriptor, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, ensure_ascii=False)
-                handle.write("\n")
+                handle.write(serialized.decode("utf-8"))
             os.replace(temporary, target)
+            self._last_nautilus_state = serialized
         finally:
             if os.path.exists(temporary):
                 os.unlink(temporary)
@@ -4146,7 +4308,7 @@ class TuxDriveApplication(Gtk.Application):
         return False
 
     def run_job(self, job: SyncJob, quiet: bool = False) -> None:
-        self.engine.configure_jobs(self.config.jobs)
+        self.engine.configure_jobs(self.config.jobs, self.config.accounts)
         if not job.enabled and not quiet:
             job.enabled = True
         if job.id in self.engine.running_jobs:
@@ -4295,7 +4457,7 @@ class TuxDriveApplication(Gtk.Application):
         return False
 
     def start_callbacks(self, job: SyncJob) -> None:
-        self.engine.configure_jobs(self.config.jobs)
+        self.engine.configure_jobs(self.config.jobs, self.config.accounts)
         self.engine.start_callbacks(
             job,
             self._job_finished,
@@ -4303,7 +4465,7 @@ class TuxDriveApplication(Gtk.Application):
         )
 
     def reconfigure_callbacks(self) -> None:
-        self.engine.configure_jobs(self.config.jobs)
+        self.engine.configure_jobs(self.config.jobs, self.config.accounts)
         for item in self.config.jobs:
             self.engine.stop_callbacks(item.id)
         for item in self.config.jobs:
@@ -4320,6 +4482,21 @@ class TuxDriveApplication(Gtk.Application):
                 )
 
     def _scheduler_tick(self) -> bool:
+        monotonic = time.monotonic()
+        if (
+            not self._cache_maintenance_running
+            and monotonic - self._last_cache_maintenance >= 300
+        ):
+            gib = 1024 ** 3
+            self._cache_maintenance_running = True
+            _run_thread(
+                self.engine.maintain_streaming_cache,
+                self._cache_maintenance_ready,
+                list(self.config.jobs),
+                self.config.settings.streaming_cache_max_gib * gib,
+                self.config.settings.streaming_cache_min_free_gib * gib,
+            )
+            self._last_cache_maintenance = monotonic
         now = datetime.now(timezone.utc)
         for job in self.config.jobs:
             if not job.enabled or job.mode is SyncMode.VIRTUAL_DRIVE or job.id in self.engine.running_jobs:
@@ -4333,6 +4510,19 @@ class TuxDriveApplication(Gtk.Application):
             if baseline is None or (now - baseline).total_seconds() >= job.interval_minutes * 60:
                 self.run_job(job, quiet=True)
         return True
+
+    def _cache_maintenance_ready(self, results, error: Exception | None) -> bool:
+        self._cache_maintenance_running = False
+        if error:
+            LOGGER.warning("Streaming cache maintenance failed safely: %s", error)
+            return False
+        for result in results or []:
+            if result.released_files:
+                LOGGER.info(
+                    "Streaming cache cleanup job=%s files=%s bytes=%s",
+                    result.job_id, result.released_files, result.released_bytes,
+                )
+        return False
 
     def _create_indicator(self) -> None:
         if AyatanaAppIndicator3 is None:
@@ -4484,7 +4674,11 @@ class TuxDriveApplication(Gtk.Application):
                     except Exception as exc:
                         share.last_status = f"Could not start: {exc}"
                         LOGGER.error("Peer share %s failed: %s", share.id, exc)
-            self.peers.start_discovery()
+            if any(
+                share.enabled and share.lan_discovery
+                for share in self.config.peer_shares
+            ):
+                self.peers.start_discovery()
             self.save()
             for job in self.config.jobs:
                 if job.enabled and job.mode is SyncMode.VIRTUAL_DRIVE:

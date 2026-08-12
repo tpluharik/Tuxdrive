@@ -24,13 +24,14 @@ from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
 from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
 from .config import cache_home, config_home
-from .models import ConflictPolicy, PeerRole, SyncJob, SyncMode
+from .models import Account, ConflictPolicy, PeerRole, Provider, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
 from .github_sync import GitHubSyncError, parse_repository_url, validate_branch
 from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
 from .nautilus_support import is_available_offline
+from .cache_manager import CacheCleanupResult, StreamingCacheManager
 
 
 @dataclass(slots=True)
@@ -51,6 +52,10 @@ class JobResult:
 class SyncEngine:
     _OFFLINE_READ_INACTIVITY_TIMEOUT = 60.0
     _OFFLINE_READ_ATTEMPTS = 2
+    _PROVIDER_REMOTE_BACKOFF = {
+        Provider.PROTON_DRIVE: (60.0, 120.0, 300.0, 600.0),
+        Provider.PEER: (10.0, 30.0, 60.0, 120.0),
+    }
 
     def __init__(self, rclone_path: str = "rclone") -> None:
         self.rclone_path = rclone_path
@@ -64,6 +69,9 @@ class SyncEngine:
         self.leases = PeerLeaseManager(rclone_path)
         self._lock = threading.RLock()
         self.delta = BlockDeltaPlanner()
+        self.cache_manager = StreamingCacheManager()
+        self._job_layout_signature: tuple[tuple[str, str, str, str], ...] = ()
+        self._remote_backoffs: dict[str, tuple[float, ...]] = {}
 
     @property
     def running_jobs(self) -> set[str]:
@@ -82,7 +90,19 @@ class SyncEngine:
         with self._lock:
             return set(self._monitors)
 
-    def configure_jobs(self, jobs: list[SyncJob]) -> None:
+    def configure_jobs(self, jobs: list[SyncJob], accounts: list[Account] | None = None) -> None:
+        provider_by_remote = {
+            account.remote: account.provider for account in (accounts or [])
+        }
+        signature = tuple(
+            (
+                job.id, job.local_path, job.mode.value,
+                provider_by_remote.get(job.account_remote, Provider.GOOGLE_DRIVE).value,
+            )
+            for job in jobs
+        )
+        if signature == self._job_layout_signature:
+            return
         protected: dict[str, list[str]] = {}
         for parent in jobs:
             if parent.mode is SyncMode.VIRTUAL_DRIVE:
@@ -104,6 +124,32 @@ class SyncEngine:
             job_id: tuple(dict.fromkeys(patterns))
             for job_id, patterns in protected.items()
         }
+        self._job_layout_signature = signature
+        self._remote_backoffs = {
+            job.id: self._PROVIDER_REMOTE_BACKOFF.get(
+                provider_by_remote.get(job.account_remote),
+                (30.0, 60.0, 120.0, 300.0),
+            )
+            for job in jobs
+        }
+
+    def maintain_streaming_cache(
+        self,
+        jobs: list[SyncJob],
+        max_bytes: int,
+        min_free_bytes: int,
+    ) -> list[CacheCleanupResult]:
+        """Conservatively evict inactive, complete, unpinned VFS objects."""
+        results: list[CacheCleanupResult] = []
+        mounted = self.mounted_jobs
+        for job in jobs:
+            if job.mode is not SyncMode.VIRTUAL_DRIVE:
+                continue
+            results.append(self.cache_manager.enforce(
+                job, max_bytes=max_bytes, min_free_bytes=min_free_bytes,
+                mounted=job.id in mounted,
+            ))
+        return results
 
     def command_for_job(self, job: SyncJob, dry_run: bool = False) -> list[str]:
         local = str(job.local)
@@ -1016,6 +1062,9 @@ class SyncEngine:
             lambda item, changes: self._apply_incremental(item, changes, callback),
             reconcile,
             self._protected_patterns.get(job.id, ()),
+            remote_backoff=self._remote_backoffs.get(
+                job.id, (30.0, 60.0, 120.0, 300.0)
+            ),
         )
         self._monitors[job.id] = monitor
         monitor.start()

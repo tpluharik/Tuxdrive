@@ -451,6 +451,30 @@ class SyncEngineCommandTests(unittest.TestCase):
         command = self.engine.command_for_job(parent)
         self.assertIn("/Online/**", command)
 
+    def test_unchanged_job_layout_skips_quadratic_exclusion_rebuild(self):
+        parent = SyncJob(account_remote="google", local_path="/data/TuxDrive")
+        streamed = SyncJob(
+            account_remote="google", local_path="/data/TuxDrive/Online",
+            mode=SyncMode.VIRTUAL_DRIVE,
+        )
+        self.engine.configure_jobs([parent, streamed])
+        original = self.engine._protected_patterns
+        self.engine.configure_jobs([parent, streamed])
+        self.assertIs(self.engine._protected_patterns, original)
+        streamed.local_path = "/data/TuxDrive/Other"
+        self.engine.configure_jobs([parent, streamed])
+        self.assertIsNot(self.engine._protected_patterns, original)
+
+    def test_remote_backoff_respects_provider_characteristics(self):
+        from tuxdrive.models import Account, Provider
+        proton = Account("proton", Provider.PROTON_DRIVE, "Private")
+        peer = Account("peer", Provider.PEER, "LAN")
+        proton_job = SyncJob("proton", "/data/proton")
+        peer_job = SyncJob("peer", "/data/peer")
+        self.engine.configure_jobs([proton_job, peer_job], [proton, peer])
+        self.assertEqual(self.engine._remote_backoffs[proton_job.id], (60.0, 120.0, 300.0, 600.0))
+        self.assertEqual(self.engine._remote_backoffs[peer_job.id], (10.0, 30.0, 60.0, 120.0))
+
     def test_streaming_mount_rejects_a_nonempty_directory(self):
         with tempfile.TemporaryDirectory() as temporary:
             mountpoint = Path(temporary) / "mount"

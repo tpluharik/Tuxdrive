@@ -1,8 +1,8 @@
 {
-  "version": "0.22.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.22.0_all.deb",
-  "sha256": "f4156700d81b8a4ccdf592c754ae0f92386359dd813abdd1a592a29bbb733f52",
-  "notes": "Selectable Nordic Glass, Bento Cloud, and Midnight Sync application designs with persistent Settings control.",
-  "expires_at": "2026-11-09T21:49:54.236695+00:00",
-  "signature": "9weeTWdmVWehd9Hj2kCP7lmddgQm/jYjxDA1stH3XvVLnjQI8weCjgVBaw+jrkcy38TW4YAgYV4k56OhxHGwCQ=="
+  "version": "0.23.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.23.0_all.deb",
+  "sha256": "bd303ba45e987c172493a8923885f8d205dc99bb0786fa6826d30356d85bb9ee",
+  "notes": "Event-driven local monitoring, adaptive remote polling, incremental UI refreshes, and conservative pin-aware cache quotas.",
+  "expires_at": "2026-11-10T07:19:52.648729+00:00",
+  "signature": "8Pnm42ZtE92jzxkihv6k/XsilAxPM00JkX6RZsKdmz3JWaqeAgKpzvyiT9QGeNil6EhH+AkfwsC0imXLGXgEBQ=="
 }

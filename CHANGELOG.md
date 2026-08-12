@@ -2,6 +2,16 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.23.0 — event-driven performance and bounded cache
+
+- Replaced two-second per-job local tree walks with recursive Linux inotify monitoring; queue overflow and uncertain directory topology fail closed into full reconciliation.
+- Added adaptive 30/60/120/300-second remote polling, immediate activity checks and delayed authoritative reconciliation without duplicate post-transfer tree walks.
+- Coalesced GTK refresh bursts, retained account/job rows for status-only updates, and stopped hidden or collapsed live-log reads.
+- Deduplicated configuration and Nautilus state writes while preserving atomic replacement and `fsync` for changed configuration.
+- Cached rclone compatibility by executable identity, made LAN advertising conditional, and removed startup's `network-online` dependency.
+- Added conservative pin-aware cache quotas. Pinned, dirty, active, symlinked and uncertain objects are never evicted.
+- Lazy-loaded optional dialog modules and expanded recovery, cache-safety and performance regression coverage.
+
 ## 0.22.0 — selectable modern application designs
 
 - Implemented the three approved visual systems: **Nordic Glass**, **Bento Cloud**, and **Midnight Sync**. All use rounded controls, card-based account/folder/group surfaces, clearer hierarchy, and provider/status identity without changing synchronization behavior.

@@ -11,6 +11,10 @@ The longer-term product direction is a **“Signal for files and cooperation”*
 
 Version 0.22.0 implements Nordic Glass, Bento Cloud, and Midnight Sync as selectable, validated, persistent GTK visual designs. Bento includes live service/synchronization/folder summary tiles; Midnight uses a high-contrast dark preference; Nordic is the default. The shared component layer preserves provider icons, rounded account/job/group cards, drag/drop, minimized groups, accessibility, live logs, and all transfer behavior. It retains the 0.21.1 folder organization repair, exact online-only/offline controls, URI-safe Nautilus menu refresh, GitHub synchronization, six functional Nautilus badges, the 0.19 security remediation and updater trust bridge, six-language documentation, and the collaboration baseline.
 
+### Completed in 0.23.0
+
+The performance-audit roadmap is implemented: inotify replaces idle local polling, remote enumeration backs off adaptively, post-transfer snapshots are updated from confirmed results and reconciled later, GTK updates are keyed/coalesced, hidden activity logs stop polling, identical configuration/Nautilus state is not rewritten, rclone validation is cached by binary identity, LAN discovery is conditional, optional dialog modules are lazy-loaded, and a conservative pin-aware cache manager enforces configurable quota/free-space targets. Queue overflow, invalid pin metadata, dirty cache state or any confinement uncertainty fails closed without discarding user data.
+
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on the headless peer agent, protocol versioning, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing, isolated per-role service endpoints and a published threat model. Tor transport and secure-workspace primitives should follow only after that foundation is externally reviewable. No planned item should be read as available until its status changes to a shipped version.
 
 ## Prioritization principles

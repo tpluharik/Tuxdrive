@@ -9,6 +9,7 @@ import tempfile
 import urllib.request
 import zipfile
 import re
+import threading
 from pathlib import Path
 from typing import Callable
 
@@ -22,6 +23,9 @@ RCLONE_SHA256 = {
     ("osx", "amd64"): "19edbb8e5e73096eb66e92a42abbc5c34bfa8981ea3986a53872c7eef85a22f4",
     ("osx", "arm64"): "35e8f2a666ce789b29111db0dd843ddabc0d59c6b609d07bcaae5d1a07cba6f8",
 }
+
+_COMPATIBILITY_CACHE: dict[tuple[str, int, int, int, int], bool] = {}
+_COMPATIBILITY_LOCK = threading.Lock()
 
 
 class BootstrapError(RuntimeError):
@@ -60,13 +64,28 @@ def resolve_rclone(configured: str = "rclone") -> str | None:
 def rclone_compatible(executable: Path) -> bool:
     """Require the bisync safety features used by TuxDrive."""
     try:
+        stat = executable.stat()
+        identity = (
+            str(executable.resolve()), stat.st_dev, stat.st_ino,
+            stat.st_size, stat.st_mtime_ns,
+        )
+    except OSError:
+        return False
+    with _COMPATIBILITY_LOCK:
+        cached = _COMPATIBILITY_CACHE.get(identity)
+    if cached is not None:
+        return cached
+    try:
         version = subprocess.run(
             [str(executable), "version"], check=False, capture_output=True,
             text=True, timeout=10,
         )
         match = re.search(r"rclone v(\d+)\.(\d+)\.(\d+)", version.stdout + version.stderr)
         if version.returncode or not match or tuple(map(int, match.groups())) < RCLONE_MINIMUM:
-            return False
+            compatible = False
+            with _COMPATIBILITY_LOCK:
+                _COMPATIBILITY_CACHE[identity] = compatible
+            return compatible
         result = subprocess.run(
             [str(executable), "bisync", "--help"],
             check=False,
@@ -77,7 +96,16 @@ def rclone_compatible(executable: Path) -> bool:
     except (OSError, subprocess.TimeoutExpired):
         return False
     help_text = result.stdout + result.stderr
-    return all(flag in help_text for flag in ("--resilient", "--recover", "--resync-mode"))
+    compatible = all(
+        flag in help_text for flag in ("--resilient", "--recover", "--resync-mode")
+    )
+    with _COMPATIBILITY_LOCK:
+        # Prune identities for replaced versions of the same executable.
+        for key in tuple(_COMPATIBILITY_CACHE):
+            if key[0] == identity[0] and key != identity:
+                _COMPATIBILITY_CACHE.pop(key, None)
+        _COMPATIBILITY_CACHE[identity] = compatible
+    return compatible
 
 
 def install_rclone(progress: Callable[[str], None] | None = None) -> str:
