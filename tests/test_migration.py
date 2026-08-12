@@ -2,10 +2,11 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from tuxdrive.config import ConfigStore
-from tuxdrive.migration import MigrationError, ProfileManager, decrypt_profile, encrypt_profile
-from tuxdrive.models import Account, AppConfig, Provider, SyncJob
+from tuxindrive.config import ConfigStore
+from tuxindrive.migration import MigrationError, ProfileManager, decrypt_profile, encrypt_profile
+from tuxindrive.models import Account, AppConfig, Provider, SyncJob
 
 
 class FakeRclone:
@@ -32,6 +33,11 @@ class FakeRclone:
 
 
 class MigrationTests(unittest.TestCase):
+    def test_pre_rebrand_encrypted_profile_format_remains_readable(self):
+        with patch("tuxindrive.migration.FORMAT", "tuxdrive-encrypted-profile"):
+            legacy = encrypt_profile({"legacy": True}, "a-secure-password")
+        self.assertEqual(decrypt_profile(legacy, "a-secure-password"), {"legacy": True})
+
     def test_encryption_round_trip_and_wrong_password(self):
         data = encrypt_profile({"answer": 42}, "a-secure-password")
         self.assertEqual(decrypt_profile(data, "a-secure-password"), {"answer": 42})

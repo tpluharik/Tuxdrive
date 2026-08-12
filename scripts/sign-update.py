@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create a signed TuxDrive update manifest without exposing the private key."""
+"""Create a signed TuxInDrive update manifest without exposing the private key."""
 
 from __future__ import annotations
 
@@ -31,6 +31,8 @@ def main() -> None:
         parser.error("the release key must be Ed25519")
     signed = {
         "version": args.version,
+        # Keep the signed bridge URL accepted by pre-rebrand 0.24.x clients.
+        # GitHub redirects it after the repository rename.
         "url": f"https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_{args.version}_all.deb",
         "sha256": hashlib.sha256(package).hexdigest(),
         "notes": args.notes,

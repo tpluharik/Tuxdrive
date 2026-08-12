@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.engine import SyncEngine
-from tuxdrive.github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
-from tuxdrive.models import SyncJob, SyncMode
+from tuxindrive.engine import SyncEngine
+from tuxindrive.github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
+from tuxindrive.models import SyncJob, SyncMode
 
 
 class GitHubSyncTests(unittest.TestCase):
@@ -39,7 +39,7 @@ class GitHubSyncTests(unittest.TestCase):
                 repository_url="https://github.com/owner/repo.git",
                 repository_branch="main",
                 mode=SyncMode.TWO_WAY,
-                git_author_name="TuxDrive Test",
+                git_author_name="TuxInDrive Test",
                 git_author_email="test@example.invalid",
             )
             engine = SyncEngine()
@@ -49,7 +49,7 @@ class GitHubSyncTests(unittest.TestCase):
                 commands.append(command)
                 return 0
 
-            with patch("tuxdrive.engine.shutil.which", return_value="/usr/bin/git"), \
+            with patch("tuxindrive.engine.shutil.which", return_value="/usr/bin/git"), \
                  patch.object(engine, "_run_git_process", side_effect=run), \
                  patch.object(
                      engine,
@@ -57,7 +57,7 @@ class GitHubSyncTests(unittest.TestCase):
                      side_effect=["https://github.com/owner/repo.git", "main"],
                  ), \
                  patch(
-                     "tuxdrive.engine.subprocess.run",
+                     "tuxindrive.engine.subprocess.run",
                      side_effect=[
                          MagicMock(returncode=0, stdout="", stderr=""),
                          MagicMock(returncode=1, stdout="", stderr=""),

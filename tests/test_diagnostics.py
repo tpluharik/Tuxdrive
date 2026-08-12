@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxdrive.diagnostics import crash_log_path, log_boot_failure
+from tuxindrive.diagnostics import crash_log_path, log_boot_failure
 
 
 class DiagnosticsTests(unittest.TestCase):

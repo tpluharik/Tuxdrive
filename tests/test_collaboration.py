@@ -3,7 +3,7 @@ import unittest
 import zipfile
 from pathlib import Path
 
-from tuxdrive.collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, TextCRDT, TextOperation, document_capability
+from tuxindrive.collaboration import CollaborationError, CollaborationWorkspace, ODFAdapter, TextCRDT, TextOperation, document_capability
 
 
 class CollaborationTests(unittest.TestCase):
@@ -73,7 +73,7 @@ class CollaborationTests(unittest.TestCase):
             ODFAdapter.export(document, second)
             self.assertEqual(first.read_bytes(), second.read_bytes())
             with zipfile.ZipFile(first) as archive:
-                self.assertEqual(archive.read("TuxDrive/original-content.xml"), content)
+                self.assertEqual(archive.read("TuxInDrive/original-content.xml"), content)
             self.assertEqual(ODFAdapter.load(first).paragraphs[0].text, "Changed")
 
     def test_ods_cells_and_formula_are_structured(self):

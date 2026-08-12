@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
-from tuxdrive.engine import SyncEngine
-from tuxdrive.proton import ProtonDriveClient, ProtonDriveError, ProtonNode, ProtonSyncResult, proton_path
+from tuxindrive.models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
+from tuxindrive.engine import SyncEngine
+from tuxindrive.proton import ProtonDriveClient, ProtonDriveError, ProtonNode, ProtonSyncResult, proton_path
 
 
 class ProtonPathTests(unittest.TestCase):
@@ -60,7 +60,7 @@ class ProtonClientTests(unittest.TestCase):
 
     def test_missing_official_cli_has_actionable_error(self):
         client = ProtonDriveClient("proton-drive")
-        with patch("tuxdrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
+        with patch("tuxindrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
             ProtonDriveError, "Install CLI and connect"
         ):
             client.resolve()
@@ -88,7 +88,7 @@ class ProtonClientTests(unittest.TestCase):
         binary_url = "https://proton.me/download/drive/cli/0.7.0/linux-x64/proton-drive"
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ, {"XDG_DATA_HOME": temporary}
-        ), patch("tuxdrive.proton.platform.machine", return_value="x86_64"), patch.object(
+        ), patch("tuxindrive.proton.platform.machine", return_value="x86_64"), patch.object(
             self.client,
             "_open_url",
             side_effect=[
@@ -111,7 +111,7 @@ class ProtonClientTests(unittest.TestCase):
         binary_url = "https://proton.me/download/drive/cli/0.7.0/linux-x64/proton-drive"
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ, {"XDG_DATA_HOME": temporary}
-        ), patch("tuxdrive.proton.platform.machine", return_value="x86_64"):
+        ), patch("tuxindrive.proton.platform.machine", return_value="x86_64"):
             target = self.client.managed_path()
             target.parent.mkdir(parents=True)
             target.write_bytes(old)
@@ -183,7 +183,7 @@ class ProtonClientTests(unittest.TestCase):
         login = self.process(stdout="Authentication successful\n")
         listing = self.process(stdout="[]\n")
         with patch.object(self.client, "resolve", return_value="/usr/bin/proton-drive"), patch(
-            "tuxdrive.proton.subprocess.Popen", side_effect=[login, listing]
+            "tuxindrive.proton.subprocess.Popen", side_effect=[login, listing]
         ) as popen:
             self.client.login()
         self.assertEqual(popen.call_args_list[0].args[0], ["/usr/bin/proton-drive", "auth", "login"])
@@ -219,7 +219,7 @@ class ProtonClientTests(unittest.TestCase):
     def test_session_expiry_is_actionable(self):
         failed = self.process(stderr="401 unauthorized: session expired", returncode=1)
         with patch.object(self.client, "resolve", return_value="/usr/bin/proton-drive"), patch(
-            "tuxdrive.proton.subprocess.Popen", return_value=failed
+            "tuxindrive.proton.subprocess.Popen", return_value=failed
         ), self.assertRaisesRegex(ProtonDriveError, "Reconnect in browser"):
             self.client.validate_session()
 
@@ -367,7 +367,7 @@ class ProtonEngineTests(unittest.TestCase):
             job = SyncJob("proton-web", temporary)
             engine.configure_jobs([job], [account])
             completed = []
-            with patch("tuxdrive.engine.resolve_rclone") as rclone:
+            with patch("tuxindrive.engine.resolve_rclone") as rclone:
                 engine._run_worker(
                     job, Path(temporary) / "proton.log", completed.append, False
                 )
@@ -396,7 +396,7 @@ class ProtonEngineTests(unittest.TestCase):
         )
         job = SyncJob("proton-web", "/data/proton", initialized=True)
         engine.configure_jobs([job], [account])
-        with patch("tuxdrive.engine.ChangeMonitor") as monitor:
+        with patch("tuxindrive.engine.ChangeMonitor") as monitor:
             engine.start_callbacks(job, lambda _result: None, lambda _job: None)
         monitor.assert_not_called()
 

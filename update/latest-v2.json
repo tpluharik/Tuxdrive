@@ -1,8 +1,8 @@
 {
-  "version": "0.24.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.24.1_all.deb",
-  "sha256": "0aa1543af19908e3668d0e899d19ced7d7c509bc134cad43978d9a34c2a41233",
-  "notes": "Fix Proton CLI installation and browser authorization on clean Linux systems",
-  "expires_at": "2026-11-10T08:38:17.406705+00:00",
-  "signature": "mH+cHPoys/HFPRfWOpeKs9V/jH8lnd0hA6GYO/k146mJ2ZEbt8XOcgmEvDhklesO6aJC7pBR+knxm575gm2ADw=="
+  "version": "0.25.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.0_all.deb",
+  "sha256": "84e645952ddebb8e70940f47df16a2e355f6be210cbe24feec31a6f71d6de2b1",
+  "notes": "Complete TuxInDrive rebrand with compatibility-preserving upgrade migration",
+  "expires_at": "2026-11-10T09:15:47.660014+00:00",
+  "signature": "fLMeHwbsIpPkjceYgmntSB3HinbDnKOBgeO5bgAJ5+rlp6RHh2E0sI5GyrDfGcycNUU3/OcPkEMYF7105CH5Dg=="
 }

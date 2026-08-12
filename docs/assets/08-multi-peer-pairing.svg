@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
  <style>text{font-family:Ubuntu,Arial,sans-serif;fill:#263238}.h{font-size:26px;font-weight:bold}.t{font-size:17px}.s{font-size:14px;fill:#58636d}.panel{fill:#fff;stroke:#c4cbd2}.button{fill:#e9edf1;stroke:#b5bdc5}.blue{fill:#3584e4}.green{fill:#2ec27e}</style>
- <rect width="1200" height="700" fill="#eef1f4"/><text x="55" y="55" class="h">TuxDrive 0.9.0 · Private collaboration</text>
+ <rect width="1200" height="700" fill="#eef1f4"/><text x="55" y="55" class="h">TuxInDrive 0.9.0 · Private collaboration</text>
  <rect x="45" y="85" width="535" height="565" rx="14" class="panel"/><text x="75" y="130" class="h">Authorized peer devices</text>
  <g class="t"><text x="85" y="180">✓  Alice · Work laptop</text><text x="85" y="220">✓  Bob · Desktop</text><text x="85" y="260">○  Test device · disabled</text></g>
  <rect x="75" y="290" width="210" height="42" rx="7" class="button"/><text x="100" y="317" class="t">Authorize device</text><rect x="300" y="290" width="190" height="42" rx="7" class="button"/><text x="326" y="317" class="t">Revoke selected</text>

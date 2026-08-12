@@ -2,17 +2,18 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-PACKAGE_ROOT="$PROJECT_ROOT/build/tuxdrive_0.24.1_all"
-OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.24.1_all.deb"
+PACKAGE_ROOT="$PROJECT_ROOT/build/tuxindrive_0.25.0_all"
+OUTPUT="$PROJECT_ROOT/dist/tuxindrive_0.25.0_all.deb"
+LEGACY_OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.25.0_all.deb"
 
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p \
   "$PACKAGE_ROOT/DEBIAN" \
   "$PACKAGE_ROOT/usr/bin" \
-  "$PACKAGE_ROOT/usr/lib/tuxdrive" \
+  "$PACKAGE_ROOT/usr/lib/tuxindrive" \
   "$PACKAGE_ROOT/usr/share/applications" \
-  "$PACKAGE_ROOT/usr/share/doc/tuxdrive" \
-  "$PACKAGE_ROOT/usr/share/doc/tuxdrive/assets" \
+  "$PACKAGE_ROOT/usr/share/doc/tuxindrive" \
+  "$PACKAGE_ROOT/usr/share/doc/tuxindrive/assets" \
   "$PACKAGE_ROOT/usr/share/nautilus-python/extensions" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems" \
@@ -21,60 +22,64 @@ mkdir -p \
 
 cp "$PROJECT_ROOT/packaging/DEBIAN/control" "$PACKAGE_ROOT/DEBIAN/control"
 cp "$PROJECT_ROOT/packaging/DEBIAN/postinst" "$PACKAGE_ROOT/DEBIAN/postinst"
-cp "$PROJECT_ROOT/packaging/tuxdrive-launcher" "$PACKAGE_ROOT/usr/bin/tuxdrive"
-ln -s tuxdrive "$PACKAGE_ROOT/usr/bin/tuxdrive-doctor"
-cp "$PROJECT_ROOT/packaging/tuxdrive-rclone-password" "$PACKAGE_ROOT/usr/lib/tuxdrive/rclone-password"
-cp "$PROJECT_ROOT/packaging/tuxdrive-update-helper" "$PACKAGE_ROOT/usr/lib/tuxdrive/update-helper"
-cp -R "$PROJECT_ROOT/src/tuxdrive/." "$PACKAGE_ROOT/usr/lib/tuxdrive/"
-find "$PACKAGE_ROOT/usr/lib/tuxdrive" -type d -name __pycache__ -prune -exec rm -rf -- {} +
-cp "$PROJECT_ROOT/packaging/io.github.tuxdrive.TuxDrive.desktop" \
-  "$PACKAGE_ROOT/usr/share/applications/io.github.tuxdrive.TuxDrive.desktop"
-cp "$PROJECT_ROOT/packaging/tuxdrive.svg" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive.svg"
-cp "$PROJECT_ROOT/packaging/tuxdrive-sync.svg" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-sync.svg"
-cp "$PROJECT_ROOT/packaging/tuxdrive-error.svg" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-error.svg"
+cp "$PROJECT_ROOT/packaging/tuxindrive-launcher" "$PACKAGE_ROOT/usr/bin/tuxindrive"
+ln -s tuxindrive "$PACKAGE_ROOT/usr/bin/tuxindrive-doctor"
+ln -s tuxindrive "$PACKAGE_ROOT/usr/bin/tuxdrive"
+ln -s tuxindrive "$PACKAGE_ROOT/usr/bin/tuxdrive-doctor"
+cp "$PROJECT_ROOT/packaging/tuxindrive-rclone-password" "$PACKAGE_ROOT/usr/lib/tuxindrive/rclone-password"
+cp "$PROJECT_ROOT/packaging/tuxindrive-update-helper" "$PACKAGE_ROOT/usr/lib/tuxindrive/update-helper"
+cp -R "$PROJECT_ROOT/src/tuxindrive/." "$PACKAGE_ROOT/usr/lib/tuxindrive/"
+find "$PACKAGE_ROOT/usr/lib/tuxindrive" -type d -name __pycache__ -prune -exec rm -rf -- {} +
+cp "$PROJECT_ROOT/packaging/io.github.tuxindrive.TuxInDrive.desktop" \
+  "$PACKAGE_ROOT/usr/share/applications/io.github.tuxindrive.TuxInDrive.desktop"
+cp "$PROJECT_ROOT/packaging/tuxindrive.svg" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive.svg"
+cp "$PROJECT_ROOT/packaging/tuxindrive-sync.svg" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-sync.svg"
+cp "$PROJECT_ROOT/packaging/tuxindrive-error.svg" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-error.svg"
 for STATE in synced syncing streaming paused pending error; do
-  cp "$PROJECT_ROOT/packaging/emblem-tuxdrive-${STATE}.svg" \
-    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems/emblem-tuxdrive-${STATE}.svg"
+  cp "$PROJECT_ROOT/packaging/emblem-tuxindrive-${STATE}.svg" \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems/emblem-tuxindrive-${STATE}.svg"
 done
-cp "$PROJECT_ROOT/packaging/tuxdrive-google-drive.svg" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-google-drive.svg"
-cp "$PROJECT_ROOT/packaging/tuxdrive-onedrive.svg" \
-  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-onedrive.svg"
+cp "$PROJECT_ROOT/packaging/tuxindrive-google-drive.svg" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-google-drive.svg"
+cp "$PROJECT_ROOT/packaging/tuxindrive-onedrive.svg" \
+  "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-onedrive.svg"
 for PROVIDER in dropbox box pcloud mega proton-drive nextcloud github; do
-  cp "$PROJECT_ROOT/packaging/tuxdrive-${PROVIDER}.svg" \
-    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxdrive-${PROVIDER}.svg"
+  cp "$PROJECT_ROOT/packaging/tuxindrive-${PROVIDER}.svg" \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-${PROVIDER}.svg"
 done
 for SIZE in 16 24 32 48 64 128 256; do
   mkdir -p "$PACKAGE_ROOT/usr/share/icons/hicolor/${SIZE}x${SIZE}/apps"
-  cp "$PROJECT_ROOT/packaging/icons/hicolor/${SIZE}x${SIZE}/apps/tuxdrive.png" \
-    "$PACKAGE_ROOT/usr/share/icons/hicolor/${SIZE}x${SIZE}/apps/tuxdrive.png"
+  cp "$PROJECT_ROOT/packaging/icons/hicolor/${SIZE}x${SIZE}/apps/tuxindrive.png" \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/${SIZE}x${SIZE}/apps/tuxindrive.png"
 done
-cp "$PROJECT_ROOT/packaging/tuxdrive.service" \
-  "$PACKAGE_ROOT/usr/lib/systemd/user/tuxdrive.service"
-cp "$PROJECT_ROOT/packaging/nautilus-extension-tuxdrive.py" \
-  "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxdrive.py"
-cp "$PROJECT_ROOT/README.md" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/README.md"
-cp "$PROJECT_ROOT/docs/USER_GUIDE.md" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/USER_GUIDE.md"
-cp "$PROJECT_ROOT/docs/TESTING.md" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/TESTING.md"
-cp "$PROJECT_ROOT/docs/ROADMAP.md" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/ROADMAP.md"
-cp "$PROJECT_ROOT/CHANGELOG.md" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/CHANGELOG.md"
-cp -R "$PROJECT_ROOT/docs/assets/." "$PACKAGE_ROOT/usr/share/doc/tuxdrive/assets/"
-cp "$PROJECT_ROOT/branding/tuxdrive-logo.png" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/tuxdrive-logo.png"
-cp "$PROJECT_ROOT/LICENSE" "$PACKAGE_ROOT/usr/share/doc/tuxdrive/copyright"
-chmod 0755 "$PACKAGE_ROOT/usr/bin/tuxdrive"
-chmod 0755 "$PACKAGE_ROOT/usr/lib/tuxdrive/rclone-password"
-chmod 0755 "$PACKAGE_ROOT/usr/lib/tuxdrive/update-helper"
+cp "$PROJECT_ROOT/packaging/tuxindrive.service" \
+  "$PACKAGE_ROOT/usr/lib/systemd/user/tuxindrive.service"
+ln -s tuxindrive.service "$PACKAGE_ROOT/usr/lib/systemd/user/tuxdrive.service"
+cp "$PROJECT_ROOT/packaging/nautilus-extension-tuxindrive.py" \
+  "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxindrive.py"
+cp "$PROJECT_ROOT/README.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/README.md"
+cp "$PROJECT_ROOT/docs/USER_GUIDE.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/USER_GUIDE.md"
+cp "$PROJECT_ROOT/docs/TESTING.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/TESTING.md"
+cp "$PROJECT_ROOT/docs/ROADMAP.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/ROADMAP.md"
+cp "$PROJECT_ROOT/CHANGELOG.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/CHANGELOG.md"
+cp -R "$PROJECT_ROOT/docs/assets/." "$PACKAGE_ROOT/usr/share/doc/tuxindrive/assets/"
+cp "$PROJECT_ROOT/branding/tuxindrive-logo.png" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/tuxindrive-logo.png"
+cp "$PROJECT_ROOT/LICENSE" "$PACKAGE_ROOT/usr/share/doc/tuxindrive/copyright"
+chmod 0755 "$PACKAGE_ROOT/usr/bin/tuxindrive"
+chmod 0755 "$PACKAGE_ROOT/usr/lib/tuxindrive/rclone-password"
+chmod 0755 "$PACKAGE_ROOT/usr/lib/tuxindrive/update-helper"
 chmod 0755 "$PACKAGE_ROOT/DEBIAN/postinst"
 chmod 0644 "$PACKAGE_ROOT/DEBIAN/control"
-chmod 0644 "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxdrive.py"
+chmod 0644 "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxindrive.py"
 
-# Verify the exact installed layout used by /usr/bin/tuxdrive. This catches
+# Verify the exact installed layout used by /usr/bin/tuxindrive. This catches
 # PYTHONPATH/package-placement regressions before a .deb can be published.
 PYTHONPATH="$PACKAGE_ROOT/usr/lib" /usr/bin/python3 -c \
-  'import importlib.util, tuxdrive; assert tuxdrive.__version__ == "0.24.1"; assert importlib.util.find_spec("tuxdrive.app"); assert importlib.util.find_spec("tuxdrive.proton"); assert importlib.util.find_spec("tuxdrive.cache_manager"); assert importlib.util.find_spec("tuxdrive.i18n"); assert importlib.util.find_spec("tuxdrive.help_content"); assert importlib.util.find_spec("tuxdrive.themes"); assert importlib.util.find_spec("tuxdrive.folder_layout"); assert importlib.util.find_spec("tuxdrive.collaboration"); assert importlib.util.find_spec("tuxdrive.platform_support"); assert importlib.util.find_spec("tuxdrive.updater"); assert importlib.util.find_spec("tuxdrive.update_helper"); assert importlib.util.find_spec("tuxdrive.peer"); assert importlib.util.find_spec("tuxdrive.tor"); assert importlib.util.find_spec("tuxdrive.recovery"); assert importlib.util.find_spec("tuxdrive.delta"); assert importlib.util.find_spec("tuxdrive.policies"); assert importlib.util.find_spec("tuxdrive.audit"); assert importlib.util.find_spec("tuxdrive.capabilities"); assert importlib.util.find_spec("tuxdrive.migration"); assert importlib.util.find_spec("tuxdrive.security"); assert importlib.util.find_spec("tuxdrive.github_sync"); assert importlib.util.find_spec("tuxdrive.nautilus_support")'
+  'import importlib.util, tuxindrive; assert tuxindrive.__version__ == "0.25.0"; assert importlib.util.find_spec("tuxindrive.app"); assert importlib.util.find_spec("tuxindrive.proton"); assert importlib.util.find_spec("tuxindrive.cache_manager"); assert importlib.util.find_spec("tuxindrive.i18n"); assert importlib.util.find_spec("tuxindrive.help_content"); assert importlib.util.find_spec("tuxindrive.themes"); assert importlib.util.find_spec("tuxindrive.folder_layout"); assert importlib.util.find_spec("tuxindrive.collaboration"); assert importlib.util.find_spec("tuxindrive.platform_support"); assert importlib.util.find_spec("tuxindrive.updater"); assert importlib.util.find_spec("tuxindrive.update_helper"); assert importlib.util.find_spec("tuxindrive.peer"); assert importlib.util.find_spec("tuxindrive.tor"); assert importlib.util.find_spec("tuxindrive.recovery"); assert importlib.util.find_spec("tuxindrive.delta"); assert importlib.util.find_spec("tuxindrive.policies"); assert importlib.util.find_spec("tuxindrive.audit"); assert importlib.util.find_spec("tuxindrive.capabilities"); assert importlib.util.find_spec("tuxindrive.migration"); assert importlib.util.find_spec("tuxindrive.security"); assert importlib.util.find_spec("tuxindrive.github_sync"); assert importlib.util.find_spec("tuxindrive.nautilus_support")'
 
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
+cp "$OUTPUT" "$LEGACY_OUTPUT"
 printf '%s\n' "$OUTPUT"

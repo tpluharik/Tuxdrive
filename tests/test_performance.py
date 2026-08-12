@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxdrive.cache_manager import StreamingCacheManager
-from tuxdrive.callbacks import ChangeMonitor, InotifyTreeMonitor
-from tuxdrive.models import SyncJob, SyncMode
+from tuxindrive.cache_manager import StreamingCacheManager
+from tuxindrive.callbacks import ChangeMonitor, InotifyTreeMonitor
+from tuxindrive.models import SyncJob, SyncMode
 
 
 class PerformanceAndRecoveryTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class PerformanceAndRecoveryTests(unittest.TestCase):
                 self.sent = False
 
             def read(self, _timeout):
-                from tuxdrive.callbacks import LocalEvents
+                from tuxindrive.callbacks import LocalEvents
                 if not self.sent:
                     self.sent = True
                     return LocalEvents(overflow=True)
@@ -103,7 +103,7 @@ class PerformanceAndRecoveryTests(unittest.TestCase):
                 self.sent = False
 
             def read(self, timeout):
-                from tuxdrive.callbacks import LocalEvents
+                from tuxindrive.callbacks import LocalEvents
                 if not self.sent:
                     self.sent = True
                     (self.root / "retry.txt").write_text("saved", encoding="utf-8")
@@ -152,7 +152,7 @@ class PerformanceAndRecoveryTests(unittest.TestCase):
 
     def _cache_layout(self, temporary: str):
         job = SyncJob("cloud", "/mnt/cloud", mode=SyncMode.VIRTUAL_DRIVE, id="stream")
-        root = Path(temporary) / "tuxdrive" / "vfs" / job.id
+        root = Path(temporary) / "tuxindrive" / "vfs" / job.id
         data = root / "vfs" / "cloud"
         data.mkdir(parents=True)
         return job, root, data
@@ -212,8 +212,8 @@ class PerformanceAndRecoveryTests(unittest.TestCase):
             self.assertEqual(result.skipped_uncertain, 1)
 
     def test_performance_hooks_are_wired_without_weakening_mount_policy(self):
-        source = (Path(__file__).parents[1] / "src" / "tuxdrive" / "app.py").read_text(encoding="utf-8")
-        service = (Path(__file__).parents[1] / "packaging" / "tuxdrive.service").read_text(encoding="utf-8")
+        source = (Path(__file__).parents[1] / "src" / "tuxindrive" / "app.py").read_text(encoding="utf-8")
+        service = (Path(__file__).parents[1] / "packaging" / "tuxindrive.service").read_text(encoding="utf-8")
         self.assertIn("not self.activity_panel.get_expanded()", source)
         self.assertIn("_run_scheduled_refresh", source)
         self.assertIn("maintain_streaming_cache", source)

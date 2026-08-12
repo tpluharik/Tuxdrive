@@ -4,11 +4,22 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tuxdrive.config import ConfigStore
-from tuxdrive.models import Account, AppConfig, ConflictPolicy, FolderGroup, PeerShare, Provider, SyncJob, SyncMode
+from tuxindrive.config import ConfigStore, branded_root
+from tuxindrive.models import Account, AppConfig, ConflictPolicy, FolderGroup, PeerShare, Provider, SyncJob, SyncMode
 
 
 class ConfigStoreTests(unittest.TestCase):
+    def test_existing_legacy_directory_is_used_without_copying_or_losing_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = root / "tuxdrive"
+            legacy.mkdir()
+            (legacy / "config.json").write_text("{}\n", encoding="utf-8")
+            self.assertEqual(branded_root(root), legacy)
+            self.assertFalse((root / "tuxindrive").exists())
+            (root / "tuxindrive").mkdir()
+            self.assertEqual(branded_root(root), root / "tuxindrive")
+
     def test_round_trip_and_private_permissions(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "nested" / "config.json"

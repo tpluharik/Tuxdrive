@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tuxdrive.delta import BlockDeltaPlanner
+from tuxindrive.delta import BlockDeltaPlanner
 
 
 class BlockDeltaTests(unittest.TestCase):

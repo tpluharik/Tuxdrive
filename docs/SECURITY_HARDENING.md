@@ -1,24 +1,26 @@
-# TuxDrive 0.24.1 security hardening and secure operation
+# TuxInDrive 0.25.0 security hardening and secure operation
 
-This document explains the controls retained through TuxDrive 0.24.1, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
+This document explains the controls retained through TuxInDrive 0.25.0, including the second-round critical/high remediation, explicit online-only/offline retention, GitHub synchronization boundaries, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md).
 
 ## Supported baseline and immediate action
 
-Version **0.24.1** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, URI-safe Nautilus menu/badge refresh, exact Nautilus 4.1 constructor/property compatibility and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version 0.25.0 changes product identifiers without changing cryptographic trust roots or silently relocating sensitive state. Fresh installations use TuxInDrive directories; upgrades use an existing legacy directory when no new directory exists. The credential helper checks the TuxInDrive Secret Service entry first and the pre-rebrand entry second. Existing encrypted profile formats, peer invitations and hidden remote metadata remain readable. The signed update bridge retains the old repository/package alias required by 0.24.x, while accepting only the two exact official GitHub raw prefixes and a filename matching the signed version.
+
+Version **0.25.0** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots and bounded ODF/CRDT parsing while adding GitHub URL/branch validation, system-owned Git credentials, hydration rollback, exact per-file rules, explicit-selection-only availability actions, a stable non-remounting VFS policy, bounded retried FUSE reads, clean old-process retirement on package upgrade, URI-safe Nautilus menu/badge refresh, exact Nautilus 4.1 constructor/property compatibility and mount-relative local-manifest verification without reconnect-time cloud reads. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Version 0.23.0 preserves those controls while adding event-driven monitoring and cache limits. Inotify queue overflow triggers full reconciliation; executable-validation caches are invalidated by binary identity changes; atomic writes remain mandatory for changed configuration; and cache cleanup refuses to evict pinned, dirty, active, symlinked or ambiguously described objects. Invalid pin metadata disables eviction for that job rather than guessing.
 
-Upgrade, restart TuxDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
+Upgrade, restart TuxInDrive and Nautilus, verify cloud access, inspect peer authorization, run an integrity check on important jobs, and retain an independent backup. Do not continue using a package whose signed update manifest has expired or failed verification.
 
 The 0.19.1 release completes a trust-root rotation without disabling verification. The legacy `latest.json` manifest is signed by the original offline key embedded in 0.18.1 and is restricted to the 0.19.1 bridge package. Version 0.19.1 reads `latest-v2.json`, signed by the rotated offline key, for all later updates. Both private keys remain outside the repository with mode `0600`; the original key should be retired after the documented legacy-support window.
 
 ## Security control inventory
 
-| Area | 0.24.1 behavior | Security purpose |
+| Area | 0.25.0 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
-| Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxDrive JSON, ordinary arguments, and world-readable files |
-| Proton Drive authorization | Official `proton-drive auth login` browser flow; forced `keychain` credential store; session owned by Proton CLI under `ch.proton.drive/drive-sdk-cli`; `/my-files` validation; one native account | TuxDrive never receives, exports, logs, or passes the Proton password, 2FA code, or session |
+| Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxInDrive JSON, ordinary arguments, and world-readable files |
+| Proton Drive authorization | Official `proton-drive auth login` browser flow; forced `keychain` credential store; session owned by Proton CLI under `ch.proton.drive/drive-sdk-cli`; `/my-files` validation; one native account | TuxInDrive never receives, exports, logs, or passes the Proton password, 2FA code, or session |
 | Filesystem writes | Relative-path validation plus descriptor-based no-follow traversal and atomic replacement for incremental downloads, deltas, recovery, hydration, and repair | Resist traversal and symlink-swap writes outside the configured root |
 | Peer deltas | Canonical signed instructions, authorized Ed25519 signer, bounded block count/size, BLAKE2 block checks, final SHA-256, atomic install, full-file fallback | Reject unauthenticated, tampered, or resource-abusive delta transactions |
 | Tor transport | Tor-only/no-public-IP services bind loopback; explicit invitation transport allowlists; randomized per-remote SOCKS listeners; readiness checks; no silent clearnet fallback | Enforce workspace transport policy and reduce accidental address exposure |
@@ -31,7 +33,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
 | GitHub repositories | Credential-free GitHub-only URLs, validated branches/origins, noninteractive system Git credentials, fast-forward/rebase guards, conflict abort | Avoid token leakage, command injection and silent Git history overwrite |
 | Offline hydration | Root/child confinement, symlink rejection, progress-based inactivity timeout with one isolated retry, failed-pin rollback, exact file rules, stable no-remount retention, explicit nested online-only exceptions, and confined local pin manifests checked without remote reads | Avoid indefinitely blocked helpers, stale pending badges, sibling downloads, detached Nautilus views, silent reconnect downloads, false offline claims, generic-cache eviction of pinned content, and path escape |
-| CI/release | Pinned GitHub Action SHAs, 221 tests, compile checks, high-severity Bandit, `pip-audit`, Debian inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
+| CI/release | Pinned GitHub Action SHAs, 227 tests, compile checks, high-severity Bandit, `pip-audit`, Debian inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
 
 ## Dependency advisory response
 
@@ -48,31 +50,31 @@ Never interpret a green dependency audit as proof that application logic is safe
 
 | Data | Normal location | Protection and backup advice |
 |---|---|---|
-| TuxDrive settings | `~/.config/tuxdrive/config.json` | Mode `0600`; contains job/account metadata, paths, peer public material, and policy—not the managed rclone config password |
+| TuxInDrive settings | `~/.config/tuxindrive/config.json` | Mode `0600`; contains job/account metadata, paths, peer public material, and policy—not the managed rclone config password |
 | rclone configuration | `~/.config/rclone/rclone.conf` | Authenticated encrypted form; treat as sensitive even when encrypted |
-| rclone config password | GNOME Secret Service entry `TuxDrive rclone configuration` | Do not delete or copy into scripts; include in a tested device-migration plan |
-| Peer private identity | TuxDrive private data directory | Mode `0600`; never send it—exchange only public keys and verified fingerprints |
-| Tor service/client authorization | Private TuxDrive Tor state | Treat client invitations/QR as passwords; revoke unused devices and account for Tor reload timing |
+| rclone config password | GNOME Secret Service entry `TuxInDrive rclone configuration` | Do not delete or copy into scripts; include in a tested device-migration plan |
+| Peer private identity | TuxInDrive private data directory | Mode `0600`; never send it—exchange only public keys and verified fingerprints |
+| Tor service/client authorization | Private TuxInDrive Tor state | Treat client invitations/QR as passwords; revoke unused devices and account for Tor reload timing |
 | Update signing private key | Offline release environment only | Never commit, ship, log, or store beside public artifacts |
-| Recovery/version data | `~/.local/share/tuxdrive/recovery` and remote `.tuxdrive-versions` | Sensitive filenames/content may be retained; include it in retention and secure-erasure policy |
-| Logs and audit | `~/.local/state/tuxdrive`, `~/.cache/tuxdrive/logs`, `~/.local/share/tuxdrive/audit.jsonl` | Private permissions; may reveal paths, peer names, timing, errors, and operational metadata |
+| Recovery/version data | `~/.local/share/tuxindrive/recovery` and remote hidden compatibility version metadata | Sensitive filenames/content may be retained; include it in retention and secure-erasure policy |
+| Logs and audit | `~/.local/state/tuxindrive`, `~/.cache/tuxindrive/logs`, `~/.local/share/tuxindrive/audit.jsonl` | Private permissions; may reveal paths, peer names, timing, errors, and operational metadata |
 
 ## Upgrade and migration behavior
 
-On first secure rclone use, TuxDrive detects an unencrypted managed configuration, generates a random password, stores it in GNOME Secret Service, asks rclone to encrypt the configuration, and records a private managed marker. An already encrypted advanced-user setup is preserved. If Secret Service is unavailable, configuration migration must fail visibly rather than writing a password into TuxDrive JSON.
+On first secure rclone use, TuxInDrive detects an unencrypted managed configuration, generates a random password, stores it in GNOME Secret Service, asks rclone to encrypt the configuration, and records a private managed marker. An already encrypted advanced-user setup is preserved. If Secret Service is unavailable, configuration migration must fail visibly rather than writing a password into TuxInDrive JSON.
 
 Existing jobs, provider remotes, peer public metadata, recovery data, and version-1 encrypted profile backups remain usable. Create new profile backups after upgrading so they receive the stronger version-2 scrypt parameters. Test restore on non-critical data before deleting an older backup.
 
 ### Official Proton Drive boundary
 
-Version 0.24.1 replaces new and reconnected Proton/rclone credential login with Proton's official CLI and repairs clean-machine bootstrap. TuxDrive accepts the release manifest only from Proton's exact HTTPS endpoint, selects only the supported amd64/arm64 Linux path, bounds both manifest and binary size, and installs the executable only after constant-time comparison with Proton's published SHA-512 checksum. Partial or mismatched downloads are discarded, replacement is atomic, and the managed tool directory/executable use private permissions. TuxDrive removes `PROTON_DRIVE_CACHE_DIR` from the child environment and forces `PROTON_DRIVE_CREDENTIALS_STORE=keychain`, preventing inherited `unsafe_file` test configuration from writing a plaintext session. Installation and browser authorization are cancellable; validation and every file operation use bounded subprocess timeouts. Diagnostic reflection removes authorization URLs and token/session/cookie assignments.
+Version 0.24.1 replaces new and reconnected Proton/rclone credential login with Proton's official CLI and repairs clean-machine bootstrap. TuxInDrive accepts the release manifest only from Proton's exact HTTPS endpoint, selects only the supported amd64/arm64 Linux path, bounds both manifest and binary size, and installs the executable only after constant-time comparison with Proton's published SHA-512 checksum. Partial or mismatched downloads are discarded, replacement is atomic, and the managed tool directory/executable use private permissions. TuxInDrive removes `PROTON_DRIVE_CACHE_DIR` from the child environment and forces `PROTON_DRIVE_CREDENTIALS_STORE=keychain`, preventing inherited `unsafe_file` test configuration from writing a plaintext session. Installation and browser authorization are cancellable; validation and every file operation use bounded subprocess timeouts. Diagnostic reflection removes authorization URLs and token/session/cookie assignments.
 
 All remote paths are confined to `/my-files`; unsafe path components and control characters are rejected. Remote entry names cannot contain separators or traversal components. Local synchronization refuses symlink roots or descendants before the official CLI writes, honors nested/transient exclusions, checks persisted local/remote snapshots for mass changes before transfer, and stores those snapshots atomically with mode `0600`. Proton jobs never enter rclone callback or mount paths. Because Proton's official CLI has no mount or atomic sync API, files-on-demand and real-time callbacks are disabled. One-sided deletions are restored instead of propagated, prioritizing recoverability; live-provider tests remain required before relying on the backend for unique data.
 
 ## Trust boundaries and residual risk
 
-- TuxDrive cannot protect files after malware or another process compromises the desktop user account.
-- Provider OAuth and rclone still grant the configured cloud permissions. A malicious provider, revoked token, policy change, or provider-side corruption remains outside TuxDrive's control.
+- TuxInDrive cannot protect files after malware or another process compromises the desktop user account.
+- Provider OAuth and rclone still grant the configured cloud permissions. A malicious provider, revoked token, policy change, or provider-side corruption remains outside TuxInDrive's control.
 - Tor hides direct routing in Tor-only mode but does not guarantee anonymity against endpoint compromise, traffic correlation, invitation leakage, or a global observer.
 - Relays see addresses, timing, connection duration, and byte volume even when they cannot decrypt nested SFTP content.
 - Local recovery, cache, names, logs, and audit records expose operational metadata unless the endpoint/storage is separately protected.
@@ -86,13 +88,13 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.24.1 and the update check reports a valid signature and expiry.
+2. Confirm the running version is 0.25.0 and the update check reports a valid signature and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.
 6. Exercise restore, conflict review, integrity verification, and ransomware/mass-change pause with test files.
 7. Inspect logs for repeated authentication failures, policy blocks, unexpected fallback attempts, delta signature failures, and update verification errors.
-8. Maintain an offline or immutable backup and document recovery objectives separately from TuxDrive's convenience history.
+8. Maintain an offline or immutable backup and document recovery objectives separately from TuxInDrive's convenience history.
 
 ## Maintainer release verification
 

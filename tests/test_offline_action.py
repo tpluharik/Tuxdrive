@@ -2,7 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxdrive.nautilus_support import (
+from tuxindrive.nautilus_support import (
     availability_route,
     command_line_path,
     is_available_offline,

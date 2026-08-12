@@ -2,8 +2,8 @@ import unittest
 from datetime import datetime
 from unittest.mock import patch
 
-from tuxdrive.models import AppSettings
-from tuxdrive.policies import TransferPolicy
+from tuxindrive.models import AppSettings
+from tuxindrive.policies import TransferPolicy
 
 
 class TransferPolicyTests(unittest.TestCase):

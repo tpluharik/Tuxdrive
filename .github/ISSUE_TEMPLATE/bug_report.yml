@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible TuxDrive failure or incorrect behaviour
+description: Report a reproducible TuxInDrive failure or incorrect behaviour
 title: "[Bug]: "
 labels: ["bug"]
 body:
@@ -10,8 +10,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: TuxDrive version
-      description: Run `tuxdrive --version` or provide the installed package version.
+      label: TuxInDrive version
+      description: Run `tuxindrive --version` or provide the installed package version.
       placeholder: "0.14.0"
     validations:
       required: true

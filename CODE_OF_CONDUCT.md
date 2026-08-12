@@ -1,6 +1,6 @@
-# TuxDrive Community Code of Conduct
+# TuxInDrive Community Code of Conduct
 
-TuxDrive welcomes constructive participation from users, testers, designers, documenters, and developers.
+TuxInDrive welcomes constructive participation from users, testers, designers, documenters, and developers.
 
 Participants must:
 
@@ -13,4 +13,3 @@ Participants must:
 Maintainers may edit, hide, lock, or remove content and may restrict participation when necessary to protect the project and its community.
 
 Report conduct concerns to the repository owner through their GitHub profile. Include links and relevant context, but do not publicly repost harmful or private material.
-

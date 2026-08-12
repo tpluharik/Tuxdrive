@@ -53,8 +53,8 @@ def load_extension():
     )
     gi.repository = repository
     spec = importlib.util.spec_from_file_location(
-        "tuxdrive_nautilus_extension_test",
-        Path("packaging/nautilus-extension-tuxdrive.py"),
+        "tuxindrive_nautilus_extension_test",
+        Path("packaging/nautilus-extension-tuxindrive.py"),
     )
     module = importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules, {"gi": gi, "gi.repository": repository}):
@@ -64,6 +64,15 @@ def load_extension():
 
 
 class NautilusExtensionTests(unittest.TestCase):
+    def test_existing_legacy_metadata_directory_remains_visible(self):
+        extension = load_extension()
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            legacy = root / "tuxdrive"
+            legacy.mkdir()
+            self.assertEqual(extension._brand_root(root), legacy)
+            self.assertFalse((root / "tuxindrive").exists())
+
     def test_file_rule_does_not_tag_siblings_or_parent(self):
         extension = load_extension()
         self.assertTrue(extension._matches_rule("folder/one.txt", ["folder/one.txt"]))
@@ -73,6 +82,13 @@ class NautilusExtensionTests(unittest.TestCase):
     def test_transient_metadata_read_keeps_last_valid_menu_jobs(self):
         extension = load_extension()
         job = {"id": "drive", "local_path": "/mnt/Cloud", "mode": "virtual_drive"}
+        with patch.object(
+            extension,
+            "_state_document",
+            return_value={"__tuxindrive__": {"nautilus_integration": True, "jobs": [job]}},
+        ):
+            self.assertEqual(extension._jobs(), [job])
+
         with patch.object(
             extension,
             "_state_document",
@@ -91,7 +107,7 @@ class NautilusExtensionTests(unittest.TestCase):
         extension = load_extension()
         state = {
             "drive": {"offline_paths": ["folder/one.txt"]},
-            "__tuxdrive__": {
+            "__tuxindrive__": {
                 "nautilus_integration": True,
                 "jobs": [{"id": "drive", "local_path": "/mnt/Cloud"}],
             },
@@ -106,7 +122,7 @@ class NautilusExtensionTests(unittest.TestCase):
             self.assertEqual(extension._runtime_states()["drive"]["offline_paths"], ["folder/one.txt"])
 
     def test_background_menu_cannot_trigger_recursive_offline_action(self):
-        source = Path("packaging/nautilus-extension-tuxdrive.py").read_text(encoding="utf-8")
+        source = Path("packaging/nautilus-extension-tuxindrive.py").read_text(encoding="utf-8")
         self.assertIn("return self._menu_items(files, allow_availability=True)", source)
         self.assertIn(
             "return self._menu_items([current_folder], allow_availability=False)",
@@ -115,7 +131,7 @@ class NautilusExtensionTests(unittest.TestCase):
 
     def test_completed_file_keeps_root_menu_and_exposes_online_only_action(self):
         extension = load_extension()
-        provider = object.__new__(extension.TuxDriveExtension)
+        provider = object.__new__(extension.TuxInDriveExtension)
         job = {
             "id": "drive",
             "local_path": "/mnt/Cloud",
@@ -139,13 +155,13 @@ class NautilusExtensionTests(unittest.TestCase):
             menu = provider._menu_items([object()], allow_availability=True)
 
         self.assertEqual(len(menu), 1)
-        self.assertEqual(menu[0].values["label"], "TuxDrive")
+        self.assertEqual(menu[0].values["label"], "TuxInDrive")
         labels = [item.values["label"] for item in menu[0].submenu.items]
         self.assertIn("Free local space (make online-only)", labels)
 
     def test_pending_file_sets_supported_sensitive_property_after_construction(self):
         extension = load_extension()
-        provider = object.__new__(extension.TuxDriveExtension)
+        provider = object.__new__(extension.TuxInDriveExtension)
         job = {
             "id": "drive",
             "local_path": "/mnt/Cloud",
@@ -170,14 +186,14 @@ class NautilusExtensionTests(unittest.TestCase):
 
         online_only = next(
             item for item in menu[0].submenu.items
-            if item.values["name"] == "TuxDrive::OnlineOnly"
+            if item.values["name"] == "TuxInDrive::OnlineOnly"
         )
         self.assertEqual(online_only.values["label"], "Downloading for offline availability…")
         self.assertFalse(online_only.values["sensitive"])
 
     def test_completed_file_does_not_pass_sensitive_to_nautilus_constructor(self):
         extension = load_extension()
-        provider = object.__new__(extension.TuxDriveExtension)
+        provider = object.__new__(extension.TuxInDriveExtension)
         job = {
             "id": "drive",
             "local_path": "/mnt/Cloud",
@@ -202,14 +218,14 @@ class NautilusExtensionTests(unittest.TestCase):
 
         online_only = next(
             item for item in menu[0].submenu.items
-            if item.values["name"] == "TuxDrive::OnlineOnly"
+            if item.values["name"] == "TuxInDrive::OnlineOnly"
         )
         self.assertEqual(online_only.values["label"], "Free local space (make online-only)")
         self.assertTrue(online_only.values["sensitive"])
 
     def test_metadata_burst_rebuilds_menu_and_reacquires_current_file_info(self):
         extension = load_extension()
-        provider = object.__new__(extension.TuxDriveExtension)
+        provider = object.__new__(extension.TuxInDriveExtension)
         provider._invalidation_source = 0
         provider._known_uris = {}
         changed = types.SimpleNamespace(get_basename=lambda: "nautilus-state.json")
@@ -249,7 +265,7 @@ class NautilusExtensionTests(unittest.TestCase):
 
     def test_info_provider_retains_only_uri_not_caller_owned_file_info(self):
         extension = load_extension()
-        provider = object.__new__(extension.TuxDriveExtension)
+        provider = object.__new__(extension.TuxInDriveExtension)
         provider._known_uris = {}
 
         class Location:

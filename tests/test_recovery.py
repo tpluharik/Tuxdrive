@@ -3,9 +3,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from tuxdrive.callbacks import FileChange
-from tuxdrive.models import SyncJob
-from tuxdrive.recovery import IntegrityAuditor, MassChangeGuard, RecoveryManager
+from tuxindrive.callbacks import FileChange
+from tuxindrive.models import SyncJob
+from tuxindrive.recovery import IntegrityAuditor, MassChangeGuard, RecoveryManager
 
 
 class RecoveryTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class RecoveryTests(unittest.TestCase):
         encrypted = [FileChange(f"victim-{index}.locked", "local") for index in range(5)]
         self.assertTrue(MassChangeGuard.assess(self.job, encrypted, 100).blocked)
 
-    @mock.patch("tuxdrive.recovery.subprocess.run")
+    @mock.patch("tuxindrive.recovery.subprocess.run")
     def test_integrity_audit_parses_actionable_differences(self, run):
         run.return_value = mock.Mock(returncode=1, stdout="= same\n* changed\n+ local\n- cloud\n", stderr="")
         auditor = IntegrityAuditor("rclone", self.manager)

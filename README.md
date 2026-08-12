@@ -1,8 +1,8 @@
-# TuxDrive
+# TuxInDrive
 
-<p align="center"><img src="branding/tuxdrive-logo.png" width="180" alt="TuxDrive black-and-white penguin head logo"></p>
+<p align="center"><img src="branding/tuxindrive-logo.png" width="180" alt="TuxInDrive black-and-white penguin head logo"></p>
 
-TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. It combines a GTK desktop interface with rclone's mature cloud backends, Proton's official browser-authenticated Drive CLI, system Git, and provider-native authorization.
+TuxInDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. It combines a GTK desktop interface with rclone's mature cloud backends, Proton's official browser-authenticated Drive CLI, system Git, and provider-native authorization.
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
@@ -10,20 +10,26 @@ TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDriv
 
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
+## TuxInDrive rebrand and upgrade compatibility
+
+Version 0.25.0 completes the product and repository rename from TuxDrive to TuxInDrive. The application, executable, desktop ID, service, Nautilus integration, icons, translations, package filename, documentation, and development namespace now use TuxInDrive. Existing installations continue to read their private legacy configuration/state directories, Secret Service entry, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
+
+The old `tuxdrive` executable and user-service names remain aliases for upgrade continuity. The Debian package identity and signed download alias intentionally remain legacy compatibility identifiers so the already released 0.24.x updater can authenticate and install 0.25.0 after the GitHub repository rename.
+
 ## Community and development
 
-TuxDrive is publicly readable. Direct repository writes remain restricted to maintainers, while everyone can participate through [Issues](https://github.com/tpluharik/Tuxdrive/issues), comments, forks, and pull requests.
+TuxInDrive is publicly readable. Direct repository writes remain restricted to maintainers, while everyone can participate through [Issues](https://github.com/tpluharik/TuxInDrive/issues), comments, forks, and pull requests.
 
-- [Report a bug](https://github.com/tpluharik/Tuxdrive/issues/new?template=bug_report.yml)
-- [Suggest a feature](https://github.com/tpluharik/Tuxdrive/issues/new?template=feature_request.yml)
+- [Report a bug](https://github.com/tpluharik/TuxInDrive/issues/new?template=bug_report.yml)
+- [Suggest a feature](https://github.com/tpluharik/TuxInDrive/issues/new?template=feature_request.yml)
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.24.1 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
+Version 0.25.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxInDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
 
 Version 0.23.0 also contains the completed performance redesign: event-driven local monitoring with overflow reconciliation, adaptive remote polling, incremental/coalesced GTK updates, visibility-aware activity tails, unchanged-state write suppression, conditional LAN discovery, executable-identity validation caching and conservative pin-aware streaming-cache quotas. These optimizations retain full reconciliation, atomic changed-state writes, signed update verification, mass-change protection, conflict handling and path-confinement controls.
 
-Version 0.24.1 makes the official Proton CLI usable on a clean installation. **Connect account → Proton Drive → Install CLI and connect** reads Proton's live release manifest, selects the official Linux binary for amd64 or arm64, verifies Proton's published SHA-512 checksum, installs it privately for the current user, and opens Proton's browser sign-in. Passwords and two-factor codes never enter TuxDrive, and the official CLI stores its session in Linux Secret Service. Scheduled two-way, download-only and upload-only folder synchronization use `/my-files`, machine-readable CLI output, nested exception filtering, pre-transfer mass-change checks, symlink/path confinement and redacted errors. Proton streaming is disabled because the official CLI exposes no mount API. Native Proton synchronization is intentionally non-destructive: one-sided deletions are restored rather than propagated, while replacements retain Proton versions and TuxDrive's configured conflict policy.
+Version 0.24.1 makes the official Proton CLI usable on a clean installation. **Connect account → Proton Drive → Install CLI and connect** reads Proton's live release manifest, selects the official Linux binary for amd64 or arm64, verifies Proton's published SHA-512 checksum, installs it privately for the current user, and opens Proton's browser sign-in. Passwords and two-factor codes never enter TuxInDrive, and the official CLI stores its session in Linux Secret Service. Scheduled two-way, download-only and upload-only folder synchronization use `/my-files`, machine-readable CLI output, nested exception filtering, pre-transfer mass-change checks, symlink/path confinement and redacted errors. Proton streaming is disabled because the official CLI exposes no mount API. Native Proton synchronization is intentionally non-destructive: one-sided deletions are restored rather than propagated, while replacements retain Proton versions and TuxInDrive's configured conflict policy.
 
 ### Current security baseline
 
@@ -31,7 +37,7 @@ Version 0.24.1 makes the official Proton CLI usable on a clean installation. **C
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.24.1:
+The following controls are enforced in 0.25.0:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -39,22 +45,22 @@ The following controls are enforced in 0.24.1:
 - Block-delta instructions are signed with the sender's Ed25519 peer identity and accepted only from an authorized device; unavailable delta signing safely falls back to a complete file transfer.
 - Encrypted profile backups use a stronger scrypt work factor and 14-character minimum for new backups while retaining read compatibility with version-1 profiles.
 - OAuth/configuration subprocesses disable same-user process inspection on Linux; logs/configuration files use explicit private permissions; the launcher runs Python in isolated mode.
-- Provider tokens/passwords for rclone-backed services are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to application JSON. Proton's official CLI separately owns its browser session in Linux Secret Service; TuxDrive never reads or exports it.
+- Provider tokens/passwords for rclone-backed services are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to application JSON. Proton's official CLI separately owns its browser session in Linux Secret Service; TuxInDrive never reads or exports it.
 - Each authorized peer key receives an isolated listener and authorization file. Read-only/receive-only restrictions are applied by the server, while send-only and one-time-drop devices are rooted in private inboxes rather than the shared workspace.
 - Collaborative operation logs and ODT/ODS imports have explicit count, byte, compression-ratio and schema limits; unsafe XML entities are rejected before document processing.
 - GitHub synchronization accepts only credential-free `github.com` HTTPS or SSH clone URLs, validates branch names, disables interactive credential prompts, and delegates secrets to the system SSH agent or Git credential helper.
 
 ### 0.24.1 official Proton Drive browser authorization
 
-- Choose **Connect account → Proton Drive → Install CLI and connect**. TuxDrive downloads only the platform binary named in [Proton's official CLI manifest](https://proton.me/download/drive/cli/index.html), verifies its published SHA-512 checksum, stores it under the current user's private TuxDrive data, then starts browser authorization. Complete password and 2FA entry only on Proton's page; TuxDrive validates `/my-files` before saving the account.
+- Choose **Connect account → Proton Drive → Install CLI and connect**. TuxInDrive downloads only the platform binary named in [Proton's official CLI manifest](https://proton.me/download/drive/cli/index.html), verifies its published SHA-512 checksum, stores it under the current user's private TuxInDrive data, then starts browser authorization. Complete password and 2FA entry only on Proton's page; TuxInDrive validates `/my-files` before saving the account.
 - The official CLI supports one active Proton account session. Reconnect replaces that session safely. Existing legacy Proton/rclone jobs are paused until browser migration succeeds; the legacy encrypted rclone remote is then removed when possible.
 - Choose two-way, download-only or upload-only synchronization. Proton jobs run on the configured schedule, never start rclone callbacks, and cannot select Streaming drive. The system check reports whether the optional official CLI is installed.
 
 ### 0.21.1 drag-and-drop groups, online-only/offline availability and GitHub
 
-- Right-click a streamed file, folder, or drive root and choose **Keep available offline**. Blue arrows remain while TuxDrive explicitly reads the complete selection into the durable VFS cache; a green check appears only after local verification. Reconnects never start that download automatically. Choose **Free local space (make online-only)** to remove the rule and cached bytes. A child can be made online-only even when its parent is pinned. The streaming-job button in TuxDrive provides a whole-drive fallback if Nautilus integration is unavailable.
+- Right-click a streamed file, folder, or drive root and choose **Keep available offline**. Blue arrows remain while TuxInDrive explicitly reads the complete selection into the durable VFS cache; a green check appears only after local verification. Reconnects never start that download automatically. Choose **Free local space (make online-only)** to remove the rule and cached bytes. A child can be made online-only even when its parent is pinned. The streaming-job button in TuxInDrive provides a whole-drive fallback if Nautilus integration is unavailable.
 - Pinning or releasing one item never reconnects the streaming mount. File rules are exact; folder and drive-root rules are recursive only when those objects are explicitly selected. The stable retention cache is released through the per-item or whole-drive online-only controls.
-- Select **New group** to create list-only groups such as Work, Personal, or Customers. Press the three-line handle on a synchronized-folder row, move the pointer, then release above/below another folder or on a group header. TuxDrive 0.21.1 transfers the row identifier through GTK's recognized same-application text target so the drop completes instead of ending after the initial selection gesture. Select the group arrow to minimize it: full rows are hidden and one provider icon per synchronized folder remains beside the group name. The saved order, membership and minimized state survive restarts. **Group** remains an accessible dialog alternative. Renaming, reordering, grouping, minimizing or deleting groups never moves or deletes files.
+- Select **New group** to create list-only groups such as Work, Personal, or Customers. Press the three-line handle on a synchronized-folder row, move the pointer, then release above/below another folder or on a group header. TuxInDrive 0.21.1 transfers the row identifier through GTK's recognized same-application text target so the drop completes instead of ending after the initial selection gesture. Select the group arrow to minimize it: full rows are hidden and one provider icon per synchronized folder remains beside the group name. The saved order, membership and minimized state survive restarts. **Group** remains an accessible dialog alternative. Renaming, reordering, grouping, minimizing or deleting groups never moves or deletes files.
 - Select **Connect account → GitHub**, enter a credential-free repository URL, branch, local folder, mode, and commit identity. Two-way mode automatically commits local changes, fetches, rebases and pushes. Configure an SSH key or system Git credential helper for private/write access.
 
 ### 0.22.0 selectable visual designs
@@ -67,7 +73,7 @@ The following controls are enforced in 0.24.1:
 
 - Publish a peer workspace as a persistent or ephemeral Tor v3 Onion Service without opening an inbound public port.
 - Issue and revoke a separate Onion client credential for each named device, carried by the existing offline invitation/QR workflow and protected again by pinned SSH identities.
-- Enforce direct-only or Tor-only operation plus no-relay, no-public-IP-discovery and never-provider-cloud restrictions. TuxDrive records a blocked audit event instead of silently switching transports.
+- Enforce direct-only or Tor-only operation plus no-relay, no-public-IP-discovery and never-provider-cloud restrictions. TuxInDrive records a blocked audit event instead of silently switching transports.
 - Configure advanced bridge/pluggable-transport profiles without copying bridge material into invitations, command lines, or application logs.
 
 ### 0.9.0 release highlights
@@ -76,7 +82,7 @@ This release expands private collaboration: each shared folder can authorize mul
 
 ### 0.10.0 desktop integration
 
-Nautilus now shows TuxDrive status metadata and a right-click **TuxDrive** submenu for configured folders and their contents. It can show the job in TuxDrive, run its safety-checked synchronization, or open activity logs. Actions are sent to the single running application instance; if needed, Nautilus starts TuxDrive in the background and waits until its transfer runtime is ready.
+Nautilus now shows TuxInDrive status metadata and a right-click **TuxInDrive** submenu for configured folders and their contents. It can show the job in TuxInDrive, run its safety-checked synchronization, or open activity logs. Actions are sent to the single running application instance; if needed, Nautilus starts TuxInDrive in the background and waits until its transfer runtime is ready.
 
 Version 0.10.1 hardens that integration against disconnected FUSE endpoints: the extension performs no path-resolution I/O, unexpected streaming exits detach stale kernel mounts immediately, and startup recovers orphaned configured mounts before reconnecting.
 
@@ -96,19 +102,19 @@ Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invit
 
 ### 0.14.0 encrypted profiles and device migration
 
-TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new device, connect the same provider and restore from Settings. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its password never leaves the device. OAuth tokens and peer private keys remain excluded unless the user explicitly enables sensitive full-device migration.
+TuxInDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new device, connect the same provider and restore from Settings. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its password never leaves the device. OAuth tokens and peer private keys remain excluded unless the user explicitly enables sensitive full-device migration.
 
 ## What works
 
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
-- encrypted TuxDrive Profile backup stored in a linked OAuth account, with discovery after provider connection and password-protected restore on a new device
+- encrypted TuxInDrive Profile backup stored in a linked OAuth account, with discovery after provider connection and password-protected restore on a new device
 - configuration-only backup by default; OAuth credentials and peer private keys require an explicit sensitive-migration opt-in
 - provider-native browser OAuth where available, Proton's official browser-authenticated CLI, plus guided credential or app-password configuration for MEGA and Nextcloud
-- Proton Drive authorization never accepts a password or two-factor code in TuxDrive; the official CLI stores its single active session under service `ch.proton.drive/drive-sdk-cli` in Linux Secret Service and `/my-files` is tested before the account is saved
+- Proton Drive authorization never accepts a password or two-factor code in TuxInDrive; the official CLI stores its single active session under service `ch.proton.drive/drive-sdk-cli` in Linux Secret Service and `/my-files` is tested before the account is saved
 - scheduled non-streaming Proton synchronization through official upload/download operations, with nested exceptions, symlink refusal, redacted diagnostics, mass-change protection and non-destructive deletion behavior
-- direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
+- direct peer-to-peer collaborative folders between two TuxInDrive computers over encrypted SFTP, with no intermediary file server
 - block-level peer delta transactions signed by the sender identity, with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and safe full-file fallback
-- automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
+- automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxInDrive keys
 - multi-peer shared folders with named device keys, enable/disable controls, immediate revocation, and an isolated authenticated server endpoint per device
 - per-device read/write, read-only, send-only and receive-only roles enforced at both transfer and SFTP server boundaries; send-only devices see only their dedicated inbox
 - expiring, dedicated-root encrypted file-drop invitations that cannot browse the containing workspace and retire after the first received file
@@ -119,7 +125,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - optional LAN multicast discovery with host-key fingerprint confirmation and no central discovery service
 - offline QR invitation display and QR-image import; no online QR service receives pairing data
 - generated Ed25519 identities, exchanged public keys, host-key pinning, editable IP/DNS address and port, and per-share folder selection
-- OAuth 2.0 authorization in the default web browser for Google Drive, OneDrive, Dropbox, Box, and pCloud—no provider password is given to TuxDrive for those OAuth flows
+- OAuth 2.0 authorization in the default web browser for Google Drive, OneDrive, Dropbox, Box, and pCloud—no provider password is given to TuxInDrive for those OAuth flows
 - multiple accounts from either provider
 - two-way synchronization with retained conflict copies
 - per-job local version history and recycle recovery with configurable retention and one-click restore
@@ -141,7 +147,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - debounced change handling, move/delete propagation, and full-sync fallback for simultaneous conflicts
 - automatic suppression of LibreOffice, Microsoft Office, browser, editor, and partial-download temporary files
 - pause/resume, sync now, cancellation, and tray controls
-- native Nautilus 4 status/emblem integration and context actions for configured TuxDrive paths
+- native Nautilus 4 status/emblem integration and context actions for configured TuxInDrive paths
 - Nautilus integration can be disabled in Settings and is enabled by default
 - optional metered-network, battery-threshold and daily schedule policies; unrestricted maximum transfer usage remains the default
 - live Nautilus state transitions and safe **Open online/cloud folder** navigation without public-link creation
@@ -153,7 +159,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - import of existing Google Drive and OneDrive remotes from rclone
 - live in-app activity and synchronization logs
 - account, folder, and tray icons with connected, synchronizing, paused, and error states
-- original TuxDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
+- original TuxInDrive penguin branding throughout the launcher, windows, tray, dialogs, installer, and documentation
 - provider-specific icons for all eight services in account selection and connected-account views
 - in-app repository update checks with an Ed25519-signed expiring manifest, HTTPS download, SHA-256 verification, Debian identity check, and an independently verifying root-side PolicyKit helper
 - update window with visible checking, download percentage, verification, installation, success, and failure states
@@ -166,16 +172,16 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.24.1_all.deb
+sudo apt install ./tuxindrive_0.25.0_all.deb
 ```
 
-Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
+Open **TuxInDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
 
-For a streaming drive, choose an empty mount folder. It may be a child of a normal synchronized tree, for example `~/Tuxdrive/tpluarikgdrive/Online`, and TuxDrive automatically excludes that subtree from the parent sync. A streaming drive must not be the parent of another sync job. Once connected, opening the mount folder loads the remote directory tree while file bodies remain online until opened.
+For a streaming drive, choose an empty mount folder. It may be a child of a normal synchronized tree, for example `~/TuxInDrive/tpluarikgdrive/Online`, and TuxInDrive automatically excludes that subtree from the parent sync. A streaming drive must not be the parent of another sync job. Once connected, opening the mount folder loads the remote directory tree while file bodies remain online until opened.
 
-For direct collaboration, open the network icon in TuxDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxDrive pins the host public key and verifies the peer before starting two-way synchronization. Automatic NAT mapping is attempted by default. Where direct reachability is impossible, configure an SSH relay account and public forwarding port; the relay carries nested encrypted SFTP traffic without receiving file keys or retaining content.
+For direct collaboration, open the network icon in TuxInDrive. Both users copy and exchange their public identity keys through a trusted channel. One user selects **Share a folder**, enters the reachable IP/DNS address and port, and copies the invitation; the other selects **Connect to a peer**, loads that invitation, chooses a local folder, and connects. TuxInDrive pins the host public key and verifies the peer before starting two-way synchronization. Automatic NAT mapping is attempted by default. Where direct reachability is impossible, configure an SSH relay account and public forwarding port; the relay carries nested encrypted SFTP traffic without receiving file keys or retaining content.
 
-APT installs the secure graphical core and normally installs supported optional recommendations. The same package adapts when an integration is unavailable; check the actual logged-in desktop with `tuxdrive --system-check`. TuxDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts. See the [distribution compatibility table and adaptive installation guide](docs/PLATFORM_SUPPORT.md).
+APT installs the secure graphical core and normally installs supported optional recommendations. The same package adapts when an integration is unavailable; check the actual logged-in desktop with `tuxindrive --system-check`. TuxInDrive installs a pinned, SHA-256-verified rclone engine into the user's private application directory when needed. Virtual drives require FUSE access; on managed systems an administrator may need to permit user mounts. See the [distribution compatibility table and adaptive installation guide](docs/PLATFORM_SUPPORT.md).
 
 ## Build from source
 
@@ -184,11 +190,11 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.24.1_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxindrive_0.25.0_all.deb`. TuxInDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
-Open **Peer-to-peer sharing → Collaborate → Open collaborative editor**. Markdown and plain text changes are stored as immutable per-device CRDT operations under `.tuxdrive-collaboration`, so offline peers converge after the containing folder synchronizes. **Merge peer changes** records local edits and merges remote operations; **Export checkpoint** updates the ordinary `.md`/`.txt` file for any editor. Optional presence is AES-256-GCM encrypted, expires quickly and is not copied to the long-lived audit timeline. Comments, suggestions, tracked-change records, approvals, mentions and tasks are immutable workspace review events.
+Open **Peer-to-peer sharing → Collaborate → Open collaborative editor**. Markdown and plain text changes are stored as immutable per-device CRDT operations in a hidden compatibility operation store, so offline peers converge after the containing folder synchronizes. **Merge peer changes** records local edits and merges remote operations; **Export checkpoint** updates the ordinary `.md`/`.txt` file for any editor. Optional presence is AES-256-GCM encrypted, expires quickly and is not copied to the long-lived audit timeline. Comments, suggestions, tracked-change records, approvals, mentions and tasks are immutable workspace review events.
 
 ODT paragraphs/styles/comments/tracked-change markers and ODS cells/formulas are imported structurally. Deterministic export retains the original `content.xml` inside the snapshot for recovery and warns where unsupported inline features may flatten. DOCX, XLSX, PDF and unknown binary formats deliberately remain under edit leases, local versions and review rather than making an unsafe real-time claim.
 
@@ -206,24 +212,24 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 ## Update from the app
 
-Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
+Open **Settings → Check for updates**. TuxInDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxInDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.24.1 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.25.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 
-TuxDrive logs before importing any GUI libraries, so even early startup failures leave evidence:
+TuxInDrive logs before importing any GUI libraries, so even early startup failures leave evidence:
 
-- `~/.local/state/tuxdrive/startup.log` — launcher output and missing-runtime errors
-- `~/.local/state/tuxdrive/tuxdrive.log` — rotating application and synchronization lifecycle log
-- `~/.local/state/tuxdrive/crash.log` — uncaught Python/thread exceptions and native fault traces
-- `~/.cache/tuxdrive/logs/` — individual rclone synchronization logs
+- `~/.local/state/tuxindrive/startup.log` — launcher output and missing-runtime errors
+- `~/.local/state/tuxindrive/tuxindrive.log` — rotating application and synchronization lifecycle log
+- `~/.local/state/tuxindrive/crash.log` — uncaught Python/thread exceptions and native fault traces
+- `~/.cache/tuxindrive/logs/` — individual rclone synchronization logs
 
-Run `tuxdrive --diagnostics` to print the main diagnostic locations.
+Run `tuxindrive --diagnostics` to print the main diagnostic locations.
 
 ## OAuth application configuration
 
-TuxDrive can use rclone's default OAuth application configuration for personal installations. For production distribution or organizational deployment, register dedicated desktop OAuth applications and enter the client ID and secret in the connection dialog:
+TuxInDrive can use rclone's default OAuth application configuration for personal installations. For production distribution or organizational deployment, register dedicated desktop OAuth applications and enter the client ID and secret in the connection dialog:
 
 ### Google Drive
 
@@ -243,13 +249,13 @@ Do not commit client secrets, access tokens, refresh tokens, or an rclone config
 
 ## Storage and security
 
-- TuxDrive settings live in `~/.config/tuxdrive/config.json` with mode `0600`.
-- OAuth tokens and credential-provider secrets remain in rclone's encrypted config (normally `~/.config/rclone/rclone.conf`). TuxDrive stores the random config password in GNOME Secret Service and retrieves it through a password command rather than application JSON or process arguments.
-- Operational logs live under `~/.cache/tuxdrive/logs` and do not contain a config dump.
+- TuxInDrive settings live in `~/.config/tuxindrive/config.json` with mode `0600`.
+- OAuth tokens and credential-provider secrets remain in rclone's encrypted config (normally `~/.config/rclone/rclone.conf`). TuxInDrive stores the random config password in GNOME Secret Service and retrieves it through a password command rather than application JSON or process arguments.
+- Operational logs live under `~/.cache/tuxindrive/logs` and do not contain a config dump.
 - First two-way synchronization merges both sides and prefers the newer version for an initial same-path collision. Later unresolved conflicts retain renamed copies.
 - Every synchronization enforces a configurable maximum deletion count. Established jobs also perform a non-destructive preview and pause suspicious mass changes.
-- Local recovery data is stored under `~/.local/share/tuxdrive/recovery`; retention is configured per job. Cloud-side version backups are stored in the job remote's `.tuxdrive-versions` area.
-- Encrypted vault passwords are protected in rclone's private configuration. They are not recoverable by TuxDrive; keep them in a password manager.
+- Local recovery data is stored under `~/.local/share/tuxindrive/recovery`; retention is configured per job. Cloud-side version backups are stored in the job remote's hidden compatibility version area.
+- Encrypted vault passwords are protected in rclone's private configuration. They are not recoverable by TuxInDrive; keep them in a password manager.
 - Upgrading from 0.15.0 or earlier automatically migrates an unencrypted managed rclone configuration into authenticated encrypted form when GNOME Secret Service is available. Existing independently encrypted advanced-user configurations are preserved.
 - The updater accepts only a non-expired Ed25519-signed manifest, an approved repository URL, the declared SHA-256 digest, and a Debian package whose embedded name/version match the requested release.
 
@@ -259,7 +265,7 @@ Back up important data before introducing any new synchronization tool. A mirror
 
 ## Parity and scope
 
-TuxDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.13.0 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation, context menus, persistent per-file/per-folder offline availability controls, adaptive provider controls and an operational dashboard. It does not provide a kernel-level placeholder API identical to Windows Cloud Files or Office coauthoring hooks. Streaming-drive mode is the Linux-native files-on-demand equivalent.
+TuxInDrive implements the core desktop behaviors of the Windows clients through public provider APIs and rclone. It does not copy Microsoft or Google's proprietary source code, branding, telemetry, private protocols, or Office integration. Version 0.13.0 provides Nautilus 4.0/4.1 live status metadata, packaged state emblems, safe provider navigation, context menus, persistent per-file/per-folder offline availability controls, adaptive provider controls and an operational dashboard. It does not provide a kernel-level placeholder API identical to Windows Cloud Files or Office coauthoring hooks. Streaming-drive mode is the Linux-native files-on-demand equivalent.
 
 ## License
 

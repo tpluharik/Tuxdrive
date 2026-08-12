@@ -1,7 +1,7 @@
 import unittest
 
-from tuxdrive.models import AppConfig, AppSettings
-from tuxdrive.themes import (
+from tuxindrive.models import AppConfig, AppSettings
+from tuxindrive.themes import (
     DEFAULT_THEME,
     THEMES,
     css_for_theme,
@@ -34,7 +34,7 @@ class VisualThemeTests(unittest.TestCase):
             self.assertIn(b".group-card", source)
             self.assertIn(b".activity-panel", source)
             self.assertIn(b"border-radius", source)
-            self.assertIn(b"switch#tuxdrive-job-switch", source)
+            self.assertIn(b"switch#tuxindrive-job-switch", source)
         self.assertEqual(len(set(rendered.values())), 3)
         self.assertIn(b"#edf3f8", rendered["nordic_glass"])
         self.assertIn(b"#6d4aff", rendered["bento_cloud"])

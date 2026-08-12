@@ -1,6 +1,6 @@
-# Contributing to TuxDrive
+# Contributing to TuxInDrive
 
-Thank you for helping improve TuxDrive. The repository is publicly readable, while direct writes to the main repository remain restricted to maintainers. Public contributions should use GitHub Issues or pull requests.
+Thank you for helping improve TuxInDrive. The repository is publicly readable, while direct writes to the main repository remain restricted to maintainers. Public contributions should use GitHub Issues or pull requests.
 
 ## Ways to contribute
 
@@ -21,15 +21,15 @@ Thank you for helping improve TuxDrive. The repository is publicly readable, whi
 Useful diagnostics:
 
 ```bash
-tuxdrive --diagnostics
-tail -n 150 ~/.local/state/tuxdrive/tuxdrive.log
-tail -n 150 ~/.local/state/tuxdrive/crash.log
-tail -n 150 ~/.cache/tuxdrive/logs/*.log
+tuxindrive --diagnostics
+tail -n 150 ~/.local/state/tuxindrive/tuxindrive.log
+tail -n 150 ~/.local/state/tuxindrive/crash.log
+tail -n 150 ~/.cache/tuxindrive/logs/*.log
 ```
 
 ## Development workflow
 
-1. Fork `tpluharik/Tuxdrive`.
+1. Fork `tpluharik/TuxInDrive`.
 2. Create a focused branch from `main`.
 3. Make a small, reviewable change.
 4. Add or update tests for behaviour changes.

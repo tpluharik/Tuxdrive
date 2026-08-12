@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-from tuxdrive.engine import JobResult, SyncEngine
-from tuxdrive.callbacks import FileChange, FileState, changes_between, is_transient_path
-from tuxdrive.models import (
+from tuxindrive.engine import JobResult, SyncEngine
+from tuxindrive.callbacks import FileChange, FileState, changes_between, is_transient_path
+from tuxindrive.models import (
     ConflictPolicy, PeerRole, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
 )
 
@@ -129,7 +129,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                 remote_path="RemoteRoot",
                 mode=SyncMode.VIRTUAL_DRIVE,
             )
-            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "RemoteRoot" / "folder"
+            cached = Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" / "google" / "RemoteRoot" / "folder"
             cached.mkdir(parents=True)
             (cached / "one.bin").write_bytes(b"one")
             (cached.parent / "two.bin").write_bytes(b"two")
@@ -153,7 +153,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                 mode=SyncMode.VIRTUAL_DRIVE,
                 offline_paths=["folder/child"],
             )
-            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "folder" / "child"
+            cached = Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" / "google" / "folder" / "child"
             cached.mkdir(parents=True)
             (cached / "one.bin").write_bytes(b"one")
             self.engine.set_offline(job, "folder", True)
@@ -174,7 +174,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                 mode=SyncMode.VIRTUAL_DRIVE,
             )
             cached = (
-                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" /
                 "google,team_drive=,root_folder_id=root" / "RemoteRoot" / "folder" / "one.bin"
             )
 
@@ -210,7 +210,7 @@ class SyncEngineCommandTests(unittest.TestCase):
             # object relative to that mount. It need not repeat Cloud/Subfolder
             # in the per-job VFS cache path.
             cached = (
-                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" /
                 "google,team_drive=,root_folder_id=root" / "one.bin"
             )
             cached.parent.mkdir(parents=True)
@@ -258,9 +258,9 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.engine._OFFLINE_READ_INACTIVITY_TIMEOUT = 0.001
             self.engine._OFFLINE_READ_ATTEMPTS = 2
             processes = [StalledProcess(), StalledProcess()]
-            with patch("tuxdrive.engine.subprocess.Popen", side_effect=processes) as popen, \
-                 patch("tuxdrive.engine.selectors.DefaultSelector") as selector_type, \
-                 patch("tuxdrive.engine.os.killpg") as killpg:
+            with patch("tuxindrive.engine.subprocess.Popen", side_effect=processes) as popen, \
+                 patch("tuxindrive.engine.selectors.DefaultSelector") as selector_type, \
+                 patch("tuxindrive.engine.os.killpg") as killpg:
                 selector = selector_type.return_value
                 selector.select.return_value = []
                 with self.assertRaisesRegex(RuntimeError, "cancelled the stalled download"):
@@ -299,7 +299,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                 offline_paths=["folder"],
             )
             cached = (
-                Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" /
+                Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" /
                 "google" / "folder" / "one.bin"
             )
             cached.parent.mkdir(parents=True)
@@ -312,7 +312,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                     "relative": "folder",
                     "files": [{
                         "path": cached.relative_to(
-                            Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs"
+                            Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs"
                         ).as_posix(),
                         "size": stat.st_size,
                         "blocks": getattr(stat, "st_blocks", 0),
@@ -337,7 +337,7 @@ class SyncEngineCommandTests(unittest.TestCase):
                 mode=SyncMode.VIRTUAL_DRIVE,
                 offline_paths=["folder"],
             )
-            cache_files = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google" / "folder"
+            cache_files = Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" / "google" / "folder"
             cache_files.mkdir(parents=True)
             (cache_files / "online.bin").write_bytes(b"online")
             (cache_files / "kept.bin").write_bytes(b"kept")
@@ -355,11 +355,11 @@ class SyncEngineCommandTests(unittest.TestCase):
             root = Path(temporary)
             (root / "one.bin").write_bytes(b"one")
             job = SyncJob(account_remote="google", local_path=str(root), mode=SyncMode.VIRTUAL_DRIVE)
-            cached = Path(cache) / "tuxdrive" / "vfs" / job.id / "vfs" / "google"
+            cached = Path(cache) / "tuxindrive" / "vfs" / job.id / "vfs" / "google"
             cached.mkdir(parents=True)
             (cached / "one.bin").write_bytes(b"one")
             self.engine.set_offline(job, ".", True)
-            cache_root = Path(cache) / "tuxdrive" / "vfs" / job.id
+            cache_root = Path(cache) / "tuxindrive" / "vfs" / job.id
             self.assertTrue((cache_root / ".tuxdrive-pins").exists())
             self.engine.set_offline(job, ".", False)
             self.assertFalse(cache_root.exists())
@@ -419,7 +419,7 @@ class SyncEngineCommandTests(unittest.TestCase):
     def test_failed_offline_symlink_hydration_rolls_back_pin(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            outside = root.parent / "outside-tuxdrive-test"
+            outside = root.parent / "outside-tuxindrive-test"
             outside.write_text("secret", encoding="utf-8")
             try:
                 (root / "escape").symlink_to(outside)
@@ -431,42 +431,42 @@ class SyncEngineCommandTests(unittest.TestCase):
                 outside.unlink(missing_ok=True)
 
     def test_overlapping_sync_and_streaming_paths_are_detected(self):
-        self.assertTrue(paths_overlap("/data/TuxDrive", "/data/TuxDrive/CEVRO"))
-        self.assertTrue(paths_overlap("/data/TuxDrive/CEVRO", "/data/TuxDrive"))
-        self.assertFalse(paths_overlap("/data/TuxDrive", "/data/StreamingDrive"))
+        self.assertTrue(paths_overlap("/data/TuxInDrive", "/data/TuxInDrive/CEVRO"))
+        self.assertTrue(paths_overlap("/data/TuxInDrive/CEVRO", "/data/TuxInDrive"))
+        self.assertFalse(paths_overlap("/data/TuxInDrive", "/data/StreamingDrive"))
 
     def test_streaming_child_is_safe_and_automatically_excluded_from_parent(self):
-        parent = SyncJob(account_remote="google", local_path="/data/TuxDrive")
+        parent = SyncJob(account_remote="google", local_path="/data/TuxInDrive")
         streamed = SyncJob(
             account_remote="google",
-            local_path="/data/TuxDrive/Online",
+            local_path="/data/TuxInDrive/Online",
             mode=SyncMode.VIRTUAL_DRIVE,
         )
         self.assertTrue(safe_streaming_overlap(parent, streamed))
         self.assertFalse(safe_streaming_overlap(streamed, SyncJob(
             account_remote="google",
-            local_path="/data/TuxDrive/Online/Downloaded",
+            local_path="/data/TuxInDrive/Online/Downloaded",
         )))
         self.engine.configure_jobs([parent, streamed])
         command = self.engine.command_for_job(parent)
         self.assertIn("/Online/**", command)
 
     def test_unchanged_job_layout_skips_quadratic_exclusion_rebuild(self):
-        parent = SyncJob(account_remote="google", local_path="/data/TuxDrive")
+        parent = SyncJob(account_remote="google", local_path="/data/TuxInDrive")
         streamed = SyncJob(
-            account_remote="google", local_path="/data/TuxDrive/Online",
+            account_remote="google", local_path="/data/TuxInDrive/Online",
             mode=SyncMode.VIRTUAL_DRIVE,
         )
         self.engine.configure_jobs([parent, streamed])
         original = self.engine._protected_patterns
         self.engine.configure_jobs([parent, streamed])
         self.assertIs(self.engine._protected_patterns, original)
-        streamed.local_path = "/data/TuxDrive/Other"
+        streamed.local_path = "/data/TuxInDrive/Other"
         self.engine.configure_jobs([parent, streamed])
         self.assertIsNot(self.engine._protected_patterns, original)
 
     def test_remote_backoff_respects_provider_characteristics(self):
-        from tuxdrive.models import Account, Provider
+        from tuxindrive.models import Account, Provider
         proton = Account("proton", Provider.PROTON_DRIVE, "Private")
         peer = Account("peer", Provider.PEER, "LAN")
         proton_job = SyncJob("proton", "/data/proton")
@@ -492,7 +492,7 @@ class SyncEngineCommandTests(unittest.TestCase):
     def test_startup_recovers_only_untracked_stale_streaming_mounts(self):
         stale = SyncJob(account_remote="google", local_path="/data/stale", mode=SyncMode.VIRTUAL_DRIVE)
         normal = SyncJob(account_remote="google", local_path="/data/normal")
-        with patch("tuxdrive.engine.os.path.ismount", side_effect=lambda value: str(value) == "/data/stale"), \
+        with patch("tuxindrive.engine.os.path.ismount", side_effect=lambda value: str(value) == "/data/stale"), \
              patch.object(self.engine, "_unmount_path", return_value=True) as unmount:
             recovered = self.engine.recover_stale_mounts([normal, stale])
         self.assertEqual(recovered, [stale.id])
@@ -515,7 +515,7 @@ class SyncEngineCommandTests(unittest.TestCase):
         process.poll.return_value = None
         self.engine._mounts[job.id] = process
         self.engine._mount_paths[job.id] = job.local
-        with patch("tuxdrive.engine.os.killpg"), \
+        with patch("tuxindrive.engine.os.killpg"), \
              patch.object(self.engine, "_unmount_path", return_value=True) as unmount:
             self.engine.shutdown()
         unmount.assert_called_once_with(job.local)
@@ -560,9 +560,9 @@ class SyncEngineCommandTests(unittest.TestCase):
         process = MagicMock()
         process.wait.return_value = 0
         with tempfile.TemporaryDirectory() as temporary, patch(
-            "tuxdrive.engine.resolve_rclone", return_value=None
-        ), patch("tuxdrive.engine.install_rclone", return_value="/private/rclone"), patch(
-            "tuxdrive.engine.subprocess.Popen", return_value=process
+            "tuxindrive.engine.resolve_rclone", return_value=None
+        ), patch("tuxindrive.engine.install_rclone", return_value="/private/rclone"), patch(
+            "tuxindrive.engine.subprocess.Popen", return_value=process
         ) as popen:
             self.engine._run_worker(
                 job, Path(temporary) / "sync.log", completed.append, False

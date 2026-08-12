@@ -3,17 +3,17 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "tuxdrive"
-version = "0.24.1"
+name = "tuxindrive"
+version = "0.25.0"
 description = "Native multi-provider cloud sync and streaming client for Debian desktops"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
-authors = [{name = "TuxDrive contributors"}]
+authors = [{name = "TuxInDrive contributors"}]
 dependencies = ["cryptography>=50.0.0,<51", "defusedxml>=0.7.1,<0.8"]
 
 [project.scripts]
-tuxdrive = "tuxdrive.app:main"
+tuxindrive = "tuxindrive.app:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

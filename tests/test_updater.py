@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxdrive.updater import UpdateManager, version_key
-from tuxdrive.update_helper import PrivilegedUpdateError, stage_verified_package
+from tuxindrive.updater import UpdateManager, version_key
+from tuxindrive.update_helper import PrivilegedUpdateError, stage_verified_package
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -41,7 +41,7 @@ class UpdateManagerTests(unittest.TestCase):
     def release_payload(self, version="0.5.1", body=b"deb"):
         signed = {
             "version": version,
-            "url": f"https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_{version}_all.deb",
+            "url": f"https://raw.githubusercontent.com/tpluharik/TuxInDrive/main/dist/tuxindrive_{version}_all.deb",
             "sha256": hashlib.sha256(body).hexdigest(),
             "notes": "Test release",
             "expires_at": "2999-01-01T00:00:00+00:00",
@@ -54,7 +54,7 @@ class UpdateManagerTests(unittest.TestCase):
 
     def test_repository_manifest_matches_current_debian_release(self):
         """Block releases whose signed update channel was left behind."""
-        from tuxdrive import __version__
+        from tuxindrive import __version__
 
         package = Path(f"dist/tuxdrive_{__version__}_all.deb")
         self.assertTrue(package.is_file(), "build/sign the current Debian package before release")
@@ -62,6 +62,20 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertEqual(release.version, __version__)
         self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
         self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
+
+    def test_pre_rebrand_repository_bridge_is_accepted_but_version_mismatch_is_not(self):
+        payload = json.loads(self.release_payload())
+        payload["url"] = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.5.1_all.deb"
+        signed = {key: payload[key] for key in ("version", "url", "sha256", "notes", "expires_at")}
+        canonical = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode()
+        payload["signature"] = base64.b64encode(self.private.sign(canonical)).decode("ascii")
+        self.assertEqual(UpdateManager.parse_manifest(json.dumps(payload).encode(), self.public).version, "0.5.1")
+        payload["url"] = payload["url"].replace("0.5.1", "0.5.2")
+        signed["url"] = payload["url"]
+        canonical = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode()
+        payload["signature"] = base64.b64encode(self.private.sign(canonical)).decode("ascii")
+        with self.assertRaisesRegex(ValueError, "filename"):
+            UpdateManager.parse_manifest(json.dumps(payload).encode(), self.public)
 
     def test_legacy_bridge_manifest_remains_fixed_at_0191(self):
         """Keep 0.18.1 on its one-step bridge without moving the old trust root."""
@@ -71,7 +85,7 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertEqual(release.url.rsplit("/", 1)[-1], "tuxdrive_0.19.1_all.deb")
 
     def test_manifest_rejects_untrusted_download(self):
-        payload = self.release_payload().replace(b"raw.githubusercontent.com/tpluharik/Tuxdrive", b"example.com")
+        payload = self.release_payload().replace(b"raw.githubusercontent.com/tpluharik/TuxInDrive", b"example.com")
         with self.assertRaises(ValueError):
             UpdateManager.parse_manifest(payload, self.public)
 
@@ -116,7 +130,7 @@ class UpdateManagerTests(unittest.TestCase):
         release = UpdateManager.parse_manifest(self.release_payload(version="0.5.1", body=body), self.public)
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            source = root / "tuxdrive_0.5.1_all.deb"
+            source = root / "tuxindrive_0.5.1_all.deb"
             source.write_bytes(body)
             staged = stage_verified_package(source, root / "staged.deb", release)
             self.assertEqual(staged.read_bytes(), body)
@@ -128,7 +142,7 @@ class UpdateManagerTests(unittest.TestCase):
             root = Path(directory)
             real = root / "real.deb"
             real.write_bytes(body)
-            link = root / "tuxdrive_0.5.1_all.deb"
+            link = root / "tuxindrive_0.5.1_all.deb"
             link.symlink_to(real)
             with self.assertRaises(PrivilegedUpdateError):
                 stage_verified_package(link, root / "stage-one.deb", release)

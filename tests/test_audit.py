@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from tuxdrive.audit import AuditTimeline
+from tuxindrive.audit import AuditTimeline
 
 
 class AuditTimelineTests(unittest.TestCase):

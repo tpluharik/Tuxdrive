@@ -1,7 +1,7 @@
 import unittest
 
-from tuxdrive.capabilities import CAPABILITIES, capabilities_for
-from tuxdrive.models import Provider, SyncMode
+from tuxindrive.capabilities import CAPABILITIES, capabilities_for
+from tuxindrive.models import Provider, SyncMode
 
 
 class ProviderCapabilityTests(unittest.TestCase):

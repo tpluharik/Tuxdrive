@@ -1,7 +1,7 @@
 import unittest
 
-from tuxdrive.help_content import topics
-from tuxdrive.i18n import LANGUAGES, get_language, is_rtl, set_language, tr
+from tuxindrive.help_content import topics
+from tuxindrive.i18n import LANGUAGES, get_language, is_rtl, set_language, tr
 
 
 class LocalizationAndHelpTests(unittest.TestCase):

@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.models import AuthorizedPeer, PeerShare, PeerTransportPolicy
-from tuxdrive.tor import TorError, TorServiceManager, enforce_transport_policy
+from tuxindrive.models import AuthorizedPeer, PeerShare, PeerTransportPolicy
+from tuxindrive.tor import TorError, TorServiceManager, enforce_transport_policy
 
 
 class TorTransportTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class TorTransportTests(unittest.TestCase):
             (service / "hostname").write_text("a" * 56 + ".onion\n", encoding="ascii")
             process = MagicMock()
             process.poll.return_value = None
-            with patch("tuxdrive.tor.shutil.which", return_value="/usr/bin/tor"), patch("tuxdrive.tor.subprocess.Popen", return_value=process) as popen:
+            with patch("tuxindrive.tor.shutil.which", return_value="/usr/bin/tor"), patch("tuxindrive.tor.subprocess.Popen", return_value=process) as popen:
                 TorServiceManager(root).start(share, 22022)
             command = popen.call_args.args[0]
             self.assertNotIn("SECRET", " ".join(command))

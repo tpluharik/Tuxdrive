@@ -6,8 +6,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxdrive.models import Provider
-from tuxdrive.rclone import RcloneClient, RcloneError, google_scoped_remote
+from tuxindrive.models import Provider
+from tuxindrive.rclone import RcloneClient, RcloneError, google_scoped_remote
 
 
 class RcloneClientTests(unittest.TestCase):
@@ -19,11 +19,31 @@ class RcloneClientTests(unittest.TestCase):
             helper = root / "helper"; helper.write_text("#!/bin/sh\n", encoding="utf-8"); helper.chmod(0o700)
             client = RcloneClient("/usr/bin/rclone")
             completed = subprocess.CompletedProcess([], 0, stdout="secret", stderr="")
-            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root), "TUXDRIVE_PASSWORD_HELPER": str(helper)}, clear=False), patch("tuxdrive.rclone.subprocess.run", return_value=completed) as run:
+            with patch.dict(os.environ, {"XDG_CONFIG_HOME": str(root), "TUXINDRIVE_PASSWORD_HELPER": str(helper)}, clear=False), patch("tuxindrive.rclone.subprocess.run", return_value=completed) as run:
                 client._ensure_config_security()
                 self.assertEqual(os.environ.get("RCLONE_PASSWORD_COMMAND"), str(helper))
-            self.assertTrue((config.parent / ".tuxdrive-encrypted").is_file())
+            self.assertTrue((config.parent / ".tuxindrive-encrypted").is_file())
             self.assertIn("encryption", run.call_args_list[-1].args[0])
+
+    def test_legacy_encryption_marker_and_helper_override_remain_readable(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            config = root / "rclone" / "rclone.conf"
+            config.parent.mkdir()
+            config.write_text("RCLONE_ENCRYPT_V0:\n", encoding="utf-8")
+            (config.parent / ".tuxdrive-encrypted").touch()
+            helper = root / "legacy-helper"
+            helper.write_text("#!/bin/sh\n", encoding="utf-8")
+            helper.chmod(0o700)
+            client = RcloneClient("/usr/bin/rclone")
+            with patch.dict(
+                os.environ,
+                {"XDG_CONFIG_HOME": str(root), "TUXDRIVE_PASSWORD_HELPER": str(helper)},
+                clear=False,
+            ), patch("tuxindrive.rclone.subprocess.run") as run:
+                client._ensure_config_security()
+                self.assertEqual(os.environ.get("RCLONE_PASSWORD_COMMAND"), str(helper))
+            run.assert_not_called()
 
     def test_noninteractive_question_is_parsed(self):
         output = json.dumps(
@@ -61,7 +81,7 @@ class RcloneClientTests(unittest.TestCase):
         client = RcloneClient("/bin/true")
         with patch.object(client, "available", return_value=True), patch.object(
             client, "_callback_port_busy", return_value=True
-        ), patch("tuxdrive.rclone.subprocess.Popen") as popen:
+        ), patch("tuxindrive.rclone.subprocess.Popen") as popen:
             with self.assertRaisesRegex(Exception, "already in use"):
                 client.continue_oauth("work", "state", "true", "wizard-1")
         popen.assert_not_called()
@@ -189,7 +209,7 @@ class RcloneClientTests(unittest.TestCase):
 
     def test_proton_credentials_cannot_be_updated_through_rclone(self):
         client = RcloneClient()
-        with self.assertRaisesRegex(RcloneError, "cannot be entered into TuxDrive"):
+        with self.assertRaisesRegex(RcloneError, "cannot be entered into TuxInDrive"):
             client.update_credentials(
                 "proton", Provider.PROTON_DRIVE, {"2fa": "must-not-be-accepted"}
             )

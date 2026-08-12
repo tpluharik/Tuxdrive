@@ -5,12 +5,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from tuxdrive.models import AuthorizedPeer, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
-from tuxdrive.peer import (
+from tuxindrive.models import AuthorizedPeer, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
+from tuxindrive.peer import (
     DiscoveredPeer, FileLease, PeerError, PeerInvitation, PeerLeaseManager,
     PeerManager, key_fingerprint, normalize_public_key, validate_port,
 )
-from tuxdrive.security import sign_json
+from tuxindrive.security import sign_json
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
@@ -25,7 +25,7 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(decoded.host, "198.51.100.20")
         self.assertEqual(decoded.port, 22022)
         self.assertEqual(decoded.host_key, KEY)
-        self.assertEqual(json.loads(encoded)["tuxdrive_peer"], 5)
+        self.assertEqual(json.loads(encoded)["tuxindrive_peer"], 5)
 
     def test_onion_invitation_is_v3_and_never_contains_direct_fallback(self):
         onion = "a" * 56 + ".onion"
@@ -41,7 +41,7 @@ class PeerSharingTests(unittest.TestCase):
             folder = Path(temporary) / "shared"
             folder.mkdir()
             share = PeerShare("Private", str(folder), "", 22022, authorized_peers=[AuthorizedPeer("Laptop", KEY)], transport_policy=PeerTransportPolicy.TOR_ONLY, onion_enabled=False)
-            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"):
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"):
                 manager = PeerManager(root=Path(temporary) / "peer")
                 with self.assertRaisesRegex(PeerError, "Tor-only"):
                     manager.start(share)
@@ -55,7 +55,7 @@ class PeerSharingTests(unittest.TestCase):
             host.parent.mkdir(parents=True)
             host.write_text("private", encoding="utf-8"); host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
             process = MagicMock(); process.poll.return_value = None
-            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxdrive.peer.subprocess.Popen", return_value=process) as popen, patch.object(PeerManager(root=root).tor.__class__, "start", return_value="a" * 56 + ".onion"):
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary, "XDG_DATA_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxindrive.peer.subprocess.Popen", return_value=process) as popen, patch.object(PeerManager(root=root).tor.__class__, "start", return_value="a" * 56 + ".onion"):
                 manager = PeerManager(root=root); manager.start(share); manager._servers.clear()
             command = popen.call_args.args[0]
             self.assertEqual(command[command.index("--addr") + 1], "127.0.0.1:22022")
@@ -83,7 +83,7 @@ class PeerSharingTests(unittest.TestCase):
             invitation.assert_usable()
 
     def test_one_time_drop_invitation_uses_dedicated_server_root(self):
-        from tuxdrive.models import OneTimeDrop
+        from tuxindrive.models import OneTimeDrop
         with tempfile.TemporaryDirectory() as temporary:
             root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
             folder.mkdir()
@@ -175,9 +175,9 @@ class PeerSharingTests(unittest.TestCase):
             process = MagicMock()
             process.poll.return_value = None
             with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch(
-                "tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"
+                "tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"
             ), patch(
-                "tuxdrive.peer.subprocess.Popen", return_value=process
+                "tuxindrive.peer.subprocess.Popen", return_value=process
             ) as popen:
                 manager = PeerManager(root=root)
                 manager.start(share)
@@ -202,7 +202,7 @@ class PeerSharingTests(unittest.TestCase):
             host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
             process = MagicMock()
             process.poll.return_value = None
-            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxdrive.peer.subprocess.Popen", return_value=process):
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxindrive.peer.subprocess.Popen", return_value=process):
                 manager = PeerManager(root=root)
                 manager.start(share)
                 manager._servers.clear()
@@ -229,7 +229,7 @@ class PeerSharingTests(unittest.TestCase):
             processes = [MagicMock(), MagicMock()]
             for process in processes:
                 process.poll.return_value = None
-            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxdrive.peer.subprocess.Popen", side_effect=processes) as popen:
+            with patch.dict(os.environ, {"XDG_CACHE_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch("tuxindrive.peer.subprocess.Popen", side_effect=processes) as popen:
                 manager = PeerManager(root=root)
                 manager.start(share)
                 manager._servers.clear()
@@ -258,8 +258,8 @@ class PeerSharingTests(unittest.TestCase):
             private.write_text("private", encoding="utf-8")
             private.with_suffix(".pub").write_text(KEY, encoding="utf-8")
             invitation = PeerInvitation("Project", "203.0.113.4", 22022, KEY)
-            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
-                "tuxdrive.peer.subprocess.run",
+            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
+                "tuxindrive.peer.subprocess.run",
                 return_value=MagicMock(returncode=0, stdout="", stderr=""),
             ) as run:
                 PeerManager(root=root).configure_connection("peer-project", invitation)
@@ -277,9 +277,9 @@ class PeerSharingTests(unittest.TestCase):
             private.with_suffix(".pub").write_text(KEY, encoding="utf-8")
             onion = "a" * 56 + ".onion"
             invitation = PeerInvitation("Private", onion, 22, KEY, transport="tor", onion_address=onion, onion_client_auth="A" * 52)
-            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxdrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
-                "tuxdrive.peer.shutil.which", side_effect=lambda value: f"/usr/bin/{value}"
-            ), patch("tuxdrive.peer.subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")) as run, patch.object(
+            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch("tuxindrive.peer.resolve_rclone", return_value="/usr/bin/rclone"), patch(
+                "tuxindrive.peer.shutil.which", side_effect=lambda value: f"/usr/bin/{value}"
+            ), patch("tuxindrive.peer.subprocess.run", return_value=MagicMock(returncode=0, stdout="", stderr="")) as run, patch.object(
                 PeerManager(root=root).tor.__class__, "install_client_credential"
             ), patch.object(
                 PeerManager(root=root).tor.__class__, "start_client", return_value=root / "tor" / "torsocks.conf"

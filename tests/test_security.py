@@ -5,7 +5,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from tuxdrive.security import UnsafePathError, confined_path, sign_json, verify_signed_json
+from tuxindrive.security import UnsafePathError, confined_path, sign_json, verify_signed_json
 
 
 class SecurityBoundaryTests(unittest.TestCase):

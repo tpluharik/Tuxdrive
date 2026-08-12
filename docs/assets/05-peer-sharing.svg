@@ -6,10 +6,10 @@
   <rect x="90" y="35" width="1020" height="630" rx="14" class="panel"/>
   <rect x="90" y="35" width="1020" height="58" rx="14" class="bar"/>
   <text x="600" y="72" text-anchor="middle" class="title">Peer-to-peer shared folders</text>
-  <text x="125" y="125" class="text">Direct encrypted SFTP between two TuxDrive computers · no intermediary file server</text>
+  <text x="125" y="125" class="text">Direct encrypted SFTP between two TuxInDrive computers · no intermediary file server</text>
   <rect x="125" y="145" width="950" height="72" rx="8" class="field"/>
   <text x="145" y="170" class="small">This computer’s public identity key</text>
-  <text x="145" y="197" class="key">ssh-ed25519 AAAAC3… TuxDrive peer</text>
+  <text x="145" y="197" class="key">ssh-ed25519 AAAAC3… TuxInDrive peer</text>
   <rect x="875" y="164" width="175" height="36" rx="7" class="button"/>
   <text x="962" y="187" text-anchor="middle" class="buttonText">Copy public key</text>
   <text x="145" y="260" class="title">Share a folder</text>

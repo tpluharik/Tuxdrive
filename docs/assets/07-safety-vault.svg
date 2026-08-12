@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700" viewBox="0 0 1200 700">
   <rect width="1200" height="700" fill="#f5f5f5"/>
   <rect x="55" y="45" width="1090" height="610" rx="18" fill="white" stroke="#c8c8c8"/>
-  <text x="95" y="105" font-family="sans-serif" font-size="30" font-weight="bold" fill="#222">TuxDrive safety and recovery</text>
+  <text x="95" y="105" font-family="sans-serif" font-size="30" font-weight="bold" fill="#222">TuxInDrive safety and recovery</text>
   <rect x="95" y="145" width="1010" height="115" rx="12" fill="#eef6ff"/>
   <text x="125" y="185" font-family="sans-serif" font-size="22" font-weight="bold">Cloud files · Protected</text>
   <text x="125" y="220" font-family="sans-serif" font-size="17" fill="#555">Last audit: complete · Local versions: 18 · Ransomware protection: on</text>
