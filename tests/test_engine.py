@@ -39,6 +39,120 @@ class SyncEngineCommandTests(unittest.TestCase):
         job = SyncJob(account_remote="one", local_path="/data/One", initialized=True)
         self.assertNotIn("--resync", self.engine.command_for_job(job))
 
+    def test_bisync_state_uses_durable_application_data(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": f"{temporary}/data", "XDG_CACHE_HOME": f"{temporary}/cache"},
+        ):
+            job = SyncJob(account_remote="one", local_path="/data/One")
+            command = self.engine.command_for_job(job)
+        workdir = Path(command[command.index("--workdir") + 1])
+        self.assertEqual(workdir, Path(temporary) / "data" / "tuxindrive" / "bisync" / job.id)
+
+    def test_legacy_bisync_state_is_migrated_out_of_cache(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": f"{temporary}/data", "XDG_CACHE_HOME": f"{temporary}/cache"},
+        ):
+            job = SyncJob(account_remote="one", local_path="/data/One", initialized=True)
+            legacy = Path(temporary) / "cache" / "tuxindrive" / "bisync" / job.id
+            legacy.mkdir(parents=True)
+            (legacy / "sync.path1.lst").write_text("local", encoding="utf-8")
+            (legacy / "sync.path2.lst").write_text("remote", encoding="utf-8")
+            workdir = self.engine._prepare_bisync_workdir(job)
+            self.assertTrue(self.engine._has_bisync_baselines(workdir))
+            self.assertEqual((workdir / "sync.path1.lst").read_text(), "local")
+
+    def test_missing_bisync_state_triggers_automatic_reinitialization(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": f"{temporary}/data", "XDG_CACHE_HOME": f"{temporary}/cache"},
+        ):
+            job = SyncJob(
+                account_remote="one",
+                local_path=f"{temporary}/local",
+                initialized=True,
+            )
+            Path(job.local_path).mkdir()
+            completed = []
+            process = MagicMock()
+            process.wait.return_value = 0
+            with patch("tuxindrive.engine.resolve_rclone", return_value="/usr/bin/rclone"), \
+                 patch("tuxindrive.engine.subprocess.run") as preview, \
+                 patch("tuxindrive.engine.subprocess.Popen", return_value=process) as popen:
+                self.engine._run_worker(
+                    job, Path(temporary) / "sync.log", completed.append, False
+                )
+            preview.assert_not_called()
+            command = popen.call_args.args[0]
+            self.assertIn("--resync", command)
+            self.assertEqual(command[command.index("--resync-mode") + 1], "newer")
+            self.assertTrue(completed[0].success)
+            self.assertIn("reinitialized automatically", completed[0].message)
+
+    def test_preview_can_recover_if_bisync_state_disappears_during_run(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": f"{temporary}/data", "XDG_CACHE_HOME": f"{temporary}/cache"},
+        ):
+            job = SyncJob(
+                account_remote="one",
+                local_path=f"{temporary}/local",
+                initialized=True,
+            )
+            Path(job.local_path).mkdir()
+            workdir = self.engine._prepare_bisync_workdir(job)
+            (workdir / "sync.path1.lst").write_text("local", encoding="utf-8")
+            (workdir / "sync.path2.lst").write_text("remote", encoding="utf-8")
+            completed = []
+            process = MagicMock()
+            process.wait.return_value = 0
+
+            def fail_preview(_command, **kwargs):
+                kwargs["stdout"].write(
+                    "Bisync critical error: cannot find prior Path1 or Path2 listings\n"
+                )
+                return MagicMock(returncode=1)
+
+            with patch("tuxindrive.engine.resolve_rclone", return_value="/usr/bin/rclone"), \
+                 patch("tuxindrive.engine.subprocess.run", side_effect=fail_preview), \
+                 patch("tuxindrive.engine.subprocess.Popen", return_value=process) as popen:
+                self.engine._run_worker(
+                    job, Path(temporary) / "sync.log", completed.append, False
+                )
+            self.assertIn("--resync", popen.call_args.args[0])
+            self.assertTrue(completed[0].success)
+
+    def test_authentication_preview_failure_does_not_force_resync(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ,
+            {"XDG_DATA_HOME": f"{temporary}/data", "XDG_CACHE_HOME": f"{temporary}/cache"},
+        ):
+            job = SyncJob(
+                account_remote="one",
+                local_path=f"{temporary}/local",
+                initialized=True,
+            )
+            Path(job.local_path).mkdir()
+            workdir = self.engine._prepare_bisync_workdir(job)
+            (workdir / "sync.path1.lst").write_text("local", encoding="utf-8")
+            (workdir / "sync.path2.lst").write_text("remote", encoding="utf-8")
+            completed = []
+
+            def fail_preview(_command, **kwargs):
+                kwargs["stdout"].write("Failed to create file system: invalid_grant\n")
+                return MagicMock(returncode=1)
+
+            with patch("tuxindrive.engine.resolve_rclone", return_value="/usr/bin/rclone"), \
+                 patch("tuxindrive.engine.subprocess.run", side_effect=fail_preview), \
+                 patch("tuxindrive.engine.subprocess.Popen") as popen:
+                self.engine._run_worker(
+                    job, Path(temporary) / "sync.log", completed.append, False
+                )
+            popen.assert_not_called()
+            self.assertFalse(completed[0].success)
+            self.assertIn("safety preview could not be completed", completed[0].message)
+
     def test_peer_lease_metadata_is_never_synchronized_as_user_content(self):
         job = SyncJob(account_remote="peer-team", local_path="/data/Team", peer_leases=True)
         command = self.engine.command_for_job(job)

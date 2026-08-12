@@ -23,7 +23,7 @@ from typing import Callable
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
 from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
-from .config import cache_root, config_root
+from .config import cache_root, config_root, data_root
 from .models import Account, ConflictPolicy, PeerRole, Provider, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
@@ -172,7 +172,12 @@ class SyncEngine:
             ))
         return results
 
-    def command_for_job(self, job: SyncJob, dry_run: bool = False) -> list[str]:
+    def command_for_job(
+        self,
+        job: SyncJob,
+        dry_run: bool = False,
+        force_resync: bool = False,
+    ) -> list[str]:
         if self._job_backends.get(job.id) == "proton_cli":
             raise ValueError("Official Proton CLI jobs use the native provider adapter")
         local = str(job.local)
@@ -223,7 +228,9 @@ class SyncEngine:
             command = [self.rclone_path, "bisync", local, job.remote_spec]
             command.extend(["--resilient", "--recover", "--conflict-loser", "pathname"])
             command.extend(self._conflict_flags(job.conflict_policy))
-            workdir = cache_root() / "bisync" / job.id
+            # Bisync listings are synchronization state, not disposable cache.
+            # Losing them makes an initialized job unable to run safely.
+            workdir = self._bisync_workdir(job)
             command.extend(["--workdir", str(workdir)])
             if job.version_history:
                 command.extend([
@@ -233,7 +240,7 @@ class SyncEngine:
                     "--suffix-keep-extension",
                     "--conflict-suffix", "{DateOnly}-tuxdrive-conflict",
                 ])
-            if not job.initialized:
+            if not job.initialized or force_resync:
                 command.extend(["--resync", "--resync-mode", "newer"])
             return [*command, *common]
 
@@ -247,6 +254,31 @@ class SyncEngine:
         if job.mode is SyncMode.VIRTUAL_DRIVE:
             return self.mount_command(job)
         raise ValueError(f"Unsupported sync mode: {job.mode}")
+
+    @staticmethod
+    def _bisync_workdir(job: SyncJob) -> Path:
+        return data_root() / "bisync" / job.id
+
+    def _prepare_bisync_workdir(self, job: SyncJob) -> Path:
+        """Keep essential bisync baselines in durable application data."""
+        workdir = self._bisync_workdir(job)
+        legacy = cache_root() / "bisync" / job.id
+        if legacy.is_dir() and not self._has_bisync_baselines(workdir):
+            ensure_private_directory(workdir.parent)
+            shutil.copytree(legacy, workdir, dirs_exist_ok=True)
+        ensure_private_directory(workdir)
+        return workdir
+
+    @staticmethod
+    def _has_bisync_baselines(workdir: Path) -> bool:
+        """Return true only when both durable sides of a bisync baseline exist."""
+        for path1 in workdir.glob("*.path1.lst"):
+            path2 = path1.with_name(
+                path1.name.removesuffix(".path1.lst") + ".path2.lst"
+            )
+            if path2.is_file():
+                return True
+        return False
 
     def mount_command(self, job: SyncJob) -> list[str]:
         cache = cache_root() / "vfs" / job.id
@@ -1297,19 +1329,31 @@ class SyncEngine:
             return
         ensure_private_directory(log_path.parent)
         cancelled = False
+        auto_reinitialize = False
         try:
             resolved = resolve_rclone(self.rclone_path)
             if resolved is None:
                 resolved = install_rclone()
             self.rclone_path = resolved
             self.leases.rclone_path = resolved
+            if job.mode is SyncMode.TWO_WAY and job.initialized:
+                workdir = self._prepare_bisync_workdir(job)
+                auto_reinitialize = (
+                    not dry_run
+                    and not self._has_bisync_baselines(workdir)
+                )
             if job.peer_leases and not dry_run:
                 active = self.leases.foreign_leases(job)
                 if active:
                     detail = ", ".join(f"{item.path} ({item.owner})" for item in active[:5])
                     callback(JobResult(job.id, False, f"Synchronization paused for active peer edit lease(s): {detail}", log_path, lease_blocked=True))
                     return
-            if job.ransomware_protection and job.initialized and not dry_run:
+            if (
+                job.ransomware_protection
+                and job.initialized
+                and not dry_run
+                and not auto_reinitialize
+            ):
                 preview_path = log_path.with_name(log_path.stem + "-safety-preview.log")
                 preview_command = self.command_for_job(job, dry_run=True)
                 with preview_path.open("w", encoding="utf-8") as preview:
@@ -1318,23 +1362,36 @@ class SyncEngine:
                         text=True, timeout=3600, check=False,
                     )
                 if preview_process.returncode != 0:
-                    raise RuntimeError("the safety preview could not be completed; the real sync was not started")
-                total_files = sum(1 for item in job.local.rglob("*") if item.is_file())
-                decision = MassChangeGuard.assess_log(job, preview_path, total_files)
-                if decision.blocked:
-                    callback(JobResult(
-                        job.id, False,
-                        f"Protection paused synchronization: {decision.reason}",
-                        preview_path, mass_change_blocked=True,
-                    ))
-                    return
-            command = self.command_for_job(job, dry_run=dry_run)
+                    if self._missing_bisync_state(preview_path):
+                        auto_reinitialize = True
+                    else:
+                        raise RuntimeError("the safety preview could not be completed; the real sync was not started")
+                else:
+                    total_files = sum(1 for item in job.local.rglob("*") if item.is_file())
+                    decision = MassChangeGuard.assess_log(job, preview_path, total_files)
+                    if decision.blocked:
+                        callback(JobResult(
+                            job.id, False,
+                            f"Protection paused synchronization: {decision.reason}",
+                            preview_path, mass_change_blocked=True,
+                        ))
+                        return
+            command = self.command_for_job(
+                job,
+                dry_run=dry_run,
+                force_resync=auto_reinitialize,
+            )
             prepare_private_file(log_path)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(
                     f"\n[{datetime.now(timezone.utc).isoformat()}] Starting TuxInDrive "
                     f"{__version__} sync with {self.rclone_path}\n"
                 )
+                if auto_reinitialize:
+                    log.write(
+                        "Bisync baseline was missing or incomplete; "
+                        "starting automatic safe reinitialization.\n"
+                    )
                 process = subprocess.Popen(
                     command,
                     stdout=log,
@@ -1348,7 +1405,12 @@ class SyncEngine:
                 cancelled = return_code in (-signal.SIGTERM, 143)
                 log.write(f"[{datetime.now(timezone.utc).isoformat()}] Exit {return_code}\n")
             if return_code == 0:
-                result = JobResult(job.id, True, "Synchronization complete", log_path)
+                message = (
+                    "Synchronization complete; sync state was reinitialized automatically"
+                    if auto_reinitialize
+                    else "Synchronization complete"
+                )
+                result = JobResult(job.id, True, message, log_path)
             elif cancelled:
                 result = JobResult(job.id, False, "Synchronization cancelled", log_path, True)
             else:
@@ -1691,6 +1753,18 @@ class SyncEngine:
         except OSError:
             return False
         return "Must run --resync to recover" in tail
+
+    @staticmethod
+    def _missing_bisync_state(log_path: Path) -> bool:
+        try:
+            tail = log_path.read_text(encoding="utf-8", errors="replace")[-64 * 1024 :]
+        except OSError:
+            return False
+        lowered = tail.lower()
+        return (
+            "cannot find prior path1 or path2 listings" in lowered
+            or "missing prior path1 or path2 listings" in lowered
+        )
 
     @staticmethod
     def _log_path(job: SyncJob) -> Path:
