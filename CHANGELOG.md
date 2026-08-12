@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.25.1 — Nautilus emblems and online-folder action
+
+- Cached Nautilus's credential-free state snapshot and normalized job roots in memory, invalidating them only when the atomic metadata monitor fires, so status emblems appear quickly even in large directories.
+- Restored visible Nautilus status emblems with explicit icon-theme identities.
+- Kept legacy emblem aliases so overlays survive a live upgrade from the pre-rebrand extension.
+- Replaced the synchronized-folder **Share link** action with **Open online folder** in all six languages.
+- Open exact private provider folders or GitHub branches where supported, never create a public share link, and safely fall back to the authenticated provider root where no stable private item URL exists.
+
 ## 0.25.0 — complete TuxInDrive rebrand
 
 - Renamed the product, Python distribution/module, executable, desktop application ID, systemd service, Nautilus extension, icons, documentation, translations, update client, build artifacts, and repository links from TuxDrive to TuxInDrive.

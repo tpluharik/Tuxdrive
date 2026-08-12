@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxindrive-logo.png" width="150" alt="TuxInDrive penguin head logo"></p>
 
-This guide covers TuxInDrive 0.25.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including official Proton Drive browser authorization, selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxInDrive distributes a `.deb` package only.
+This guide covers TuxInDrive 0.25.1 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including official Proton Drive browser authorization, selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; private online-folder navigation; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxInDrive distributes a `.deb` package only.
 
 Credentials for rclone-backed providers are kept in rclone's authenticated encrypted configuration. TuxInDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Proton's official CLI separately stores its browser session in Secret Service under `ch.proton.drive/drive-sdk-cli`; TuxInDrive never reads or exports it. Do not delete either secret until the related accounts have been disconnected.
 
-Version 0.25.0 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.25.1 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 ### Upgrading from TuxDrive
 
@@ -19,7 +19,7 @@ The 0.25.0 upgrade changes all visible product names to TuxInDrive. Existing pri
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxindrive_0.25.0_all.deb
+sudo apt install ./tuxindrive_0.25.1_all.deb
 ```
 
 Launch **TuxInDrive** from Ubuntu's application menu. TuxInDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -62,7 +62,7 @@ The black-and-white penguin identifies TuxInDrive itself. Each cloud service use
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxInDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxInDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.25.0 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.25.1 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxInDrive
 
@@ -316,7 +316,7 @@ Each job offers:
 - **Sync now** — start a complete reconciliation immediately.
 - **Stop** — cancel the active transfer.
 - **Open folder** — open the local folder in Files.
-- **Share link** — create a provider link and copy it to the clipboard.
+- **Open online folder** — open the synchronized provider folder or GitHub branch in the default browser without creating a public share link. Providers that do not expose an exact private folder URL safely open their authenticated Drive root and report that fallback.
 - **History** — inspect and restore local versions or recycled files.
 - **Verify** — compare both sides and repair reviewed paths from the chosen authority.
 - **Conflicts** — open the conflict-focused review center.
@@ -346,7 +346,7 @@ TuxInDrive 0.10.2 added packaged status emblems and explicit Nautilus 4 metadata
 
 TuxInDrive 0.10.3 supports the Nautilus 4.0 and 4.1 GI namespaces used across supported Ubuntu installations. It intentionally does not request an exact minor namespace because Nautilus loads its own version before importing extensions.
 
-TuxInDrive publishes job state and a minimal job/path snapshot through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The snapshot contains job identifiers, local paths, modes and availability rules only—never OAuth tokens, passwords, private keys, provider configuration or file content. Version 0.22.0 uses this snapshot as the extension's primary menu and badge source, retains the last complete value, coalesces the config/state events emitted when a pin completes, and stores only stable URIs rather than Nautilus-owned FileInfo wrappers. It reacquires current cached FileInfo objects for badge invalidation and emits Nautilus's dedicated menu-update signal. Every menu item is created with Nautilus 4.1's documented four constructor fields; pending-action sensitivity is then applied with the writable GObject property. The TuxInDrive submenu therefore remains present while its file action changes from **Keep available offline** to **Free local space (make online-only)**, and a transient read cannot repaint verified offline files as cloud-only.
+TuxInDrive publishes job state and a minimal job/path snapshot through a private atomic cache file watched by the extension. Badges refresh among pending, synchronizing, synchronized, streaming, paused, and error states when application state changes. The snapshot contains job identifiers, local paths, modes and availability rules only—never OAuth tokens, passwords, private keys, provider configuration or file content. Version 0.25.1 keeps the last complete snapshot and normalized synchronized-folder roots in memory, then reloads them only after the metadata monitor reports an atomic update; opening a large folder therefore does not re-read and reparse JSON for every icon. The extension coalesces config/state events emitted when a pin completes and stores only stable URIs rather than Nautilus-owned FileInfo wrappers. It reacquires current cached FileInfo objects for badge invalidation and emits Nautilus's dedicated menu-update signal. Every menu item is created with Nautilus 4.1's documented four constructor fields; pending-action sensitivity is then applied with the writable GObject property. The TuxInDrive submenu therefore remains present while its file action changes from **Keep available offline** to **Free local space (make online-only)**, and a transient read cannot repaint verified offline files as cloud-only.
 
 When **Keep available offline** is used on one file, TuxInDrive reads that complete file in an isolated helper and briefly waits for rclone to publish the matching full-size VFS cache object before showing the green check. It does not resolve or stat the selected FUSE path during Nautilus routing; the transfer engine validates the mount-relative path and rejects symlink escapes immediately before hydration. The helper may run for any total duration while bytes continue arriving. If no bytes arrive for 60 seconds, TuxInDrive cancels the blocked reader and retries once; a second stall rolls back the rule, clears the blue pending badge and reports an error. If the provider does not publish a complete cache object within ten seconds after a completed read, TuxInDrive likewise reports an error and does not leave a false offline marker.
 
@@ -567,7 +567,7 @@ cat ~/.local/state/tuxindrive/startup.log
 cat ~/.local/state/tuxindrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxindrive_0.25.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxindrive_0.25.1_all.deb`.
 
 ## 13. Data safety
 
@@ -577,10 +577,10 @@ Reinstall the current package with `sudo apt install ./tuxindrive_0.25.0_all.deb
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxInDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.25.0
+### Security upgrade checklist for 0.25.1
 
-1. Install `tuxindrive_0.25.0_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.25.0 and no signature or expiry error.
+1. Install `tuxindrive_0.25.1_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.25.1 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxInDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

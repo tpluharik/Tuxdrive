@@ -1,8 +1,8 @@
 {
-  "version": "0.25.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.0_all.deb",
-  "sha256": "84e645952ddebb8e70940f47df16a2e355f6be210cbe24feec31a6f71d6de2b1",
-  "notes": "Complete TuxInDrive rebrand with compatibility-preserving upgrade migration",
-  "expires_at": "2026-11-10T09:15:47.660014+00:00",
-  "signature": "fLMeHwbsIpPkjceYgmntSB3HinbDnKOBgeO5bgAJ5+rlp6RHh2E0sI5GyrDfGcycNUU3/OcPkEMYF7105CH5Dg=="
+  "version": "0.25.1",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.25.1_all.deb",
+  "sha256": "46c79e9cc0f8f3c2fe7630e45a263d23efc1f536bc4244adff7b7d68fe094ca8",
+  "notes": "Faster Nautilus status icons and safe online-folder navigation",
+  "expires_at": "2026-11-10T10:28:16.517638+00:00",
+  "signature": "wWp5S1EC8ZQWBL9UYmxZC3WgazGZm7csvMVGcfuPcb9JXQ9NQomQjkVBaK/IlInnJbitZL3s3sYDlgBlNWYpDA=="
 }

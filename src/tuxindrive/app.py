@@ -3058,11 +3058,18 @@ class MainWindow(Gtk.ApplicationWindow):
         group_button = Gtk.Button(label=tr("group"))
         group_button.set_tooltip_text("Move this entry to an internal TuxInDrive group")
         group_button.connect("clicked", self._move_to_group, job)
-        share_button = Gtk.Button(label=tr("share_link"))
-        share_button.connect("clicked", self._share_job, job)
-        share_button.set_sensitive(bool(account and capabilities_for(account.provider).share_links))
-        if not share_button.get_sensitive():
-            share_button.set_tooltip_text("This provider does not expose a safe share-link capability")
+        online_button = Gtk.Button(label=tr("open_online_folder"))
+        online_button.set_tooltip_text(
+            "Open this synchronized folder at its provider without creating a public share link"
+        )
+        online_button.connect(
+            "clicked", lambda _button: self.controller._open_online_path(str(job.local))
+        )
+        online_button.set_sensitive(bool(account and account.provider not in {Provider.PEER, Provider.VAULT}))
+        if not online_button.get_sensitive():
+            online_button.set_tooltip_text(
+                "Peer folders and encrypted vaults have no safe provider web location"
+            )
         history_button = Gtk.Button(label=tr("history"))
         history_button.set_tooltip_text("Restore locally retained versions and recycled files")
         history_button.connect(
@@ -3084,7 +3091,7 @@ class MainWindow(Gtk.ApplicationWindow):
         remove = Gtk.Button.new_from_icon_name("user-trash-symbolic", Gtk.IconSize.BUTTON)
         remove.set_tooltip_text(tr("remove_sync"))
         remove.connect("clicked", self._remove_job, job)
-        for widget in (sync, cancel, availability_button, open_button, share_button, history_button, verify_button, conflicts_button, group_button, rename_button, edit_button, log_button):
+        for widget in (sync, cancel, availability_button, open_button, online_button, history_button, verify_button, conflicts_button, group_button, rename_button, edit_button, log_button):
             if widget is None:
                 continue
             actions.pack_start(widget, False, False, 0)
@@ -3433,23 +3440,6 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.controller.reconfigure_callbacks()
                 self.refresh()
         dialog.destroy()
-
-    def _share_job(self, _button: Gtk.Button, job: SyncJob) -> None:
-        if job.is_git:
-            link = repository_item_url(job.repository_url, job.repository_branch)
-            Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(link, -1)
-            self.message("GitHub branch link copied to the clipboard.")
-            return
-        self.message("Creating a provider share link…")
-        _run_thread(self.controller.rclone.public_link, self._share_ready, job.remote_spec)
-
-    def _share_ready(self, link: str | None, error: Exception | None) -> bool:
-        if error or not link:
-            self.message(str(error or "This provider could not create a link."), Gtk.MessageType.ERROR)
-            return False
-        Gtk.Clipboard.get(Gdk.SELECTION_CLIPBOARD).set_text(link, -1)
-        self.message("Share link copied to the clipboard.")
-        return False
 
     def _rename_job(self, _button: Gtk.Button, job: SyncJob) -> None:
         dialog = Gtk.Dialog(title="Rename synchronized folder", transient_for=self, modal=True)
@@ -4315,6 +4305,18 @@ class TuxInDriveApplication(Gtk.Application):
                 job.repository_url, job.repository_branch, relative.as_posix()
             )
             _run_thread(self._launch_online_url, self._online_launch_ready, url, True)
+            return
+        if account.provider is Provider.PROTON_DRIVE and account.backend == "proton_cli":
+            # Proton's official CLI exposes filesystem paths but does not
+            # currently publish a stable private web-route contract for an
+            # item. Never route the native account through the legacy rclone
+            # backend or manufacture a public sharing URL.
+            _run_thread(
+                self._launch_online_url,
+                self._online_launch_ready,
+                account.provider.home_url,
+                False,
+            )
             return
         remote = job.remote_scope or job.account_remote
         remote_spec = f"{remote}:{remote_path}" if remote_path else f"{remote}:"

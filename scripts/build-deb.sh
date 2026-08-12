@@ -2,9 +2,9 @@
 set -eu
 
 PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-PACKAGE_ROOT="$PROJECT_ROOT/build/tuxindrive_0.25.0_all"
-OUTPUT="$PROJECT_ROOT/dist/tuxindrive_0.25.0_all.deb"
-LEGACY_OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.25.0_all.deb"
+PACKAGE_ROOT="$PROJECT_ROOT/build/tuxindrive_0.25.1_all"
+OUTPUT="$PROJECT_ROOT/dist/tuxindrive_0.25.1_all.deb"
+LEGACY_OUTPUT="$PROJECT_ROOT/dist/tuxdrive_0.25.1_all.deb"
 
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p \
@@ -41,6 +41,11 @@ cp "$PROJECT_ROOT/packaging/tuxindrive-error.svg" \
 for STATE in synced syncing streaming paused pending error; do
   cp "$PROJECT_ROOT/packaging/emblem-tuxindrive-${STATE}.svg" \
     "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems/emblem-tuxindrive-${STATE}.svg"
+  # A Nautilus process can keep the pre-rebrand extension loaded across a
+  # package upgrade. Keep the old emblem identity available until that process
+  # exits so overlays do not disappear between installation and its restart.
+  ln -s "emblem-tuxindrive-${STATE}.svg" \
+    "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/emblems/emblem-tuxdrive-${STATE}.svg"
 done
 cp "$PROJECT_ROOT/packaging/tuxindrive-google-drive.svg" \
   "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-google-drive.svg"
@@ -78,7 +83,7 @@ chmod 0644 "$PACKAGE_ROOT/usr/share/nautilus-python/extensions/tuxindrive.py"
 # Verify the exact installed layout used by /usr/bin/tuxindrive. This catches
 # PYTHONPATH/package-placement regressions before a .deb can be published.
 PYTHONPATH="$PACKAGE_ROOT/usr/lib" /usr/bin/python3 -c \
-  'import importlib.util, tuxindrive; assert tuxindrive.__version__ == "0.25.0"; assert importlib.util.find_spec("tuxindrive.app"); assert importlib.util.find_spec("tuxindrive.proton"); assert importlib.util.find_spec("tuxindrive.cache_manager"); assert importlib.util.find_spec("tuxindrive.i18n"); assert importlib.util.find_spec("tuxindrive.help_content"); assert importlib.util.find_spec("tuxindrive.themes"); assert importlib.util.find_spec("tuxindrive.folder_layout"); assert importlib.util.find_spec("tuxindrive.collaboration"); assert importlib.util.find_spec("tuxindrive.platform_support"); assert importlib.util.find_spec("tuxindrive.updater"); assert importlib.util.find_spec("tuxindrive.update_helper"); assert importlib.util.find_spec("tuxindrive.peer"); assert importlib.util.find_spec("tuxindrive.tor"); assert importlib.util.find_spec("tuxindrive.recovery"); assert importlib.util.find_spec("tuxindrive.delta"); assert importlib.util.find_spec("tuxindrive.policies"); assert importlib.util.find_spec("tuxindrive.audit"); assert importlib.util.find_spec("tuxindrive.capabilities"); assert importlib.util.find_spec("tuxindrive.migration"); assert importlib.util.find_spec("tuxindrive.security"); assert importlib.util.find_spec("tuxindrive.github_sync"); assert importlib.util.find_spec("tuxindrive.nautilus_support")'
+  'import importlib.util, tuxindrive; assert tuxindrive.__version__ == "0.25.1"; assert importlib.util.find_spec("tuxindrive.app"); assert importlib.util.find_spec("tuxindrive.proton"); assert importlib.util.find_spec("tuxindrive.cache_manager"); assert importlib.util.find_spec("tuxindrive.i18n"); assert importlib.util.find_spec("tuxindrive.help_content"); assert importlib.util.find_spec("tuxindrive.themes"); assert importlib.util.find_spec("tuxindrive.folder_layout"); assert importlib.util.find_spec("tuxindrive.collaboration"); assert importlib.util.find_spec("tuxindrive.platform_support"); assert importlib.util.find_spec("tuxindrive.updater"); assert importlib.util.find_spec("tuxindrive.update_helper"); assert importlib.util.find_spec("tuxindrive.peer"); assert importlib.util.find_spec("tuxindrive.tor"); assert importlib.util.find_spec("tuxindrive.recovery"); assert importlib.util.find_spec("tuxindrive.delta"); assert importlib.util.find_spec("tuxindrive.policies"); assert importlib.util.find_spec("tuxindrive.audit"); assert importlib.util.find_spec("tuxindrive.capabilities"); assert importlib.util.find_spec("tuxindrive.migration"); assert importlib.util.find_spec("tuxindrive.security"); assert importlib.util.find_spec("tuxindrive.github_sync"); assert importlib.util.find_spec("tuxindrive.nautilus_support")'
 
 dpkg-deb --root-owner-group --build "$PACKAGE_ROOT" "$OUTPUT"
 cp "$OUTPUT" "$LEGACY_OUTPUT"

@@ -64,6 +64,38 @@ def load_extension():
 
 
 class NautilusExtensionTests(unittest.TestCase):
+    def test_status_uses_the_complete_installed_emblem_identity(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxInDriveExtension)
+        provider._known_uris = {}
+        job = {
+            "id": "drive",
+            "local_path": "/mnt/Cloud",
+            "mode": "two_way",
+            "initialized": True,
+        }
+
+        class FileInfo:
+            def __init__(self):
+                self.emblems = []
+
+            def get_uri(self):
+                return "file:///mnt/Cloud"
+
+            def add_string_attribute(self, *_args):
+                return None
+
+            def add_emblem(self, name):
+                self.emblems.append(name)
+
+        info = FileInfo()
+        with patch.object(extension, "_jobs", return_value=[job]), patch.object(
+            extension, "_runtime_states", return_value={}
+        ), patch.object(extension, "_local_path", return_value=Path("/mnt/Cloud")):
+            provider._apply_file_info(info)
+
+        self.assertEqual(info.emblems, ["emblem-tuxindrive-synced"])
+
     def test_existing_legacy_metadata_directory_remains_visible(self):
         extension = load_extension()
         with tempfile.TemporaryDirectory() as temporary:
@@ -94,14 +126,66 @@ class NautilusExtensionTests(unittest.TestCase):
             "_state_document",
             return_value={"__tuxdrive__": {"nautilus_integration": True, "jobs": [job]}},
         ):
-            self.assertEqual(extension._jobs(), [job])
+            self.assertEqual(extension._jobs(force=True), [job])
 
         with tempfile.TemporaryDirectory() as temporary, patch.object(
             extension, "_state_document", return_value={}
         ), patch.object(
             extension, "_config_path", return_value=Path(temporary) / "missing.json"
         ):
-            self.assertEqual(extension._jobs(), [job])
+            self.assertEqual(extension._jobs(force=True), [job])
+
+    def test_badges_reuse_one_monitor_invalidated_metadata_snapshot(self):
+        extension = load_extension()
+        provider = object.__new__(extension.TuxInDriveExtension)
+        provider._known_uris = {}
+        state = {
+            "drive": {"state": "synced", "detail": "Ready"},
+            "__tuxindrive__": {
+                "nautilus_integration": True,
+                "jobs": [{
+                    "id": "drive",
+                    "local_path": "/mnt/Cloud",
+                    "mode": "two_way",
+                    "initialized": True,
+                }],
+            },
+        }
+
+        class Location:
+            def __init__(self, path):
+                self.path = path
+
+            def get_path(self):
+                return self.path
+
+        class FileInfo:
+            def __init__(self, path):
+                self.path = path
+
+            def get_location(self):
+                return Location(self.path)
+
+            def get_uri(self):
+                return "file://" + self.path
+
+            def add_string_attribute(self, *_args):
+                return None
+
+            def add_emblem(self, *_args):
+                return None
+
+        with tempfile.TemporaryDirectory() as temporary:
+            state_path = Path(temporary) / "nautilus-state.json"
+            state_path.write_text(__import__("json").dumps(state), encoding="utf-8")
+            with patch.object(extension, "_state_path", return_value=state_path), patch.object(
+                extension.json, "loads", wraps=extension.json.loads
+            ) as loads:
+                provider._apply_file_info(FileInfo("/mnt/Cloud/one.txt"))
+                provider._apply_file_info(FileInfo("/mnt/Cloud/two.txt"))
+                provider._apply_file_info(FileInfo("/mnt/Cloud/three.txt"))
+
+        self.assertEqual(loads.call_count, 1)
 
     def test_transient_state_read_keeps_verified_badges(self):
         extension = load_extension()

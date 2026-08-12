@@ -18,6 +18,10 @@ APP_ID = "io.github.tuxindrive.TuxInDrive"
 APP_PATH = "/io/github/tuxindrive/TuxInDrive"
 _LAST_VALID_JOBS: list[dict] = []
 _LAST_VALID_STATE: dict = {}
+_LAST_VALID_JOB_ROOTS: list[tuple[Path, dict]] = []
+_RUNTIME_STATES_CACHE: dict[str, dict] = {}
+_JOBS_CACHE_READY = False
+_STATE_CACHE_READY = False
 
 
 def _brand_root(root: Path) -> Path:
@@ -45,28 +49,42 @@ def _config_path() -> Path:
     return _brand_root(root) / "config.json"
 
 
-def _jobs() -> list[dict]:
+def _cache_jobs(jobs: list[dict]) -> list[dict]:
+    """Publish normalized jobs and their roots as one in-memory snapshot."""
+    global _JOBS_CACHE_READY, _LAST_VALID_JOBS, _LAST_VALID_JOB_ROOTS
+    _LAST_VALID_JOBS = _dict_list(jobs)
+    roots: list[tuple[Path, dict]] = []
+    for job in _LAST_VALID_JOBS:
+        try:
+            roots.append((Path(os.path.abspath(os.path.expanduser(job["local_path"]))), job))
+        except (KeyError, OSError, TypeError, ValueError):
+            continue
+    _LAST_VALID_JOB_ROOTS = roots
+    _JOBS_CACHE_READY = True
+    return list(_LAST_VALID_JOBS)
+
+
+def _jobs(*, force: bool = False) -> list[dict]:
     # Prefer the small extension snapshot. It is written atomically, contains
     # no provider credentials and avoids parsing unrelated application state
     # for every item in a FUSE directory.
-    global _LAST_VALID_JOBS
+    global _JOBS_CACHE_READY
+    if _JOBS_CACHE_READY and not force:
+        return list(_LAST_VALID_JOBS)
     document = _state_document()
     meta = document.get("__tuxindrive__", document.get("__tuxdrive__", {}))
     if isinstance(meta, dict) and isinstance(meta.get("jobs"), list):
         if not meta.get("nautilus_integration", True):
-            _LAST_VALID_JOBS = []
-            return []
-        _LAST_VALID_JOBS = _dict_list(meta["jobs"])
-        return list(_LAST_VALID_JOBS)
+            return _cache_jobs([])
+        return _cache_jobs(meta["jobs"])
     try:
         value = json.loads(_config_path().read_text(encoding="utf-8"))
         if not value.get("settings", {}).get("nautilus_integration", True):
-            _LAST_VALID_JOBS = []
-            return []
+            return _cache_jobs([])
         jobs = value.get("jobs", [])
         if isinstance(jobs, list):
-            _LAST_VALID_JOBS = _dict_list(jobs)
-            return list(_LAST_VALID_JOBS)
+            return _cache_jobs(jobs)
+        _JOBS_CACHE_READY = True
         return list(_LAST_VALID_JOBS)
     except (OSError, ValueError, TypeError):
         # The app publishes a minimal, non-secret snapshot specifically for
@@ -75,6 +93,7 @@ def _jobs() -> list[dict]:
         # Keep the last complete credential-free snapshot. Menu construction
         # often races the atomic state-file replacement after a pin changes;
         # a single failed read must not make the menu disappear.
+        _JOBS_CACHE_READY = True
         return list(_LAST_VALID_JOBS)
 
 
@@ -83,8 +102,10 @@ def _state_path() -> Path:
     return _brand_root(root) / "nautilus-state.json"
 
 
-def _state_document() -> dict:
-    global _LAST_VALID_STATE
+def _state_document(*, force: bool = False) -> dict:
+    global _LAST_VALID_STATE, _RUNTIME_STATES_CACHE, _STATE_CACHE_READY
+    if _STATE_CACHE_READY and not force:
+        return _LAST_VALID_STATE
     try:
         value = json.loads(_state_path().read_text(encoding="utf-8"))
         meta = (
@@ -97,18 +118,26 @@ def _state_document() -> dict:
         # already verified badges until the next metadata event.
         if isinstance(meta, dict) and isinstance(meta.get("jobs"), list):
             _LAST_VALID_STATE = value
+            _RUNTIME_STATES_CACHE = {
+                str(key): entry
+                for key, entry in value.items()
+                if key not in {"__tuxindrive__", "__tuxdrive__"} and isinstance(entry, dict)
+            }
+            _STATE_CACHE_READY = True
             return value
+        _STATE_CACHE_READY = True
         return _LAST_VALID_STATE
     except (OSError, ValueError, TypeError):
+        # Cache even an initially absent snapshot. The directory monitor will
+        # force a reload when the app publishes it; retrying the same failed
+        # disk read for every visible file makes Nautilus badges arrive late.
+        _STATE_CACHE_READY = True
         return _LAST_VALID_STATE
 
 
 def _runtime_states() -> dict[str, dict]:
-    return {
-        str(key): value
-        for key, value in _state_document().items()
-        if key not in {"__tuxindrive__", "__tuxdrive__"} and isinstance(value, dict)
-    }
+    _state_document()
+    return _RUNTIME_STATES_CACHE
 
 
 def _local_path(file_info: Nautilus.FileInfo) -> Path | None:
@@ -122,12 +151,21 @@ def _local_path(file_info: Nautilus.FileInfo) -> Path | None:
 
 def _containing_job(path: Path, configured_jobs: list[dict] | None = None) -> dict | None:
     matches: list[tuple[int, dict]] = []
-    for job in configured_jobs if configured_jobs is not None else _jobs():
+    jobs = configured_jobs if configured_jobs is not None else _jobs()
+    if configured_jobs is None and _JOBS_CACHE_READY and jobs == _LAST_VALID_JOBS:
+        roots = _LAST_VALID_JOB_ROOTS
+    else:
+        roots = []
+        for job in jobs:
+            try:
+                roots.append((Path(os.path.abspath(os.path.expanduser(job["local_path"]))), job))
+            except (KeyError, OSError, TypeError, ValueError):
+                continue
+    for root, job in roots:
         try:
-            root = Path(os.path.abspath(os.path.expanduser(job["local_path"])))
             path.relative_to(root)
             matches.append((len(root.parts), job))
-        except (KeyError, OSError, TypeError, ValueError):
+        except (OSError, TypeError, ValueError):
             continue
     return max(matches, default=(0, None), key=lambda item: item[0])[1]
 
@@ -209,8 +247,8 @@ class TuxInDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoP
         # Prime the last-known-good snapshots before asking Nautilus to query
         # the provider again. A completed pin can therefore change its action
         # from Keep offline to Make online-only without losing the root menu.
-        _state_document()
-        _jobs()
+        _state_document(force=True)
+        _jobs(force=True)
         # MenuProvider has its own refresh signal. Using it prevents badge
         # invalidation from being (incorrectly) relied on to rebuild a context
         # menu after Keep available offline completes.
@@ -460,7 +498,10 @@ class TuxInDriveExtension(GObject.GObject, Nautilus.MenuProvider, Nautilus.InfoP
             }.get(state, "Managed by TuxInDrive"))
         )
         file_info.add_string_attribute("tuxindrive_status", status)
-        emblem = f"tuxindrive-{state}" if state in {"syncing", "synced", "streaming", "paused", "error", "pending"} else "tuxindrive-pending"
+        # Nautilus expects the installed icon-theme name. Use the complete
+        # emblem identity rather than relying on a desktop-version-specific
+        # implicit ``emblem-`` prefix.
+        emblem = f"emblem-tuxindrive-{state}" if state in {"syncing", "synced", "streaming", "paused", "error", "pending"} else "emblem-tuxindrive-pending"
         file_info.add_emblem(emblem)
 
     def update_file_info_full(self, _provider, _handle, _closure, file_info: Nautilus.FileInfo):

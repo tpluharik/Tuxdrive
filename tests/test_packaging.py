@@ -35,7 +35,7 @@ class PackagingTests(unittest.TestCase):
     def test_debian_identity_is_an_explicit_signed_updater_compatibility_abi(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         self.assertIn("Package: tuxdrive", control)
-        self.assertIn("Provides: tuxindrive (= 0.25.0)", control)
+        self.assertIn("Provides: tuxindrive (= 0.25.1)", control)
         helper = Path("packaging/tuxindrive-rclone-password").read_text(encoding="utf-8")
         self.assertIn("lookup application tuxdrive purpose rclone-config", helper)
 
@@ -177,7 +177,23 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Nautilus.OperationResult.COMPLETE", extension)
         for state in ("synced", "syncing", "streaming", "paused", "pending", "error"):
             self.assertTrue(Path(f"packaging/emblem-tuxindrive-{state}.svg").exists())
+            self.assertIn(f'emblem-tuxdrive-${{STATE}}.svg', build_script)
+        self.assertIn('file_info.add_emblem(emblem)', extension)
+        self.assertIn('f"emblem-tuxindrive-{state}"', extension)
         self.assertIn("scalable/emblems", build_script)
+
+    def test_job_action_opens_online_folder_without_creating_share_link(self):
+        app = Path("src/tuxindrive/app.py").read_text(encoding="utf-8")
+        i18n = Path("src/tuxindrive/i18n.py").read_text(encoding="utf-8")
+        self.assertIn('Gtk.Button(label=tr("open_online_folder"))', app)
+        self.assertIn('self.controller._open_online_path(str(job.local))', app)
+        self.assertNotIn('Gtk.Button(label=tr("share_link"))', app)
+        self.assertNotIn("def _share_job", app)
+        self.assertNotIn("Creating a provider share link", app)
+        self.assertIn('account.provider is Provider.PROTON_DRIVE and account.backend == "proton_cli"', app)
+        self.assertIn("does not\n            # currently publish a stable private web-route contract", app)
+        self.assertNotIn('"share_link":', i18n)
+        self.assertEqual(i18n.count('"open_online_folder":'), 6)
 
     def test_nautilus_emblems_are_unbranded_and_visually_distinct(self):
         palette = {

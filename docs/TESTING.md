@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **227 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. They also exercise official manifest parsing, amd64 selection, SHA-512 verification, rejected manifest/binary hosts, checksum mismatch preservation and cancellation before browser login. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache pin/write-back/recent-stream protection, absolute/invalid-marker fail-closed behavior, unchanged-write suppression and executable-cache invalidation. Theme tests require all three named designs, distinct palettes, shared rounded components, Midnight-only dark preference, persistent selection, and safe legacy/invalid fallback. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxInDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. The Nautilus tests mirror the real 4.1 four-argument `MenuItem.new()` boundary, reject unsupported GTK-widget methods and require writable properties to be applied after construction. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxInDrive development suite contains **230 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. They also exercise official manifest parsing, amd64 selection, SHA-512 verification, rejected manifest/binary hosts, checksum mismatch preservation and cancellation before browser login. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache pin/write-back/recent-stream protection, absolute/invalid-marker fail-closed behavior, unchanged-write suppression and executable-cache invalidation. Theme tests require all three named designs, distinct palettes, shared rounded components, Midnight-only dark preference, persistent selection, and safe legacy/invalid fallback. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxInDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. Nautilus tests additionally require the complete installed emblem identity, monitor-invalidated single-read snapshot caching and legacy live-upgrade aliases. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -35,7 +35,7 @@ The TuxInDrive development suite contains **227 automated tests**. Tests use tem
 | `test_i18n_help.py` | 3 | Six-language UI fallback, Arabic/Hebrew RTL detection, complete localized in-app help topics and localized drag/collapse guidance. |
 | `test_migration.py` | 6 | AES-GCM profile round trips, wrong-password/tamper rejection, provider copy/restore, secret opt-in, private permissions and input validation. |
 | `test_offline_action.py` | 9 | Mounted-drive fast dispatch, cold-start queuing, both supported command-line availability option forms, lexical file routing without FUSE resolution, sibling-prefix rejection, exact file-rule isolation, nested offline/online-only precedence, and green-state publication only for locally verified rules. |
-| `test_nautilus_extension.py` | 10 | Exact sibling/parent exclusion, background-menu isolation, last-known-good job/badge metadata, coalesced metadata refresh, URI-only lifecycle handling, current-cache FileInfo reacquisition, dedicated menu-update signaling, exact four-argument menu construction, post-construction sensitivity, and preservation of the TuxInDrive menu when a file changes from pending to verified offline. |
+| `test_nautilus_extension.py` | 11 | Exact sibling/parent exclusion, background-menu isolation, last-known-good job/badge metadata, monitor-invalidated single-read caching, coalesced metadata refresh, URI-only lifecycle handling, current-cache FileInfo reacquisition, dedicated menu-update signaling, exact four-argument menu construction, post-construction sensitivity, and preservation of the TuxInDrive menu when a file changes from pending to verified offline. |
 | `test_packaging.py` | 13 | Debian launcher/layout and exact old-process upgrade transition checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion, packaged emblems, and unbranded color/shape/glyph-distinct badge metadata. |
 | `test_performance.py` | 10 | Real inotify save delivery, startup-race capture, remote-failure retry, overflow reconciliation, symlink/transient exclusion, pin/write-back/recent-stream cache protection, absolute/invalid-marker fail-closed behavior, and performance-hook integration. |
 | `test_proton.py` | 28 | Official-CLI discovery, browser-only login arguments, forced Secret Service storage, session validation/expiry, redaction, path/name confinement, backend migration persistence, nested exclusions, symlink refusal, mass-change blocking, empty trees, native engine routing, and fail-closed no-streaming/no-callback behavior. |
@@ -87,9 +87,9 @@ The TuxInDrive development suite contains **227 automated tests**. Tests use tem
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.25.0_all.deb
-dpkg-deb --contents dist/tuxindrive_0.25.0_all.deb
-sha256sum dist/tuxindrive_0.25.0_all.deb
+dpkg-deb --info dist/tuxindrive_0.25.1_all.deb
+dpkg-deb --contents dist/tuxindrive_0.25.1_all.deb
+sha256sum dist/tuxindrive_0.25.1_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -104,8 +104,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.25.0 \
-  --package dist/tuxdrive_0.25.0_all.deb \
+python3 scripts/sign-update.py --version 0.25.1 \
+  --package dist/tuxdrive_0.25.1_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```

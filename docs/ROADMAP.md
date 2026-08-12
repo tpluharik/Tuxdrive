@@ -7,7 +7,11 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.25.0
+## Current baseline: 0.25.1
+
+### Completed in 0.25.1
+
+Version 0.25.1 restores Nautilus status emblems with explicit current icon identities plus pre-rebrand live-upgrade aliases. The synchronized-folder public-link control is replaced by private online-folder navigation, with exact provider/GitHub destinations where supported and a safe authenticated-root fallback otherwise.
 
 ### Completed in 0.25.0
 
