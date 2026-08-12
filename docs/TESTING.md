@@ -16,7 +16,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxDrive development suite contains **193 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache pin/write-back/recent-stream protection, absolute/invalid-marker fail-closed behavior, unchanged-write suppression and executable-cache invalidation. Theme tests require all three named designs, distinct palettes, shared rounded components, Midnight-only dark preference, persistent selection, and safe legacy/invalid fallback. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. The Nautilus tests mirror the real 4.1 four-argument `MenuItem.new()` boundary, reject unsupported GTK-widget methods and require writable properties to be applied after construction. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
+The TuxDrive development suite contains **215 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache pin/write-back/recent-stream protection, absolute/invalid-marker fail-closed behavior, unchanged-write suppression and executable-cache invalidation. Theme tests require all three named designs, distinct palettes, shared rounded components, Midnight-only dark preference, persistent selection, and safe legacy/invalid fallback. Folder-layout tests prove that drag/drop changes only persisted display order and group metadata, including safe fallback from a deleted group; they also round-trip the same TuxDrive-prefixed UTF-8 payload used by GTK and reject malformed or unrelated data. The Nautilus tests mirror the real 4.1 four-argument `MenuItem.new()` boundary, reject unsupported GTK-widget methods and require writable properties to be applied after construction. The updater tests validate the fixed original-key 0.19.1 bridge and the rotated-key v2 channel against the exact current package.
 
 ## Test groups
 
@@ -38,6 +38,7 @@ The TuxDrive development suite contains **193 automated tests**. Tests use tempo
 | `test_nautilus_extension.py` | 9 | Exact sibling/parent exclusion, background-menu isolation, last-known-good job/badge metadata, coalesced metadata refresh, URI-only lifecycle handling, current-cache FileInfo reacquisition, dedicated menu-update signaling, exact four-argument menu construction, post-construction sensitivity, and preservation of the TuxDrive menu when a file changes from pending to verified offline. |
 | `test_packaging.py` | 12 | Debian launcher/layout and exact old-process upgrade transition checks, optional-integration package boundaries, GTK/GDK version pinning, UI feature presence, provider icons, peer runtime inclusion, Nautilus routing, InfoProvider completion, packaged emblems, and unbranded color/shape/glyph-distinct badge metadata. |
 | `test_performance.py` | 10 | Real inotify save delivery, startup-race capture, remote-failure retry, overflow reconciliation, symlink/transient exclusion, pin/write-back/recent-stream cache protection, absolute/invalid-marker fail-closed behavior, and performance-hook integration. |
+| `test_proton.py` | 22 | Official-CLI discovery, browser-only login arguments, forced Secret Service storage, session validation/expiry, redaction, path/name confinement, backend migration persistence, nested exclusions, symlink refusal, mass-change blocking, empty trees, native engine routing, and fail-closed no-streaming/no-callback behavior. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
 | `test_peer.py` | 19 | Invitation compatibility/roles/drops/relay parsing, verified atomic delta application, fingerprints, isolated per-device role/root enforcement, multi-device authorization, legacy migration, host-key pinning, edit leases and private-identity authentication. |
 | `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
@@ -60,7 +61,7 @@ The TuxDrive development suite contains **193 automated tests**. Tests use tempo
 - Tor-only policy rejects direct fallback, invalid Onion addresses are refused, client authorization is device-scoped/revocable, and Tor configuration/authorization files are private.
 - Bridge credentials remain out of subprocess arguments, invitations, and application audit/log messages.
 - A peer client pins the server host key and authenticates with its own private key.
-- Proton accounts are not accepted until an actual remote listing succeeds.
+- Proton accounts are not accepted until an official-CLI `/my-files` listing succeeds; no password/2FA/session enters TuxDrive arguments or configuration, inherited plaintext credential-store overrides are rejected, and native jobs cannot enter rclone callback or mount paths.
 - Update packages are not installed until both desktop and privileged helper verification succeed; the helper verifies a root-only staged copy and trusts neither a user-supplied digest nor the previously opened user-writable path.
 - Incoming replacement/deletion recovery retains restorable content before changing the local file.
 - Ransomware-like extensions and configured mass-change thresholds pause propagation.
@@ -86,9 +87,9 @@ The TuxDrive development suite contains **193 automated tests**. Tests use tempo
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxdrive_0.22.0_all.deb
-dpkg-deb --contents dist/tuxdrive_0.22.0_all.deb
-sha256sum dist/tuxdrive_0.22.0_all.deb
+dpkg-deb --info dist/tuxdrive_0.24.0_all.deb
+dpkg-deb --contents dist/tuxdrive_0.24.0_all.deb
+sha256sum dist/tuxdrive_0.24.0_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -103,8 +104,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.22.0 \
-  --package dist/tuxdrive_0.22.0_all.deb \
+python3 scripts/sign-update.py --version 0.24.0 \
+  --package dist/tuxdrive_0.24.0_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxDrive-update-signing-private.pem
 ```
@@ -123,7 +124,7 @@ Automated tests do **not** replace live provider and desktop testing. Before a s
 |---|---|
 | Installation | Clean Ubuntu 26.04 install, upgrade from the previous package, application-menu launch and tray visibility. |
 | OAuth | New Google Drive and OneDrive accounts, browser cancellation, reconnect and expired-token recovery. |
-| Credential providers | MEGA, Nextcloud app password, Proton password plus conditional 2FA challenge. |
+| Credential providers | MEGA and Nextcloud app-password flows; official Proton CLI install, browser login/2FA, `/my-files` validation, expired-session reconnect, legacy-rclone migration, logout, offline/online restart, nested exceptions, and one-sided deletion restoration. Confirm the password/2FA/session never appears in TuxDrive configuration, logs, or process arguments. |
 | Selective sync | Nested folder selection, multiple selected roots, rename/move, deletion and conflict copy. |
 | Folder organization | Reorder folders before/after one another, move them across named groups and Ungrouped, restart the app, and confirm order/membership persist. Minimize each group and verify one provider icon per folder plus tooltip, drop into a minimized group, expand it, and confirm no local/cloud path changed. Repeat with keyboard using the Group dialog. |
 | Streaming | Empty mount, file hydration on open, write-back, disconnect, unexpected mount loss and restart. |

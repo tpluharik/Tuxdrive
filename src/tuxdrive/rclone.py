@@ -151,6 +151,10 @@ class RcloneClient:
         credentials: dict[str, str] | None = None,
     ) -> ConfigResult:
         self._validate_remote_name(remote)
+        if provider is Provider.PROTON_DRIVE:
+            raise RcloneError(
+                "Proton Drive authorization is available only through Proton's official browser-authenticated CLI"
+            )
         args = ["config", "create", remote, provider.rclone_type]
         args.extend(provider.initial_options)
         if client_id:
@@ -204,31 +208,19 @@ class RcloneClient:
         self, remote: str, provider: Provider, credentials: dict[str, str]
     ) -> None:
         self._validate_remote_name(remote)
+        if provider is Provider.PROTON_DRIVE:
+            raise RcloneError(
+                "Proton Drive credentials cannot be entered into TuxDrive; reconnect in the official browser flow"
+            )
         secret_keys = {
             key for key, _label, secret, _required in provider.credential_fields if secret
         }
-        # A current Proton 2FA code is sensitive but rclone expects it as a
-        # plain config value rather than an obscured password.
         args = ["config", "update", remote]
         for key, value in credentials.items():
             if value:
                 args.extend([key, self._obscure(value) if key in secret_keys else value])
         args.append("--non-interactive")
         self._run(args)
-
-    @staticmethod
-    def requires_proton_2fa(error: Exception | str) -> bool:
-        detail = str(error).lower()
-        return any(
-            marker in detail
-            for marker in (
-                "2fa enabled",
-                "2fa code",
-                "two-factor",
-                "two factor",
-                "totp",
-            )
-        )
 
     def _obscure(self, value: str) -> str:
         if not self.available():

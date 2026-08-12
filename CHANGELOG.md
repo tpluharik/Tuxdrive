@@ -2,6 +2,14 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.24.0 — official Proton Drive browser authorization
+
+- Replaced new and reconnected Proton/rclone password login with Proton's official `proton-drive auth login` browser flow. Passwords and 2FA codes stay on Proton's page; the official CLI owns its session in Linux Secret Service.
+- Added native Proton account persistence, `/my-files` validation and folder browsing, one-session enforcement, browser reconnect/logout, and safe migration that retains old job definitions while pausing the legacy backend.
+- Added scheduled two-way, download-only and upload-only Proton reconciliation using official machine-readable file operations. Nested exceptions, transient-file filtering, path confinement, symlink refusal, timeouts/cancellation, redacted errors, atomic private state and pre-transfer mass-change protection are enforced.
+- Disabled Proton files-on-demand and real-time callbacks because the official CLI exposes no mount or sync-event API. One-sided deletions are restored rather than propagated; `Newer wins` safely falls back to keep-both because no atomic provider primitive is available.
+- Added Proton authorization, expiry, traversal, credential-store override, redaction, incremental reconciliation, deletion restoration, mass-change, symlink, exclusion, backend-routing, no-rclone, no-callback and no-mount regressions. The complete suite now contains 215 automated tests.
+
 ## 0.23.0 — event-driven performance and bounded cache
 
 - Replaced two-second per-job local tree walks with recursive Linux inotify monitoring; queue overflow and uncertain directory topology fail closed into full reconciliation.

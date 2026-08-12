@@ -14,5 +14,7 @@ class ProviderCapabilityTests(unittest.TestCase):
 
     def test_proton_limits_unsafe_ui_actions(self):
         proton = capabilities_for(Provider.PROTON_DRIVE)
+        self.assertTrue(proton.browser_oauth)
+        self.assertFalse(proton.streaming)
         self.assertFalse(proton.share_links)
         self.assertFalse(proton.hashes)

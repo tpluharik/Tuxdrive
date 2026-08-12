@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tuxdrive.models import Provider
-from tuxdrive.rclone import RcloneClient, google_scoped_remote
+from tuxdrive.rclone import RcloneClient, RcloneError, google_scoped_remote
 
 
 class RcloneClientTests(unittest.TestCase):
@@ -161,32 +161,15 @@ class RcloneClientTests(unittest.TestCase):
             ["config", "create", "cloud", "webdav", "vendor", "nextcloud"],
         )
 
-    def test_proton_credentials_are_protected_and_written(self):
+    def test_proton_credentials_are_rejected_by_legacy_rclone_path(self):
         client = RcloneClient()
-        credentials = {
-            "username": "user@proton.me",
-            "password": "raw-password",
-            "2fa": "123456",
-        }
-        with patch.object(
-            client, "_obscure", side_effect=lambda value: f"obscured:{value}"
-        ) as obscure, patch.object(
-            client,
-            "_run_oauth",
-            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
-        ) as run:
-            result = client.begin_oauth(
-                "proton", Provider.PROTON_DRIVE, credentials=credentials
+        with self.assertRaisesRegex(RcloneError, "official browser-authenticated CLI"):
+            client.begin_oauth(
+                "proton",
+                Provider.PROTON_DRIVE,
+                credentials={"password": "must-not-be-accepted"},
             )
-        self.assertTrue(result.complete)
-        args = run.call_args.args[0]
-        self.assertIn("username", args)
-        self.assertIn("user@proton.me", args)
-        self.assertIn("obscured:raw-password", args)
-        self.assertIn("123456", args)
-        self.assertNotIn("raw-password", args)
-        self.assertEqual(obscure.call_count, 1)
-        self.assertEqual(args[-1], "--non-interactive")
+        self.assertEqual(Provider.PROTON_DRIVE.credential_fields, ())
 
     def test_remote_is_listed_before_account_is_accepted(self):
         client = RcloneClient()
@@ -201,24 +184,15 @@ class RcloneClientTests(unittest.TestCase):
             ["lsf", "proton:", "--dirs-only", "--max-depth", "1"],
         )
 
-    def test_proton_two_factor_requirement_is_detected(self):
-        self.assertTrue(RcloneClient.requires_proton_2fa("2FA enabled, but no code provided"))
-        self.assertTrue(RcloneClient.requires_proton_2fa("invalid two-factor authentication code"))
-        self.assertFalse(RcloneClient.requires_proton_2fa("username and password are required"))
+    def test_legacy_rclone_has_no_proton_two_factor_prompt(self):
+        self.assertFalse(hasattr(RcloneClient, "requires_proton_2fa"))
 
-    def test_proton_two_factor_code_is_updated_without_password_obscuring(self):
+    def test_proton_credentials_cannot_be_updated_through_rclone(self):
         client = RcloneClient()
-        with patch.object(
-            client,
-            "_run",
-            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
-        ) as run, patch.object(client, "_obscure") as obscure:
-            client.update_credentials("proton", Provider.PROTON_DRIVE, {"2fa": "123456"})
-        self.assertEqual(
-            run.call_args.args[0],
-            ["config", "update", "proton", "2fa", "123456", "--non-interactive"],
-        )
-        obscure.assert_not_called()
+        with self.assertRaisesRegex(RcloneError, "cannot be entered into TuxDrive"):
+            client.update_credentials(
+                "proton", Provider.PROTON_DRIVE, {"2fa": "must-not-be-accepted"}
+            )
 
     def test_account_discovery_recognizes_added_backends(self):
         configured = {

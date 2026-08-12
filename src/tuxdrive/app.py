@@ -66,6 +66,7 @@ from .folder_layout import job_drag_payload, job_id_from_drag_payload, move_job
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
+from .proton import ProtonDriveClient, ProtonDriveError
 from .updater import UpdateManager, UpdateRelease
 from .policies import TransferPolicy
 from .migration import MigrationError, ProfileManager
@@ -124,7 +125,6 @@ class OAuthWizard(Gtk.Dialog):
         self.remote = ""
         self.session_id = uuid.uuid4().hex
         self._closed = False
-        self._initial_credentials: dict[str, str] = {}
 
         content = self.get_content_area()
         content.set_border_width(24)
@@ -214,7 +214,6 @@ class OAuthWizard(Gtk.Dialog):
                 key: entry.get_text().strip()
                 for key, entry in self.credential_entries.items()
             }
-            self._initial_credentials = credentials
             missing = [
                 label for key, label, _secret, required in self.provider.credential_fields
                 if required and not credentials.get(key)
@@ -263,12 +262,6 @@ class OAuthWizard(Gtk.Dialog):
             return False
         self._not_busy()
         if error:
-            if (
-                self.provider is Provider.PROTON_DRIVE
-                and self.client.requires_proton_2fa(error)
-            ):
-                self._prompt_proton_2fa(str(error))
-                return False
             self._set_error(str(error))
             return False
         if result is None:
@@ -319,12 +312,6 @@ class OAuthWizard(Gtk.Dialog):
     def _validation_ready(self, _result, error: Exception | None) -> bool:
         self._not_busy()
         if error:
-            if (
-                self.provider is Provider.PROTON_DRIVE
-                and self.client.requires_proton_2fa(error)
-            ):
-                self._prompt_proton_2fa(str(error))
-                return False
             self._set_error(f"Connection validation failed: {error}")
             return False
         account = Account(
@@ -335,58 +322,6 @@ class OAuthWizard(Gtk.Dialog):
         self.complete_callback(account)
         self.destroy()
         return False
-
-    def _prompt_proton_2fa(self, detail: str) -> None:
-        dialog = Gtk.Dialog(title="Proton Drive two-factor authentication", transient_for=self, modal=True)
-        dialog.set_icon_name(self.provider.icon_name)
-        area = dialog.get_content_area()
-        area.set_border_width(22)
-        area.set_spacing(10)
-        prompt = Gtk.Label(
-            label=(
-                "Proton requires a fresh two-factor authentication code. "
-                "Open your authenticator app and enter the current six-digit code."
-            ),
-            xalign=0,
-        )
-        prompt.set_line_wrap(True)
-        code = Gtk.Entry()
-        code.set_placeholder_text("000000")
-        code.set_max_length(12)
-        code.set_input_purpose(Gtk.InputPurpose.DIGITS)
-        code.set_activates_default(True)
-        technical = Gtk.Expander(label="Technical detail")
-        technical.add(Gtk.Label(label=detail, xalign=0, selectable=True, wrap=True))
-        area.pack_start(prompt, False, False, 0)
-        area.pack_start(code, False, False, 0)
-        area.pack_start(technical, False, False, 0)
-        dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        submit = dialog.add_button("Verify", Gtk.ResponseType.OK)
-        submit.get_style_context().add_class("suggested-action")
-        dialog.set_default_response(Gtk.ResponseType.OK)
-        dialog.show_all()
-        response = dialog.run()
-        value = code.get_text().strip()
-        dialog.destroy()
-        if response != Gtk.ResponseType.OK:
-            self._set_error("Proton Drive connection is waiting for two-factor authentication.")
-            return
-        if not re.fullmatch(r"[0-9]{6,12}", value):
-            self._set_error("Enter the current numeric Proton two-factor authentication code.")
-            return
-        self._busy("Submitting Proton two-factor authentication…")
-        credentials = dict(self._initial_credentials)
-        credentials["2fa"] = value
-        _run_thread(
-            self.client.begin_oauth,
-            self._step_ready,
-            self.remote,
-            self.provider,
-            "",
-            "",
-            self.session_id,
-            credentials,
-        )
 
     def _answer(self) -> str:
         if isinstance(self.answer_widget, Gtk.ComboBoxText):
@@ -410,10 +345,177 @@ class OAuthWizard(Gtk.Dialog):
         self.status.set_markup(f"<span foreground='#c01c28'>{GLib.markup_escape_text(message)}</span>")
 
 
+class ProtonAuthDialog(Gtk.Dialog):
+    """Browser-only authorization through Proton's official CLI."""
+
+    def __init__(
+        self,
+        parent: Gtk.Window,
+        client: ProtonDriveClient,
+        complete_callback: Callable[[Account], None],
+        accounts: list[Account],
+        existing: Account | None = None,
+    ) -> None:
+        super().__init__(title="Connect Proton Drive", transient_for=parent, modal=True)
+        self.set_icon_name(Provider.PROTON_DRIVE.icon_name)
+        self.set_default_size(600, 420)
+        self.client = client
+        self.complete_callback = complete_callback
+        self.accounts = accounts
+        self.existing = existing
+        self._closed = False
+        area = self.get_content_area()
+        area.set_border_width(24)
+        area.set_spacing(14)
+        title = Gtk.Label(xalign=0)
+        title.set_markup("<span size='x-large' weight='bold'>Connect Proton Drive securely</span>")
+        area.pack_start(title, False, False, 0)
+        explanation = Gtk.Label(
+            label=(
+                "TuxDrive starts Proton's official browser authorization. Your password and two-factor code "
+                "are entered only on Proton's website. The resulting session is stored by the official CLI "
+                "in Linux Secret Service; TuxDrive never receives or exports it."
+            ),
+            xalign=0,
+        )
+        explanation.set_line_wrap(True)
+        area.pack_start(explanation, False, False, 0)
+        limitation = Gtk.Label(
+            label=(
+                "Scheduled folder synchronization is supported. Files-on-demand is disabled for Proton "
+                "because the official CLI does not provide a mount interface."
+            ),
+            xalign=0,
+        )
+        limitation.set_line_wrap(True)
+        limitation.get_style_context().add_class("dim-label")
+        area.pack_start(limitation, False, False, 0)
+        grid = Gtk.Grid(column_spacing=12, row_spacing=10)
+        self.name_entry = Gtk.Entry()
+        self.name_entry.set_text(existing.remote if existing else "proton-web")
+        self.name_entry.set_sensitive(existing is None)
+        self.display_entry = Gtk.Entry()
+        self.display_entry.set_text(existing.display_name if existing else "Proton Drive")
+        grid.attach(Gtk.Label(label="Account key", xalign=0), 0, 0, 1, 1)
+        grid.attach(self.name_entry, 1, 0, 1, 1)
+        grid.attach(Gtk.Label(label="Display name", xalign=0), 0, 1, 1, 1)
+        grid.attach(self.display_entry, 1, 1, 1, 1)
+        area.pack_start(grid, False, False, 0)
+        self.spinner = Gtk.Spinner()
+        self.status = Gtk.Label(label="Ready to open Proton authorization", xalign=0)
+        self.status.set_line_wrap(True)
+        row = Gtk.Box(spacing=10)
+        row.pack_start(self.spinner, False, False, 0)
+        row.pack_start(self.status, True, True, 0)
+        area.pack_start(row, False, False, 0)
+        download = Gtk.Button(label="Get official Proton CLI")
+        download.connect(
+            "clicked", lambda _button: webbrowser.open("https://proton.me/download/drive/cli")
+        )
+        area.pack_start(download, False, False, 0)
+        self.cancel_button = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        self.login_button = self.add_button("Open browser and connect", Gtk.ResponseType.OK)
+        self.login_button.get_style_context().add_class("suggested-action")
+        self.connect("response", self._response)
+        self.connect("delete-event", self._delete)
+        self.show_all()
+
+    def _response(self, _dialog: Gtk.Dialog, response: int) -> None:
+        if response != Gtk.ResponseType.OK:
+            self._closed = True
+            self.client.cancel_login()
+            self.destroy()
+            return
+        remote = self.name_entry.get_text().strip()
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", remote):
+            self._error("Account key may contain only letters, numbers, dot, dash, and underscore.")
+            return
+        collision = next(
+            (
+                account for account in self.accounts
+                if account.remote == remote
+                and (not self.existing or account.remote != self.existing.remote)
+            ),
+            None,
+        )
+        if collision:
+            self._error("That account key is already in use. Choose a different key.")
+            return
+        another = next(
+            (
+                account for account in self.accounts
+                if account.provider is Provider.PROTON_DRIVE
+                and account.backend == "proton_cli"
+                and (not self.existing or account.remote != self.existing.remote)
+            ),
+            None,
+        )
+        if another:
+            self._error(
+                "The official Proton CLI maintains one active account session. Remove or reconnect the existing Proton account first."
+            )
+            return
+        self.spinner.start()
+        self.status.set_text("Complete sign-in and two-factor authentication in your browser…")
+        self.login_button.set_sensitive(False)
+        _run_thread(self.client.login, self._ready)
+
+    def _delete(self, *_args) -> bool:
+        self._closed = True
+        self.client.cancel_login()
+        return False
+
+    def _ready(self, _result, error: Exception | None) -> bool:
+        self.spinner.stop()
+        self.login_button.set_sensitive(True)
+        if self._closed:
+            return False
+        if error:
+            self._error(str(error))
+            return False
+        account = Account(
+            remote=self.name_entry.get_text().strip(),
+            provider=Provider.PROTON_DRIVE,
+            display_name=self.display_entry.get_text().strip() or "Proton Drive",
+            backend="proton_cli",
+        )
+        self.complete_callback(account)
+        self.destroy()
+        return False
+
+    def _error(self, message: str) -> None:
+        self.status.set_markup(
+            f"<span foreground='#c01c28'>{GLib.markup_escape_text(message)}</span>"
+        )
+
+
+class CloudBrowserClient:
+    """Route folder browsing without exposing provider sessions to callers."""
+
+    def __init__(
+        self,
+        rclone: RcloneClient,
+        proton: ProtonDriveClient,
+        accounts: Callable[[], list[Account]],
+    ) -> None:
+        self.rclone = rclone
+        self.proton = proton
+        self.accounts = accounts
+
+    def list_directories(self, remote: str, remote_path: str = "") -> list[str]:
+        account = next((item for item in self.accounts() if item.remote == remote), None)
+        if account and account.provider is Provider.PROTON_DRIVE and account.backend == "proton_cli":
+            return self.proton.list_directories(remote, remote_path)
+        return self.rclone.list_directories(remote, remote_path)
+
+    def google_drive_locations(self, remote: str) -> list[DriveLocation]:
+        return self.rclone.google_drive_locations(remote)
+
+
 class CloudFolderTree(Gtk.Box):
     """Lazy-loading, multi-select cloud directory tree."""
 
-    def __init__(self, client: RcloneClient, remote: str, selected: list[str] | None = None) -> None:
+    def __init__(self, client: RcloneClient | CloudBrowserClient, remote: str, selected: list[str] | None = None) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.client = client
         self.remote = remote
@@ -625,7 +727,7 @@ class SyncJobDialog(Gtk.Dialog):
     def __init__(
         self,
         parent: Gtk.Window,
-        client: RcloneClient,
+        client: RcloneClient | CloudBrowserClient,
         accounts: list[Account],
         existing: SyncJob | None = None,
     ) -> None:
@@ -835,6 +937,14 @@ class SyncJobDialog(Gtk.Dialog):
             "versions" if capabilities.versions else "no provider versions",
         ]
         self.capability_note.set_text(f"{account.provider.label}: {', '.join(features)}. {capabilities.notes}".strip())
+        if hasattr(self, "realtime_sync") and account.provider is Provider.PROTON_DRIVE:
+            self.realtime_sync.set_active(False)
+            self.realtime_sync.set_sensitive(False)
+            self.realtime_sync.set_tooltip_text(
+                "The official Proton CLI currently supports scheduled reconciliation, not event callbacks."
+            )
+        elif hasattr(self, "realtime_sync"):
+            self.realtime_sync.set_sensitive(True)
         if hasattr(self, "block_delta"):
             self.block_delta.set_sensitive(account.provider is Provider.PEER)
 
@@ -3078,6 +3188,13 @@ class MainWindow(Gtk.ApplicationWindow):
             provider = providers[response - 1]
             if provider is Provider.GITHUB:
                 self._configure_github()
+            elif provider is Provider.PROTON_DRIVE:
+                ProtonAuthDialog(
+                    self,
+                    self.controller.proton,
+                    self.controller.add_account,
+                    self.controller.config.accounts,
+                )
             else:
                 OAuthWizard(self, self.controller.rclone, provider, self.controller.add_account)
         elif response == vault_response:
@@ -3222,7 +3339,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if not accounts:
             self.message("Connect a cloud account first.", Gtk.MessageType.WARNING)
             return
-        dialog = SyncJobDialog(self, self.controller.rclone, accounts)
+        dialog = SyncJobDialog(self, self.controller.cloud_browser, accounts)
         if dialog.run() == Gtk.ResponseType.OK:
             jobs = dialog.jobs()
             existing_jobs = list(self.controller.config.jobs)
@@ -3267,7 +3384,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self._configure_github(account, job)
             return
         dialog = SyncJobDialog(
-            self, self.controller.rclone, self.controller.config.accounts, existing=job
+            self, self.controller.cloud_browser, self.controller.config.accounts, existing=job
         )
         if dialog.run() == Gtk.ResponseType.OK:
             values = dialog.jobs()
@@ -3364,7 +3481,13 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         if not self._confirm(f"Remove {account.display_name} and its local authorization?"):
             return
-        if account.provider is not Provider.GITHUB:
+        if account.provider is Provider.PROTON_DRIVE and account.backend == "proton_cli":
+            try:
+                self.controller.proton.logout()
+            except ProtonDriveError as exc:
+                self.message(str(exc), Gtk.MessageType.ERROR)
+                return
+        elif account.provider is not Provider.GITHUB:
             try:
                 self.controller.rclone.delete_remote(account.remote)
             except RcloneError as exc:
@@ -3402,6 +3525,15 @@ class MainWindow(Gtk.ApplicationWindow):
             return
         if account.provider is Provider.VAULT:
             self.message("Vault keys cannot be refreshed or recovered. Create a new vault to change its encryption credentials.", Gtk.MessageType.WARNING)
+            return
+        if account.provider is Provider.PROTON_DRIVE:
+            ProtonAuthDialog(
+                self,
+                self.controller.proton,
+                self.controller.add_account,
+                self.controller.config.accounts,
+                existing=account,
+            )
             return
         if not account.provider.browser_oauth:
             OAuthWizard(
@@ -3831,7 +3963,11 @@ class TuxDriveApplication(Gtk.Application):
             self.config = AppConfig()
         set_language(self.config.settings.language)
         self.rclone = RcloneClient(self.config.settings.rclone_path)
-        self.engine = SyncEngine(self.config.settings.rclone_path)
+        self.proton = ProtonDriveClient(self.config.settings.proton_drive_path)
+        self.cloud_browser = CloudBrowserClient(
+            self.rclone, self.proton, lambda: self.config.accounts
+        )
+        self.engine = SyncEngine(self.config.settings.rclone_path, proton=self.proton)
         self.audit = AuditTimeline()
         self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
         self.profiles = ProfileManager(self.store, self.rclone)
@@ -4290,6 +4426,32 @@ class TuxDriveApplication(Gtk.Application):
                 os.unlink(temporary)
 
     def add_account(self, account: Account) -> None:
+        previous = next(
+            (item for item in self.config.accounts if item.remote == account.remote),
+            None,
+        )
+        if (
+            account.provider is Provider.PROTON_DRIVE
+            and account.backend == "proton_cli"
+        ):
+            for job in self.config.jobs:
+                if job.account_remote != account.remote:
+                    continue
+                job.realtime_sync = False
+                if job.mode is SyncMode.VIRTUAL_DRIVE:
+                    job.enabled = False
+                    job.initialized = False
+                    job.last_status = (
+                        "Proton streaming is unavailable with the official CLI; edit this job and choose a synchronization mode."
+                    )
+            if previous and previous.backend != "proton_cli":
+                try:
+                    self.rclone.delete_remote(previous.remote)
+                except RcloneError as exc:
+                    LOGGER.warning(
+                        "Official Proton session connected, but legacy encrypted rclone remote cleanup failed: %s",
+                        exc,
+                    )
         self.config.accounts = [item for item in self.config.accounts if item.remote != account.remote]
         self.config.accounts.append(account)
         self.save()
@@ -4654,6 +4816,17 @@ class TuxDriveApplication(Gtk.Application):
         for remote, provider in existing.items():
             if remote not in known:
                 self.config.accounts.append(Account(remote, provider, remote))
+        legacy_proton = {
+            account.remote for account in self.config.accounts
+            if account.provider is Provider.PROTON_DRIVE and account.backend != "proton_cli"
+        }
+        for job in self.config.jobs:
+            if job.account_remote in legacy_proton and job.enabled:
+                self.engine.stop_callbacks(job.id)
+                job.enabled = False
+                job.last_status = (
+                    "Reconnect this Proton account in the browser to migrate from the legacy rclone login."
+                )
         self.save()
         if self.window:
             self.window.refresh()

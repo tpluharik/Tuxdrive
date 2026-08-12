@@ -2,7 +2,7 @@
 
 <p align="center"><img src="branding/tuxdrive-logo.png" width="180" alt="TuxDrive black-and-white penguin head logo"></p>
 
-TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. It combines a GTK desktop interface with rclone's mature cloud backends, system Git, browser-based OAuth or provider authentication, and transfer engine.
+TuxDrive is a native Ubuntu desktop client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. It combines a GTK desktop interface with rclone's mature cloud backends, Proton's official browser-authenticated Drive CLI, system Git, and provider-native authorization.
 
 📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
 
@@ -19,9 +19,11 @@ TuxDrive is publicly readable. Direct repository writes remain restricted to mai
 - [Contribution guide](CONTRIBUTING.md)
 - [Code of conduct](CODE_OF_CONDUCT.md)
 
-Version 0.23.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
+Version 0.24.0 targets Ubuntu 24.04/26.04 and Debian 12/13 GNOME on amd64 and arm64. **Nordic Glass**, **Bento Cloud**, and **Midnight Sync** are complete, persistent visual designs selectable in Settings; Bento adds live service/sync/folder summary tiles, while Midnight provides a high-contrast dark workspace. Synchronized-folder rows can be reordered or moved into groups by functional same-application GTK drag and drop, and a minimized group shows compact provider icons for its folders while preserving the layout across restarts. These operations and design changes affect only TuxDrive interface metadata—never local or cloud paths. Streaming mounts remain files-on-demand after reconnect, with explicit offline/online-only controls, bounded exact-file hydration, durable Nautilus menus, old-process retirement during upgrade, GitHub synchronization, the 0.19 security baseline, six functional Nautilus badges, searchable offline documentation, and persistent English, German, French, Spanish, Arabic and Hebrew localization.
 
 Version 0.23.0 also contains the completed performance redesign: event-driven local monitoring with overflow reconciliation, adaptive remote polling, incremental/coalesced GTK updates, visibility-aware activity tails, unchanged-state write suppression, conditional LAN discovery, executable-identity validation caching and conservative pin-aware streaming-cache quotas. These optimizations retain full reconciliation, atomic changed-state writes, signed update verification, mass-change protection, conflict handling and path-confinement controls.
+
+Version 0.24.0 migrates new and reconnected Proton Drive accounts to Proton's official CLI. **Connect account → Proton Drive** opens Proton's browser sign-in; passwords and two-factor codes never enter TuxDrive, and the official CLI stores its session in Linux Secret Service. Scheduled two-way, download-only and upload-only folder synchronization use `/my-files`, machine-readable CLI output, nested exception filtering, pre-transfer mass-change checks, symlink/path confinement and redacted errors. Proton streaming is disabled because the official CLI exposes no mount API. Native Proton synchronization is intentionally non-destructive: one-sided deletions are restored rather than propagated, while replacements retain Proton versions and TuxDrive's configured conflict policy.
 
 ### Current security baseline
 
@@ -29,7 +31,7 @@ Version 0.23.0 also contains the completed performance redesign: event-driven lo
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.22.0:
+The following controls are enforced in 0.24.0:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -37,10 +39,16 @@ The following controls are enforced in 0.22.0:
 - Block-delta instructions are signed with the sender's Ed25519 peer identity and accepted only from an authorized device; unavailable delta signing safely falls back to a complete file transfer.
 - Encrypted profile backups use a stronger scrypt work factor and 14-character minimum for new backups while retaining read compatibility with version-1 profiles.
 - OAuth/configuration subprocesses disable same-user process inspection on Linux; logs/configuration files use explicit private permissions; the launcher runs Python in isolated mode.
-- Provider tokens/passwords are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to the application JSON. Independently encrypted advanced-user rclone configurations are preserved.
+- Provider tokens/passwords for rclone-backed services are migrated into rclone's authenticated encrypted configuration; its random key is retrieved from GNOME Secret Service and never committed to application JSON. Proton's official CLI separately owns its browser session in Linux Secret Service; TuxDrive never reads or exports it.
 - Each authorized peer key receives an isolated listener and authorization file. Read-only/receive-only restrictions are applied by the server, while send-only and one-time-drop devices are rooted in private inboxes rather than the shared workspace.
 - Collaborative operation logs and ODT/ODS imports have explicit count, byte, compression-ratio and schema limits; unsafe XML entities are rejected before document processing.
 - GitHub synchronization accepts only credential-free `github.com` HTTPS or SSH clone URLs, validates branch names, disables interactive credential prompts, and delegates secrets to the system SSH agent or Git credential helper.
+
+### 0.24.0 official Proton Drive browser authorization
+
+- Install Proton's official `proton-drive` CLI, then choose **Connect account → Proton Drive → Open browser and connect**. Complete password and 2FA entry only on Proton's page; TuxDrive validates `/my-files` before saving the account.
+- The official CLI supports one active Proton account session. Reconnect replaces that session safely. Existing legacy Proton/rclone jobs are paused until browser migration succeeds; the legacy encrypted rclone remote is then removed when possible.
+- Choose two-way, download-only or upload-only synchronization. Proton jobs run on the configured schedule, never start rclone callbacks, and cannot select Streaming drive. The system check reports whether the optional official CLI is installed.
 
 ### 0.21.1 drag-and-drop groups, online-only/offline availability and GitHub
 
@@ -95,9 +103,9 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 - eight providers: Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, and Nextcloud
 - encrypted TuxDrive Profile backup stored in a linked OAuth account, with discovery after provider connection and password-protected restore on a new device
 - configuration-only backup by default; OAuth credentials and peer private keys require an explicit sensitive-migration opt-in
-- provider-native browser OAuth where available, plus guided credential or app-password configuration for MEGA, Proton Drive, and Nextcloud
-- Proton Drive has explicit username, password, 2FA/OTP-secret, and two-password mailbox fields; credentials are protected by rclone configuration encryption backed by GNOME Secret Service and the remote is tested before it is shown as connected
-- Proton Drive opens a dedicated in-app 2FA challenge only when Proton requests a fresh code
+- provider-native browser OAuth where available, Proton's official browser-authenticated CLI, plus guided credential or app-password configuration for MEGA and Nextcloud
+- Proton Drive authorization never accepts a password or two-factor code in TuxDrive; the official CLI stores its single active session under service `ch.proton.drive/drive-sdk-cli` in Linux Secret Service and `/my-files` is tested before the account is saved
+- scheduled non-streaming Proton synchronization through official upload/download operations, with nested exceptions, symlink refusal, redacted diagnostics, mass-change protection and non-destructive deletion behavior
 - direct peer-to-peer collaborative folders between two TuxDrive computers over encrypted SFTP, with no intermediary file server
 - block-level peer delta transactions signed by the sender identity, with BLAKE2 block verification, final SHA-256 validation, atomic receiver replacement, and safe full-file fallback
 - automatic UPnP/NAT-PMP port mapping and optional encrypted reverse-tunnel relay; the relay forwards ciphertext and stores no file content or TuxDrive keys
@@ -158,7 +166,7 @@ TuxDrive Profile links the application to an existing Google Drive, OneDrive, Dr
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxdrive_0.23.0_all.deb
+sudo apt install ./tuxdrive_0.24.0_all.deb
 ```
 
 Open **TuxDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
@@ -176,7 +184,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The installer is written to `dist/tuxdrive_0.23.0_all.deb`. TuxDrive publishes Debian packages only.
+The installer is written to `dist/tuxdrive_0.24.0_all.deb`. TuxDrive publishes Debian packages only.
 
 ### Local-first collaborative documents
 
@@ -200,7 +208,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.23.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.24.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

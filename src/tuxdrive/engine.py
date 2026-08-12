@@ -32,6 +32,7 @@ from .github_sync import GitHubSyncError, parse_repository_url, validate_branch
 from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
 from .nautilus_support import is_available_offline
 from .cache_manager import CacheCleanupResult, StreamingCacheManager
+from .proton import ProtonDriveClient, ProtonDriveError
 
 
 @dataclass(slots=True)
@@ -57,7 +58,11 @@ class SyncEngine:
         Provider.PEER: (10.0, 30.0, 60.0, 120.0),
     }
 
-    def __init__(self, rclone_path: str = "rclone") -> None:
+    def __init__(
+        self,
+        rclone_path: str = "rclone",
+        proton: ProtonDriveClient | None = None,
+    ) -> None:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._mounts: dict[str, subprocess.Popen[str]] = {}
@@ -70,8 +75,10 @@ class SyncEngine:
         self._lock = threading.RLock()
         self.delta = BlockDeltaPlanner()
         self.cache_manager = StreamingCacheManager()
-        self._job_layout_signature: tuple[tuple[str, str, str, str], ...] = ()
+        self._job_layout_signature: tuple[tuple[str, str, str, str, str], ...] = ()
         self._remote_backoffs: dict[str, tuple[float, ...]] = {}
+        self._job_backends: dict[str, str] = {}
+        self.proton = proton or ProtonDriveClient()
 
     @property
     def running_jobs(self) -> set[str]:
@@ -94,10 +101,20 @@ class SyncEngine:
         provider_by_remote = {
             account.remote: account.provider for account in (accounts or [])
         }
+        backend_by_remote = {
+            account.remote: (
+                "proton_cli"
+                if account.provider is Provider.PROTON_DRIVE
+                and account.backend == "proton_cli"
+                else "rclone"
+            )
+            for account in (accounts or [])
+        }
         signature = tuple(
             (
                 job.id, job.local_path, job.mode.value,
                 provider_by_remote.get(job.account_remote, Provider.GOOGLE_DRIVE).value,
+                backend_by_remote.get(job.account_remote, "rclone"),
             )
             for job in jobs
         )
@@ -132,6 +149,10 @@ class SyncEngine:
             )
             for job in jobs
         }
+        self._job_backends = {
+            job.id: backend_by_remote.get(job.account_remote, "rclone")
+            for job in jobs
+        }
 
     def maintain_streaming_cache(
         self,
@@ -152,6 +173,8 @@ class SyncEngine:
         return results
 
     def command_for_job(self, job: SyncJob, dry_run: bool = False) -> list[str]:
+        if self._job_backends.get(job.id) == "proton_cli":
+            raise ValueError("Official Proton CLI jobs use the native provider adapter")
         local = str(job.local)
         common = [
             "--create-empty-src-dirs",
@@ -770,6 +793,14 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
         dry_run: bool = False,
     ) -> bool:
+        if self._job_backends.get(job.id) == "proton_cli" and job.mode is SyncMode.VIRTUAL_DRIVE:
+            callback(JobResult(
+                job.id,
+                False,
+                "Proton files-on-demand is unavailable because the official CLI has no mount API. Edit the job and choose a synchronization mode.",
+                self._log_path(job),
+            ))
+            return False
         if job.mode is SyncMode.VIRTUAL_DRIVE:
             result = self.start_mount(job)
             callback(result)
@@ -801,8 +832,11 @@ class SyncEngine:
     def cancel(self, job_id: str) -> bool:
         with self._lock:
             process = self._processes.get(job_id)
+            native = self._job_backends.get(job_id) == "proton_cli"
+        if native:
+            self.proton.cancel(job_id)
         if not process or process.poll() is not None:
-            return False
+            return native
         try:
             os.killpg(process.pid, signal.SIGTERM)
         except ProcessLookupError:
@@ -1053,7 +1087,13 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
         reconcile: Callable[[SyncJob], None],
     ) -> None:
-        if job.is_git or job.mode is SyncMode.VIRTUAL_DRIVE or not job.realtime_sync or not job.initialized:
+        if (
+            job.is_git
+            or self._job_backends.get(job.id) == "proton_cli"
+            or job.mode is SyncMode.VIRTUAL_DRIVE
+            or not job.realtime_sync
+            or not job.initialized
+        ):
             return
         self.stop_callbacks(job.id)
         monitor = ChangeMonitor(
@@ -1214,6 +1254,47 @@ class SyncEngine:
         if job.is_git:
             callback(self._run_git_sync(job, log_path, dry_run))
             return
+        if self._job_backends.get(job.id) == "proton_cli":
+            ensure_private_directory(log_path.parent)
+            prepare_private_file(log_path)
+            try:
+                with log_path.open("a", encoding="utf-8") as log:
+                    log.write(
+                        f"\n[{datetime.now(timezone.utc).isoformat()}] Starting TuxDrive "
+                        f"{__version__} sync through official Proton Drive CLI\n"
+                    )
+                    if dry_run:
+                        self.proton.validate_session()
+                        local_items = len(self.proton.local_snapshot(job))
+                        remote_items = len(self.proton.remote_snapshot(job.remote_path, job_id=job.id))
+                        log.write(f"Safe preview: local={local_items}, remote={remote_items}; no transfer performed\n")
+                        result = JobResult(job.id, True, "Proton synchronization preview complete", log_path)
+                    else:
+                        outcome = self.proton.sync(
+                            job,
+                            process_callback=lambda process: self._set_current_process(job.id, process),
+                        )
+                        log.write(
+                            "Synchronization complete: "
+                            f"uploaded roots={outcome.uploaded}, downloaded roots={outcome.downloaded}, "
+                            f"local items={outcome.local_items}, remote items={outcome.remote_items}\n"
+                        )
+                        result = JobResult(job.id, True, "Proton synchronization complete", log_path)
+            except ProtonDriveError as exc:
+                message = str(exc)
+                result = JobResult(
+                    job.id,
+                    False,
+                    message,
+                    log_path,
+                    cancelled="cancel" in message.lower(),
+                    mass_change_blocked="Protection paused" in message,
+                )
+            finally:
+                with self._lock:
+                    self._processes.pop(job.id, None)
+            callback(result)
+            return
         ensure_private_directory(log_path.parent)
         cancelled = False
         try:
@@ -1287,6 +1368,10 @@ class SyncEngine:
             with self._lock:
                 self._processes.pop(job.id, None)
         callback(result)
+
+    def _set_current_process(self, job_id: str, process: subprocess.Popen[str]) -> None:
+        with self._lock:
+            self._processes[job_id] = process
 
     def _run_git_sync(self, job: SyncJob, log_path: Path, dry_run: bool) -> JobResult:
         """Synchronize a GitHub working tree without storing access tokens."""

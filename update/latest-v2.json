@@ -1,8 +1,8 @@
 {
-  "version": "0.23.0",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.23.0_all.deb",
-  "sha256": "bd303ba45e987c172493a8923885f8d205dc99bb0786fa6826d30356d85bb9ee",
-  "notes": "Event-driven local monitoring, adaptive remote polling, incremental UI refreshes, and conservative pin-aware cache quotas.",
-  "expires_at": "2026-11-10T07:19:52.648729+00:00",
-  "signature": "8Pnm42ZtE92jzxkihv6k/XsilAxPM00JkX6RZsKdmz3JWaqeAgKpzvyiT9QGeNil6EhH+AkfwsC0imXLGXgEBQ=="
+  "version": "0.24.0",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.24.0_all.deb",
+  "sha256": "8b84c6106b439d9792428a0cf7034d799c7a64b439296456956b240eb999b5a5",
+  "notes": "Official Proton Drive browser authorization and incremental scheduled sync",
+  "expires_at": "2026-11-10T08:11:45.235326+00:00",
+  "signature": "zVRu7c81Hz2EscYPH2YjnxmEJ6EdgGWw3OImEYFrpadUcGBq/9Fo36PYrKsxsEkeSw0+MxRUg73dCg7PZAOMBg=="
 }

@@ -105,10 +105,6 @@ class Provider(str, Enum):
     def initial_options(self) -> tuple[str, ...]:
         if self is self.NEXTCLOUD:
             return ("vendor", "nextcloud")
-        if self is self.PROTON_DRIVE:
-            # Proton's backend warns that its metadata cache can become stale
-            # when another client changes a mounted drive.
-            return ("enable_caching", "false")
         return ()
 
     @property
@@ -118,12 +114,6 @@ class Provider(str, Enum):
             self.MEGA: (
                 ("user", "MEGA email", False, True),
                 ("pass", "MEGA password", True, True),
-            ),
-            self.PROTON_DRIVE: (
-                ("username", "Proton account email", False, True),
-                ("password", "Proton password", True, True),
-                ("otp_secret_key", "OTP secret key (optional)", True, False),
-                ("mailbox_password", "Mailbox password (two-password accounts)", True, False),
             ),
             self.NEXTCLOUD: (
                 ("url", "Nextcloud WebDAV URL", False, True),
@@ -217,12 +207,17 @@ class Account:
     repository_branch: str = "main"
     git_author_name: str = ""
     git_author_email: str = ""
+    backend: str = "rclone"
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "Account":
+        provider = Provider(value["provider"])
+        backend = value.get("backend", "rclone")
+        if provider is not Provider.PROTON_DRIVE or backend != "proton_cli":
+            backend = "rclone"
         return cls(
             remote=value["remote"],
-            provider=Provider(value["provider"]),
+            provider=provider,
             display_name=value.get("display_name", value["remote"]),
             created_at=value.get("created_at", datetime.now(timezone.utc).isoformat()),
             peer_host=value.get("peer_host", ""),
@@ -234,6 +229,7 @@ class Account:
             repository_branch=value.get("repository_branch", "main"),
             git_author_name=value.get("git_author_name", ""),
             git_author_email=value.get("git_author_email", ""),
+            backend=backend,
         )
 
 
@@ -419,6 +415,7 @@ class AppSettings:
     notifications: bool = True
     start_minimized: bool = False
     rclone_path: str = "rclone"
+    proton_drive_path: str = "proton-drive"
     nautilus_integration: bool = True
     language: str = "en"
     visual_theme: str = "nordic_glass"

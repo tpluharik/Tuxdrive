@@ -1,0 +1,297 @@
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+from tuxdrive.models import Account, AppConfig, ConflictPolicy, Provider, SyncJob, SyncMode
+from tuxdrive.engine import SyncEngine
+from tuxdrive.proton import ProtonDriveClient, ProtonDriveError, ProtonNode, ProtonSyncResult, proton_path
+
+
+class ProtonPathTests(unittest.TestCase):
+    def test_paths_are_confined_to_my_files(self):
+        self.assertEqual(proton_path(), "/my-files")
+        self.assertEqual(proton_path("Work/Reports"), "/my-files/Work/Reports")
+        for unsafe in ("../secret", "a/../../b", "a\nname"):
+            with self.subTest(unsafe=unsafe), self.assertRaises(ProtonDriveError):
+                proton_path(unsafe)
+
+    def test_native_backend_survives_configuration_round_trip(self):
+        original = AppConfig(accounts=[Account("proton-web", Provider.PROTON_DRIVE, "Private", backend="proton_cli")])
+        restored = AppConfig.from_dict(original.to_dict())
+        self.assertEqual(restored.accounts[0].backend, "proton_cli")
+        self.assertEqual(restored.settings.proton_drive_path, "proton-drive")
+
+    def test_legacy_account_defaults_to_rclone_backend(self):
+        restored = Account.from_dict({
+            "remote": "old-proton",
+            "provider": "proton_drive",
+            "display_name": "Old",
+        })
+        self.assertEqual(restored.backend, "rclone")
+
+    def test_native_backend_is_accepted_only_for_proton(self):
+        restored = Account.from_dict({
+            "remote": "google-main",
+            "provider": "google_drive",
+            "display_name": "Work",
+            "backend": "proton_cli",
+        })
+        self.assertEqual(restored.backend, "rclone")
+
+
+class ProtonClientTests(unittest.TestCase):
+    def setUp(self):
+        self.client = ProtonDriveClient("/usr/bin/proton-drive")
+
+    @staticmethod
+    def process(stdout="", stderr="", returncode=0):
+        process = MagicMock()
+        process.communicate.return_value = (stdout, stderr)
+        process.returncode = returncode
+        process.pid = 1234
+        process.poll.return_value = returncode
+        return process
+
+    def test_missing_official_cli_has_actionable_error(self):
+        client = ProtonDriveClient("proton-drive")
+        with patch("tuxdrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
+            ProtonDriveError, "proton.me/download/drive/cli"
+        ):
+            client.resolve()
+
+    def test_environment_forces_secret_service_and_ignores_unsafe_override(self):
+        with patch.dict(os.environ, {
+            "PROTON_DRIVE_CACHE_DIR": "/tmp/plain-session",
+            "PROTON_DRIVE_CREDENTIALS_STORE": "unsafe_file",
+        }):
+            environment = self.client._environment()
+        self.assertNotIn("PROTON_DRIVE_CACHE_DIR", environment)
+        self.assertEqual(environment["PROTON_DRIVE_CREDENTIALS_STORE"], "keychain")
+        self.assertEqual(environment["PROTON_DRIVE_LOG_LEVEL"], "WARNING")
+
+    def test_browser_login_never_passes_credentials(self):
+        login = self.process(stdout="Authentication successful\n")
+        listing = self.process(stdout="[]\n")
+        with patch.object(self.client, "resolve", return_value="/usr/bin/proton-drive"), patch(
+            "tuxdrive.proton.subprocess.Popen", side_effect=[login, listing]
+        ) as popen:
+            self.client.login()
+        self.assertEqual(popen.call_args_list[0].args[0], ["/usr/bin/proton-drive", "auth", "login"])
+        flattened = " ".join(popen.call_args_list[0].args[0]).lower()
+        self.assertNotIn("password", flattened)
+        self.assertNotIn("2fa", flattened)
+        self.assertEqual(
+            popen.call_args_list[1].args[0],
+            ["/usr/bin/proton-drive", "filesystem", "list", "/my-files", "--json"],
+        )
+
+    def test_directory_listing_uses_json_and_rejects_unsafe_names(self):
+        payload = json.dumps([
+            {"name": "Documents", "type": "folder", "uid": "1"},
+            {"name": "photo.jpg", "type": "file", "uid": "2"},
+        ])
+        with patch.object(self.client, "_json", return_value=json.loads(payload)) as command:
+            self.assertEqual(self.client.list_directories("proton-web", ""), ["Documents"])
+        self.assertEqual(command.call_args.args[0], ["filesystem", "list", "/my-files", "--json"])
+        with patch.object(self.client, "_json", return_value=[{"name": "../escape", "type": "file"}]), self.assertRaises(
+            ProtonDriveError
+        ):
+            self.client.list_directories("proton-web", "")
+
+    def test_auth_error_redacts_url_and_session_value(self):
+        detail = self.client._safe_error(
+            "Open https://account.proton.me/auth?token=secret\nsession: super-secret"
+        )
+        self.assertNotIn("account.proton.me", detail)
+        self.assertNotIn("super-secret", detail)
+        self.assertIn("[authorization URL omitted]", detail)
+
+    def test_session_expiry_is_actionable(self):
+        failed = self.process(stderr="401 unauthorized: session expired", returncode=1)
+        with patch.object(self.client, "resolve", return_value="/usr/bin/proton-drive"), patch(
+            "tuxdrive.proton.subprocess.Popen", return_value=failed
+        ), self.assertRaisesRegex(ProtonDriveError, "Reconnect in browser"):
+            self.client.validate_session()
+
+    def test_mass_change_guard_blocks_before_transfer(self):
+        job = SyncJob(
+            "proton-web", "/data/proton", initialized=True,
+            mass_change_limit=2, mass_change_percent=90,
+        )
+        previous = {"local": {"a": "1", "b": "1", "c": "1"}, "remote": {}}
+        with self.assertRaisesRegex(ProtonDriveError, "Protection paused"):
+            self.client._guard_mass_change(
+                job, {"a": "2", "b": "2", "c": "1"}, {}, previous
+            )
+
+    def test_sync_rejects_streaming_without_running_cli(self):
+        job = SyncJob("proton-web", "/data/proton", mode=SyncMode.VIRTUAL_DRIVE)
+        with patch.object(self.client, "_run") as run, self.assertRaisesRegex(
+            ProtonDriveError, "no mount API"
+        ):
+            self.client.sync(job)
+        run.assert_not_called()
+
+    def test_empty_upload_does_not_invoke_transfer(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            local = Path(temporary) / "local"
+            local.mkdir()
+            job = SyncJob(
+                "proton-web", str(local), mode=SyncMode.UPLOAD_ONLY,
+                conflict_policy=ConflictPolicy.LOCAL_WINS,
+            )
+            with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch.object(
+                self.client, "remote_tree", side_effect=[{}, {}]
+            ), patch.object(
+                self.client, "_run"
+            ) as run, patch.object(self.client, "_save_state"):
+                result = self.client.sync(job)
+        self.assertEqual(result.uploaded, 0)
+        run.assert_not_called()
+
+    def test_nested_exclusions_are_not_uploaded(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            local = Path(temporary) / "local"
+            (local / "nested").mkdir(parents=True)
+            (local / "nested" / "report.txt").write_text("ok", encoding="utf-8")
+            (local / "nested" / "partial.part").write_text("temporary", encoding="utf-8")
+            job = SyncJob("proton-web", str(local), mode=SyncMode.UPLOAD_ONLY)
+            completed = MagicMock(stdout="[]", stderr="", returncode=0)
+            with patch.dict(os.environ, {"XDG_DATA_HOME": str(Path(temporary) / "state")}), patch.object(
+                self.client, "remote_tree", side_effect=[{}, {}]
+            ), patch.object(self.client, "_run", return_value=completed) as run, patch.object(
+                self.client, "_save_state"
+            ):
+                self.client.sync(job)
+        commands = [call.args[0] for call in run.call_args_list]
+        flattened = "\n".join(" ".join(command) for command in commands)
+        self.assertIn("report.txt", flattened)
+        self.assertNotIn("partial.part", flattened)
+        self.assertTrue(any(command[:2] == ["filesystem", "create-folder"] for command in commands))
+
+    def test_download_rejects_existing_symlink_before_cli_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            local = Path(temporary) / "local"
+            outside = Path(temporary) / "outside"
+            local.mkdir()
+            outside.mkdir()
+            (local / "linked").symlink_to(outside, target_is_directory=True)
+            tree = {
+                "linked/file.txt": ProtonNode(
+                    "file.txt", "/my-files/linked/file.txt", False, "fingerprint"
+                )
+            }
+            job = SyncJob("proton-web", str(local), mode=SyncMode.DOWNLOAD_ONLY)
+            with patch.object(self.client, "_run") as run, self.assertRaisesRegex(
+                ProtonDriveError, "symbolic link"
+            ):
+                self.client._download_children(
+                    tree, local, "replace", job, None, {"linked/file.txt"}
+                )
+        run.assert_not_called()
+
+    def test_unchanged_files_are_not_transferred_again(self):
+        job = SyncJob("proton-web", "/data/proton")
+        local = {"report.txt": "f:10:100"}
+        remote = {"report.txt": "f:10:sha1:uid"}
+        uploads, downloads = self.client._transfer_plan(
+            job, local, remote, {"local": local, "remote": remote}
+        )
+        self.assertEqual(uploads, {})
+        self.assertEqual(downloads, {})
+
+    def test_one_sided_deletions_are_restored(self):
+        job = SyncJob("proton-web", "/data/proton")
+        previous = {
+            "local": {"local-deleted.txt": "f:1:1", "remote-deleted.txt": "f:1:1"},
+            "remote": {"local-deleted.txt": "f:1:a", "remote-deleted.txt": "f:1:b"},
+        }
+        uploads, downloads = self.client._transfer_plan(
+            job,
+            {"remote-deleted.txt": "f:1:1"},
+            {"local-deleted.txt": "f:1:a"},
+            previous,
+        )
+        self.assertEqual(uploads, {"merge": {"remote-deleted.txt"}})
+        self.assertEqual(downloads, {"replace": {"local-deleted.txt"}})
+
+    def test_changed_both_sides_keeps_both_without_guessing_newer(self):
+        job = SyncJob(
+            "proton-web", "/data/proton", conflict_policy=ConflictPolicy.NEWER_WINS
+        )
+        uploads, downloads = self.client._transfer_plan(
+            job,
+            {"report.txt": "f:11:200"},
+            {"report.txt": "f:12:new:uid"},
+            {
+                "local": {"report.txt": "f:10:100"},
+                "remote": {"report.txt": "f:10:old:uid"},
+            },
+        )
+        self.assertEqual(uploads, {"merge": {"report.txt"}})
+        self.assertEqual(downloads, {"keep-both": {"report.txt"}})
+
+    def test_sync_rejects_a_symlink_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            real = Path(temporary) / "real"
+            linked = Path(temporary) / "linked"
+            real.mkdir()
+            linked.symlink_to(real, target_is_directory=True)
+            job = SyncJob("proton-web", str(linked), mode=SyncMode.UPLOAD_ONLY)
+            with patch.object(self.client, "_run") as run, self.assertRaisesRegex(
+                ProtonDriveError, "root cannot be a symbolic link"
+            ):
+                self.client.sync(job)
+        run.assert_not_called()
+
+
+class ProtonEngineTests(unittest.TestCase):
+    def test_native_job_uses_proton_adapter_not_rclone(self):
+        proton = MagicMock(spec=ProtonDriveClient)
+        proton.sync.return_value = ProtonSyncResult(1, 1, 3, 3)
+        engine = SyncEngine("/usr/bin/rclone", proton=proton)
+        account = Account(
+            "proton-web", Provider.PROTON_DRIVE, "Private", backend="proton_cli"
+        )
+        with tempfile.TemporaryDirectory() as temporary:
+            job = SyncJob("proton-web", temporary)
+            engine.configure_jobs([job], [account])
+            completed = []
+            with patch("tuxdrive.engine.resolve_rclone") as rclone:
+                engine._run_worker(
+                    job, Path(temporary) / "proton.log", completed.append, False
+                )
+        rclone.assert_not_called()
+        proton.sync.assert_called_once()
+        self.assertTrue(completed[0].success)
+
+    def test_native_streaming_job_fails_closed(self):
+        proton = MagicMock(spec=ProtonDriveClient)
+        engine = SyncEngine("/usr/bin/rclone", proton=proton)
+        account = Account(
+            "proton-web", Provider.PROTON_DRIVE, "Private", backend="proton_cli"
+        )
+        job = SyncJob("proton-web", "/data/proton", mode=SyncMode.VIRTUAL_DRIVE)
+        engine.configure_jobs([job], [account])
+        completed = []
+        self.assertFalse(engine.run_async(job, completed.append))
+        self.assertIn("no mount API", completed[0].message)
+        proton.sync.assert_not_called()
+
+    def test_native_job_never_starts_rclone_change_monitor(self):
+        proton = MagicMock(spec=ProtonDriveClient)
+        engine = SyncEngine("/usr/bin/rclone", proton=proton)
+        account = Account(
+            "proton-web", Provider.PROTON_DRIVE, "Private", backend="proton_cli"
+        )
+        job = SyncJob("proton-web", "/data/proton", initialized=True)
+        engine.configure_jobs([job], [account])
+        with patch("tuxdrive.engine.ChangeMonitor") as monitor:
+            engine.start_callbacks(job, lambda _result: None, lambda _job: None)
+        monitor.assert_not_called()
+
+if __name__ == "__main__":
+    unittest.main()

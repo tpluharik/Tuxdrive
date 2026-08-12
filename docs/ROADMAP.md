@@ -7,13 +7,17 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.22.0
+## Current baseline: 0.24.0
 
 Version 0.22.0 implements Nordic Glass, Bento Cloud, and Midnight Sync as selectable, validated, persistent GTK visual designs. Bento includes live service/synchronization/folder summary tiles; Midnight uses a high-contrast dark preference; Nordic is the default. The shared component layer preserves provider icons, rounded account/job/group cards, drag/drop, minimized groups, accessibility, live logs, and all transfer behavior. It retains the 0.21.1 folder organization repair, exact online-only/offline controls, URI-safe Nautilus menu refresh, GitHub synchronization, six functional Nautilus badges, the 0.19 security remediation and updater trust bridge, six-language documentation, and the collaboration baseline.
 
 ### Completed in 0.23.0
 
 The performance-audit roadmap is implemented: inotify replaces idle local polling, remote enumeration backs off adaptively, post-transfer snapshots are updated from confirmed results and reconciled later, GTK updates are keyed/coalesced, hidden activity logs stop polling, identical configuration/Nautilus state is not rewritten, rclone validation is cached by binary identity, LAN discovery is conditional, optional dialog modules are lazy-loaded, and a conservative pin-aware cache manager enforces configurable quota/free-space targets. Queue overflow, invalid pin metadata, dirty cache state or any confinement uncertainty fails closed without discarding user data.
+
+### Completed in 0.24.0
+
+New and reconnected Proton Drive accounts use Proton's official browser-authenticated CLI and Linux Secret Service session storage. TuxDrive persists an explicit native backend, pauses legacy Proton/rclone jobs until browser migration, browses `/my-files`, and provides browser reconnect plus official logout without copying any old password. Scheduled two-way/download/upload reconciliation honors nested exceptions, refuses symlinks and unsafe remote paths, redacts authorization material, bounds and cancels subprocesses, stores atomic private snapshots, and runs mass-change protection before transfer. Proton streaming and real-time callbacks remain disabled until Proton publishes supported mount and sync-event APIs; one-sided deletions are restored rather than propagated.
 
 The next recommended development milestone is **1.0.0 — operational hardening**, focusing on the headless peer agent, protocol versioning, hydration/throughput metrics, relay deployment guidance, large-tree delta stress testing, isolated per-role service endpoints and a published threat model. Tor transport and secure-workspace primitives should follow only after that foundation is externally reviewable. No planned item should be read as available until its status changes to a shipped version.
 

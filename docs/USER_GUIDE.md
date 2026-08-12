@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.22.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.24.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including official Proton Drive browser authorization, selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxDrive distributes a `.deb` package only.
 
-Provider credentials are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Do not delete the `TuxDrive rclone configuration` secret unless the cloud accounts have first been disconnected or exported.
+Credentials for rclone-backed providers are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Proton's official CLI separately stores its browser session in Secret Service under `ch.proton.drive/drive-sdk-cli`; TuxDrive never reads or exports it. Do not delete either secret until the related accounts have been disconnected.
 
-Version 0.22.0 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.24.0 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.22.0 is the supported security baseline. Upgrade older installations b
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.22.0_all.deb
+sudo apt install ./tuxdrive_0.24.0_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -58,7 +58,7 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.22.0 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.24.0 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxDrive
 
@@ -111,18 +111,20 @@ Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive,
 - **Display name** is the friendly name shown in the sidebar.
 - **OAuth client ID/secret** are optional for personal testing. A dedicated provider application is recommended for regular or organizational use.
 - Google Drive, OneDrive, Dropbox, Box, and pCloud normally open browser OAuth. Sign in on the provider's page and approve access; TuxDrive does not receive the cloud password.
-- MEGA and Proton Drive use explicit provider credential fields. Nextcloud asks for the server URL, username, and preferably an app password. Secret values are protected before rclone stores them in its private configuration; they are never stored in TuxDrive's account JSON.
-- Every provider exposes the same lazy-loading folder tree, multi-folder selection, two-way/one-way modes, and streaming-drive option after connection.
-- Proton Drive support follows rclone's beta backend. TuxDrive disables that backend's metadata cache so changes made by another client can be discovered, but provider protocol changes may still require a future TuxDrive/rclone update.
+- MEGA uses explicit provider credentials. Nextcloud asks for the server URL, username, and preferably an app password. Secret values are protected before rclone stores them in its private configuration; they are never stored in TuxDrive's account JSON.
+- Every provider exposes the same lazy-loading folder tree and multi-folder selection. The capability note disables modes the provider cannot safely support.
+- Proton Drive uses Proton's official CLI and browser login. It supports scheduled two-way, download-only, and upload-only jobs, but not streaming or real-time callbacks because the official CLI exposes neither a mount API nor a sync-event API.
 - If the browser callback port is busy, cancel the old authorization window and retry. TuxDrive stops stale OAuth callback processes before opening a new session.
 
 ### Proton Drive authentication
 
-Enter the Proton account email and password. If Proton reports that two-factor authentication is required, TuxDrive opens a separate dialog for the current code and retries verification. You may instead provide the account's OTP secret key during setup when recurring automatic authentication is appropriate. Enter a mailbox password only for older Proton accounts configured in two-password mode. TuxDrive tests a root-folder listing before it accepts the account, so an incomplete remote is no longer displayed as **Connected**.
+Install the official `proton-drive` CLI from [Proton's download page](https://proton.me/download/drive/cli). Select **Connect account → Proton Drive → Open browser and connect**. Keep the dialog open while entering the password and any two-factor code on Proton's page. TuxDrive supplies no password, OTP secret, mailbox password, token, or callback data to the CLI; after login, it validates a machine-readable listing of `/my-files` before saving the account.
 
-If Proton Drive was added with TuxDrive 0.6.0 or 0.6.1 and folder browsing says that a username and password are required, open the account's menu and choose **Reconnect / refresh credentials**. Fill in the Proton fields; synchronized-job definitions do not need to be recreated.
+The official CLI maintains one active Proton account session. To change or refresh it, open the account menu and select **Reconnect / refresh credentials**, then complete browser authorization again. Removing the account runs the official logout command after all jobs have been removed.
 
-Proton Drive support uses rclone's beta backend. Proton protocol changes may require an updated TuxDrive transfer engine, and Proton may apply additional authentication checks to some accounts.
+Legacy Proton/rclone accounts are paused after upgrading. Reconnect them in the browser; TuxDrive preserves their synchronized-folder definitions, switches them to the official backend, disables any old streaming job with an actionable edit message, and removes the unused encrypted rclone remote when possible. No legacy password is copied into the official session.
+
+Native Proton synchronization is intentionally conservative. Nested exceptions and transient files are excluded, symbolic links stop the run, mass-change thresholds are checked before transfer, and one-sided deletions are restored instead of being propagated. `Local wins` and `Cloud wins` control replacement order; `Keep both` is the safe conflict default. Proton's official CLI does not yet expose an atomic newer-wins primitive, so a Proton job configured as `Newer wins` falls back to non-destructive keep-both behavior.
 
 The account menu provides:
 
@@ -535,9 +537,9 @@ The expandable **Live activity log** shows recent application and transfer messa
 
 Version 0.10.1 writes a streaming preflight block containing the TuxDrive version, remote, mount point, rclone path, `/dev/fuse` availability, and `fusermount3` location. It automatically detaches an orphaned FUSE mount left by a crash or unexpected rclone exit and waits up to 45 seconds for large cloud trees. The Nautilus extension uses lexical path matching, so it does not resolve or stat disconnected streaming endpoints. The app displays the most relevant mount failure directly while the full command activity remains in the job log.
 
-### Proton Drive says username and password are required
+### Proton Drive asks for a legacy username and password
 
-The account was created without the Proton backend credentials. Open its menu, choose **Reconnect / refresh credentials**, enter the required Proton email and password (plus 2FA/OTP information when applicable), and wait for **Verifying cloud access** to complete. TuxDrive retains the existing sync jobs and validates the repaired remote before returning it to the connected state.
+The account still uses the retired rclone login. Install the official Proton CLI, open the account menu, choose **Reconnect / refresh credentials**, and finish browser authorization. TuxDrive retains existing folder definitions, validates `/my-files`, and never asks for the Proton password or 2FA code.
 
 ### Job reports recovery sync required
 
@@ -561,7 +563,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.22.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.24.0_all.deb`.
 
 ## 13. Data safety
 
@@ -571,10 +573,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.22.0_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.22.0
+### Security upgrade checklist for 0.24.0
 
-1. Install `tuxdrive_0.22.0_all.deb`; the upgrade closes an older running TuxDrive instance. Reopen TuxDrive and restart Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.22.0 and no signature or expiry error.
+1. Install `tuxdrive_0.24.0_all.deb`; the upgrade closes an older running TuxDrive instance. Reopen TuxDrive and restart Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.24.0 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

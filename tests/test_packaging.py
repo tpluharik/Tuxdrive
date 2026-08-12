@@ -55,7 +55,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("Verifying cloud access…", app)
         self.assertIn("Reconnect / refresh credentials", app)
         self.assertIn("class PeerSharingDialog", app)
-        self.assertIn("Proton Drive two-factor authentication", app)
+        self.assertIn("class ProtonAuthDialog", app)
+        self.assertIn("Linux Secret Service", app)
         self.assertIn("Save and connect", app)
         self.assertIn("class ProfileDialog", app)
         self.assertIn("TuxDrive Profile / migrate", app)
@@ -100,6 +101,7 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("tuxdrive-update-helper", build_script)
         self.assertIn('find_spec("tuxdrive.update_helper")', build_script)
         self.assertIn('find_spec("tuxdrive.github_sync")', build_script)
+        self.assertIn('find_spec("tuxdrive.proton")', build_script)
 
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")

@@ -29,7 +29,7 @@ CAPABILITIES: dict[Provider, ProviderCapabilities] = {
     Provider.BOX: ProviderCapabilities(True, True, True, True, True, True, True),
     Provider.PCLOUD: ProviderCapabilities(True, True, False, True, True, True, True, "Change polling falls back to scheduled reconciliation."),
     Provider.MEGA: ProviderCapabilities(False, True, False, True, True, True, True, "Credential login; scheduled reconciliation is the safe default."),
-    Provider.PROTON_DRIVE: ProviderCapabilities(False, True, False, False, True, False, True, "Beta backend; remote hash and sharing APIs are limited."),
+    Provider.PROTON_DRIVE: ProviderCapabilities(True, False, False, False, True, False, True, "Official Proton CLI with browser authorization and Secret Service session storage. Scheduled synchronization is supported; streaming is unavailable because Proton exposes no mount API."),
     Provider.NEXTCLOUD: ProviderCapabilities(False, True, False, True, True, True, True, "Capabilities vary with server and WebDAV configuration."),
     Provider.GITHUB: ProviderCapabilities(False, False, True, True, True, True, True, "Git-backed repository synchronization; Git history is the version store and files over GitHub's limits are rejected by GitHub."),
     Provider.PEER: ProviderCapabilities(False, False, True, True, True, False, True, "Direct authenticated peer transport with role controls."),
