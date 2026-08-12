@@ -10,12 +10,13 @@ mkdir -p build/macos dist
   --name TuxInDrive --osx-bundle-identifier io.github.tuxindrive.TuxInDrive \
   --distpath build/macos --workpath build/pyinstaller-macos --specpath build \
   --collect-all gi --hidden-import=keyring.backends.macOS \
-  --add-data "branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
+  --add-data "$project_root/branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
 "$python_bin" -m PyInstaller --noconfirm --clean --console --onefile \
   --name rclone-password --distpath build/macos \
   --workpath build/pyinstaller-password-macos --specpath build \
   --hidden-import=keyring.backends.macOS src/tuxindrive/password_helper.py
 app=build/macos/TuxInDrive.app
+test -d "$app"
 mkdir -p "$app/Contents/Resources"
 mv build/macos/rclone-password "$app/Contents/Resources/rclone-password"
 cp README.md LICENSE "$app/Contents/Resources/"
@@ -27,4 +28,5 @@ architecture=$(uname -m)
 dmg="dist/TuxInDrive-$version-macos-$architecture.dmg"
 rm -f "$dmg"
 hdiutil create -volname TuxInDrive -srcfolder "$app" -ov -format UDZO "$dmg"
+test -s "$dmg"
 echo "macOS package written to $dmg"

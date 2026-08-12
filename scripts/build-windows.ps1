@@ -14,7 +14,7 @@ mkdir -p build/windows dist
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name TuxInDrive \
   --distpath build/windows --workpath build/pyinstaller-windows --specpath build \
   --collect-all gi --hidden-import=keyring.backends.Windows \
-  --add-data 'branding/tuxindrive-logo.png:branding' packaging/desktop-entry.py
+  --add-data '$MsysProjectRoot/branding/tuxindrive-logo.png:branding' packaging/desktop-entry.py
 python -m PyInstaller --noconfirm --clean --console --onefile \
   --name tuxindrive-rclone-password --distpath build/windows/TuxInDrive \
   --workpath build/pyinstaller-password-windows --specpath build \
@@ -25,4 +25,6 @@ $Iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
 if (-not (Test-Path $Iscc)) { throw "Inno Setup 6 is required" }
 & $Iscc "/DAppVersion=$Version" "packaging\windows\TuxInDrive.iss"
 Compress-Archive -Path "build\windows\TuxInDrive\*" -DestinationPath "dist\TuxInDrive-$Version-windows-x64-portable.zip" -Force
+if (-not (Test-Path "dist\TuxInDrive-$Version-windows-x64-setup.exe")) { throw "Windows installer was not created" }
+if (-not (Test-Path "dist\TuxInDrive-$Version-windows-x64-portable.zip")) { throw "Windows portable archive was not created" }
 Write-Host "Windows packages written to dist\"

@@ -9,7 +9,7 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 - Added a native Android Material UI for accounts, synchronized folders, cloud browsing, activity and transfer policies.
 - Integrated the official pinned rclone 1.75.0 gomobile library in-process on Android, including encrypted configuration import/unlock, real cloud listing, SAF folder grants, WorkManager transfers, durable bisync state, keep-both conflicts and mass-deletion stops.
 - Added reproducible CI jobs for Windows installer/portable ZIP, macOS DMG and installable Android APK. Developer artifacts are ad-hoc/debug signed until platform release certificates are configured.
-- Expanded portability and native-key-store regressions; the Python suite now contains 250 tests.
+- Expanded portability, native-key-store and native-package regressions; the Python suite now contains 251 tests.
 
 ## 0.25.3 — renamed GitHub repository recovery
 

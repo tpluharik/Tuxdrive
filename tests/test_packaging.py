@@ -239,6 +239,17 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue(Path("packaging/windows/TuxInDrive.iss").is_file())
         self.assertTrue(Path("android/app/src/main/AndroidManifest.xml").is_file())
 
+    def test_native_build_paths_match_ci_runner_layout(self):
+        platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
+        windows = Path("scripts/build-windows.ps1").read_text(encoding="utf-8")
+        macos = Path("scripts/build-macos.sh").read_text(encoding="utf-8")
+        self.assertIn("mingw-w64-ucrt-x86_64-pyinstaller", platforms)
+        self.assertNotIn("mingw-w64-ucrt-x86_64-python-pyinstaller", platforms)
+        self.assertIn("mkdir -p android/app/libs", platforms)
+        self.assertIn("test -s \"${GITHUB_WORKSPACE}/android/app/libs/rclone.aar\"", platforms)
+        self.assertIn("$MsysProjectRoot/branding/tuxindrive-logo.png", windows)
+        self.assertIn('$project_root/branding/tuxindrive-logo.png', macos)
+
 
 if __name__ == "__main__":
     unittest.main()
