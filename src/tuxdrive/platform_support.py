@@ -11,6 +11,8 @@ import shutil
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .proton import ProtonDriveClient
+
 
 @dataclass(frozen=True, slots=True)
 class FeatureCheck:
@@ -64,11 +66,15 @@ def inspect_host() -> dict[str, object]:
         FeatureCheck("signed updater", False, False, "Not included in the unsigned experimental macOS package", "Install a newer notarized package manually") if is_macos else
         _command("pkexec", False, "In-app package installation unavailable", "Install the distribution's PolicyKit pkexec package"),
         _command("osascript" if is_macos else "notify-send", False, "Desktop notifications unavailable", "Install libnotify-bin"),
-        _command(
+        FeatureCheck(
             "proton-drive",
+            ProtonDriveClient().available(),
             False,
-            "Official Proton Drive synchronization unavailable",
-            "Download the official CLI from https://proton.me/download/drive/cli",
+            (
+                shutil.which("proton-drive")
+                or (str(ProtonDriveClient.managed_path()) if ProtonDriveClient.managed_path().is_file() else "Official Proton Drive synchronization unavailable")
+            ),
+            "Use Connect account → Proton Drive → Install CLI and connect",
         ),
         FeatureCheck("metered-network policy", False, False, "NetworkManager policy probe is Linux-only", "Use schedule/battery policies") if is_macos else
         _command("nmcli", False, "Metered-network policies unavailable", "Install and enable NetworkManager"),

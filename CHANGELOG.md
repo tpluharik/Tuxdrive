@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.24.1 — functional Proton CLI bootstrap
+
+- Fixed Proton connection on clean Linux installations. The 0.24.0 dialog linked to a Proton URL that currently returns 404 and required an executable that the package did not install.
+- **Install CLI and connect** now reads Proton's live release manifest, selects the official amd64 or arm64 Linux executable, downloads it into TuxDrive's private user-data directory, and continues directly into browser authorization.
+- The manifest is accepted only from Proton's exact HTTPS location. The platform binary must match the SHA-512 checksum published in the same Proton release row before it is atomically installed with private executable permissions; mismatches and partial downloads are discarded.
+- Added download limits, redirect validation, cancellable installation, safe replacement, and regression coverage for architecture selection, checksum substitution, untrusted manifests/hosts, cancellation, and existing-binary preservation. The complete suite now contains 221 automated tests.
+
 ## 0.24.0 — official Proton Drive browser authorization
 
 - Replaced new and reconnected Proton/rclone password login with Proton's official `proton-drive auth login` browser flow. Passwords and 2FA codes stay on Proton's page; the official CLI owns its session in Linux Secret Service.

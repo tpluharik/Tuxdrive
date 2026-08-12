@@ -1,16 +1,23 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
+import hmac
 import json
 import os
+import platform
 import re
 import shutil
 import signal
 import subprocess
 import tempfile
 import threading
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import defaultdict
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Callable, Iterable
 
@@ -21,6 +28,40 @@ from .security import ensure_private_directory
 
 class ProtonDriveError(RuntimeError):
     """A safe, user-facing failure from the official Proton Drive CLI."""
+
+
+PROTON_CLI_MANIFEST = "https://proton.me/download/drive/cli/index.html"
+_MAX_MANIFEST_BYTES = 1 * 1024 * 1024
+_MAX_CLI_BYTES = 256 * 1024 * 1024
+
+
+class _ProtonManifestParser(HTMLParser):
+    """Collect links and checksums from Proton's small release table."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self._links: list[str] | None = None
+        self._text: list[str] = []
+        self.rows: list[tuple[list[str], str]] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "tr":
+            self._links = []
+            self._text = []
+        elif tag == "a" and self._links is not None:
+            href = dict(attrs).get("href")
+            if href:
+                self._links.append(href)
+
+    def handle_data(self, data: str) -> None:
+        if self._links is not None:
+            self._text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag == "tr" and self._links is not None:
+            self.rows.append((self._links, " ".join(self._text)))
+            self._links = None
+            self._text = []
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +120,11 @@ class ProtonDriveClient:
         self._login_lock = threading.Lock()
         self._login_process: subprocess.Popen[str] | None = None
         self._cancelled_jobs: set[str] = set()
+        self._install_cancel = threading.Event()
+
+    @staticmethod
+    def managed_path() -> Path:
+        return data_home() / "tuxdrive" / "tools" / "proton-drive"
 
     def resolve(self) -> str:
         candidate = self.executable
@@ -87,10 +133,13 @@ class ProtonDriveClient:
             if os.path.sep in candidate
             else shutil.which(candidate)
         )
+        managed = self.managed_path()
+        if (not resolved or not Path(resolved).is_file()) and managed.is_file():
+            resolved = str(managed)
         if not resolved or not Path(resolved).is_file() or not os.access(resolved, os.X_OK):
             raise ProtonDriveError(
-                "Official Proton Drive CLI was not found. Download it from "
-                "https://proton.me/download/drive/cli, install it as ‘proton-drive’, then retry."
+                "Official Proton Drive CLI is not installed. Choose Install CLI and connect; "
+                "TuxDrive will download it from Proton and verify Proton's SHA-512 checksum."
             )
         self.executable = resolved
         return resolved
@@ -101,6 +150,173 @@ class ProtonDriveClient:
             return True
         except ProtonDriveError:
             return False
+
+    def install(self) -> Path:
+        """Install Proton's verified release in TuxDrive's private user data.
+
+        The manifest and binary are fetched over HTTPS. Redirected binary data
+        is trusted only after it matches the SHA-512 value from Proton's own
+        manifest; partial or mismatched downloads are never made executable.
+        """
+        platform_name = self._platform_name()
+        try:
+            manifest_response = self._open_url(PROTON_CLI_MANIFEST)
+            try:
+                manifest_url = self._validated_manifest_url(manifest_response.geturl())
+                manifest = self._read_limited(
+                    manifest_response, _MAX_MANIFEST_BYTES, "Proton CLI manifest"
+                ).decode("utf-8", errors="strict")
+            finally:
+                manifest_response.close()
+        except (OSError, UnicodeError, urllib.error.URLError) as exc:
+            raise ProtonDriveError("Could not securely read Proton's CLI release manifest") from exc
+        download_url, expected = self._manifest_entry(
+            manifest, manifest_url, platform_name
+        )
+
+        root = self.managed_path().parent
+        if root.is_symlink():
+            raise ProtonDriveError("The private Proton CLI directory cannot be a symbolic link")
+        ensure_private_directory(root)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix="proton-drive-", suffix=".download", dir=root
+        )
+        temporary = Path(temporary_name)
+        digest = hashlib.sha512()
+        received = 0
+        try:
+            with os.fdopen(descriptor, "wb") as output:
+                response = self._open_url(download_url)
+                try:
+                    final_url = urllib.parse.urlparse(response.geturl())
+                    if final_url.scheme != "https":
+                        raise ProtonDriveError("Proton CLI download was redirected outside HTTPS")
+                    length = response.headers.get("Content-Length") if response.headers else None
+                    if length:
+                        try:
+                            if int(length) > _MAX_CLI_BYTES:
+                                raise ProtonDriveError("Proton CLI download exceeded the safety limit")
+                        except ValueError:
+                            raise ProtonDriveError("Proton CLI download returned an invalid length") from None
+                    while True:
+                        if self._install_cancel.is_set():
+                            raise ProtonDriveError("Proton CLI installation was cancelled")
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        received += len(chunk)
+                        if received > _MAX_CLI_BYTES:
+                            raise ProtonDriveError("Proton CLI download exceeded the safety limit")
+                        digest.update(chunk)
+                        output.write(chunk)
+                finally:
+                    response.close()
+                output.flush()
+                os.fsync(output.fileno())
+                os.fchmod(output.fileno(), 0o700)
+            if not received:
+                raise ProtonDriveError("Proton CLI download was empty")
+            if not hmac.compare_digest(digest.hexdigest(), expected):
+                raise ProtonDriveError(
+                    "Proton CLI checksum verification failed; the downloaded file was discarded"
+                )
+            target = self.managed_path()
+            os.replace(temporary, target)
+            os.chmod(target, 0o700)
+            directory = os.open(root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+            self.executable = str(target)
+            return target
+        except (OSError, UnicodeError, urllib.error.URLError) as exc:
+            raise ProtonDriveError("Could not securely install the official Proton Drive CLI") from exc
+        finally:
+            try:
+                temporary.unlink()
+            except FileNotFoundError:
+                pass
+
+    def install_and_login(self) -> None:
+        self._install_cancel.clear()
+        if not self.available():
+            self.install()
+        if self._install_cancel.is_set():
+            raise ProtonDriveError("Proton authorization was cancelled")
+        self.login()
+
+    @staticmethod
+    def _platform_name() -> str:
+        machine = platform.machine().lower()
+        if machine in {"x86_64", "amd64"}:
+            return "linux-x64"
+        if machine in {"aarch64", "arm64"}:
+            return "linux-arm64"
+        raise ProtonDriveError(
+            f"Proton Drive CLI is unavailable for this processor architecture: {machine or 'unknown'}"
+        )
+
+    @staticmethod
+    def _validated_manifest_url(value: str) -> str:
+        parsed = urllib.parse.urlparse(value)
+        if (
+            parsed.scheme != "https"
+            or parsed.hostname != "proton.me"
+            or parsed.path != "/download/drive/cli/index.html"
+            or parsed.username
+            or parsed.password
+        ):
+            raise ProtonDriveError("Proton CLI manifest was redirected to an untrusted location")
+        return value
+
+    @staticmethod
+    def _manifest_entry(manifest: str, manifest_url: str, platform_name: str) -> tuple[str, str]:
+        parser = _ProtonManifestParser()
+        parser.feed(manifest)
+        matches: list[tuple[str, str]] = []
+        for links, text in parser.rows:
+            checksums = re.findall(r"(?i)\b[0-9a-f]{128}\b", text)
+            for href in links:
+                url = urllib.parse.urljoin(manifest_url, href)
+                parsed = urllib.parse.urlparse(url)
+                if (
+                    parsed.scheme == "https"
+                    and parsed.hostname == "proton.me"
+                    and parsed.path.startswith("/download/drive/cli/")
+                    and parsed.path.endswith(f"/{platform_name}/proton-drive")
+                    and not parsed.query
+                    and not parsed.fragment
+                    and len(checksums) == 1
+                ):
+                    matches.append((url, checksums[0].lower()))
+        if len(matches) != 1:
+            raise ProtonDriveError(
+                f"Proton's CLI manifest has no unambiguous {platform_name} release"
+            )
+        return matches[0]
+
+    @staticmethod
+    def _open_url(url: str):
+        request = urllib.request.Request(
+            url,
+            headers={"User-Agent": "TuxDrive Proton CLI installer"},
+        )
+        return urllib.request.urlopen(request, timeout=60)
+
+    @staticmethod
+    def _read_limited(response, limit: int, label: str) -> bytes:
+        length = response.headers.get("Content-Length") if response.headers else None
+        if length:
+            try:
+                if int(length) > limit:
+                    raise ProtonDriveError(f"{label} exceeded the safety limit")
+            except ValueError:
+                raise ProtonDriveError(f"{label} returned an invalid length") from None
+        value = response.read(limit + 1)
+        if len(value) > limit:
+            raise ProtonDriveError(f"{label} exceeded the safety limit")
+        return value
 
     def version(self) -> str:
         return self._run(["version"], timeout=30).stdout.strip()
@@ -135,6 +351,7 @@ class ProtonDriveClient:
         self.validate_session()
 
     def cancel_login(self) -> None:
+        self._install_cancel.set()
         with self._login_lock:
             process = self._login_process
         if process and process.poll() is None:

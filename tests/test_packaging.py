@@ -57,6 +57,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("class PeerSharingDialog", app)
         self.assertIn("class ProtonAuthDialog", app)
         self.assertIn("Linux Secret Service", app)
+        self.assertIn("Install CLI and connect", app)
+        self.assertIn("download/drive/cli/index.html", app)
         self.assertIn("Save and connect", app)
         self.assertIn("class ProfileDialog", app)
         self.assertIn("TuxDrive Profile / migrate", app)

@@ -402,19 +402,30 @@ class ProtonAuthDialog(Gtk.Dialog):
         grid.attach(self.display_entry, 1, 1, 1, 1)
         area.pack_start(grid, False, False, 0)
         self.spinner = Gtk.Spinner()
-        self.status = Gtk.Label(label="Ready to open Proton authorization", xalign=0)
+        ready = client.available()
+        self.status = Gtk.Label(
+            label=(
+                "Official Proton CLI detected; ready to open authorization."
+                if ready
+                else "The official CLI will be downloaded from Proton and checksum-verified before sign-in."
+            ),
+            xalign=0,
+        )
         self.status.set_line_wrap(True)
         row = Gtk.Box(spacing=10)
         row.pack_start(self.spinner, False, False, 0)
         row.pack_start(self.status, True, True, 0)
         area.pack_start(row, False, False, 0)
-        download = Gtk.Button(label="Get official Proton CLI")
+        download = Gtk.Button(label="Proton CLI release information")
         download.connect(
-            "clicked", lambda _button: webbrowser.open("https://proton.me/download/drive/cli")
+            "clicked", lambda _button: webbrowser.open("https://proton.me/download/drive/cli/index.html")
         )
         area.pack_start(download, False, False, 0)
         self.cancel_button = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
-        self.login_button = self.add_button("Open browser and connect", Gtk.ResponseType.OK)
+        self.login_button = self.add_button(
+            "Open browser and connect" if ready else "Install CLI and connect",
+            Gtk.ResponseType.OK,
+        )
         self.login_button.get_style_context().add_class("suggested-action")
         self.connect("response", self._response)
         self.connect("delete-event", self._delete)
@@ -456,9 +467,13 @@ class ProtonAuthDialog(Gtk.Dialog):
             )
             return
         self.spinner.start()
-        self.status.set_text("Complete sign-in and two-factor authentication in your browser…")
+        self.status.set_text(
+            "Installing the verified Proton CLI, then opening browser authorization…"
+            if not self.client.available()
+            else "Complete sign-in and two-factor authentication in your browser…"
+        )
         self.login_button.set_sensitive(False)
-        _run_thread(self.client.login, self._ready)
+        _run_thread(self.client.install_and_login, self._ready)
 
     def _delete(self, *_args) -> bool:
         self._closed = True

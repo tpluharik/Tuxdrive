@@ -1,5 +1,8 @@
+import hashlib
+import io
 import json
 import os
+import stat
 import tempfile
 import unittest
 from pathlib import Path
@@ -58,9 +61,113 @@ class ProtonClientTests(unittest.TestCase):
     def test_missing_official_cli_has_actionable_error(self):
         client = ProtonDriveClient("proton-drive")
         with patch("tuxdrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
-            ProtonDriveError, "proton.me/download/drive/cli"
+            ProtonDriveError, "Install CLI and connect"
         ):
             client.resolve()
+
+    @staticmethod
+    def response(value: bytes, url: str, content_length: str | None = None):
+        response = io.BytesIO(value)
+        response.geturl = MagicMock(return_value=url)
+        response.headers = {"Content-Length": content_length or str(len(value))}
+        return response
+
+    @staticmethod
+    def manifest(binary: bytes, platform_name: str = "linux-x64") -> bytes:
+        checksum = hashlib.sha512(binary).hexdigest()
+        return (
+            "<html><table><tr><td>linux/x64</td><td>"
+            f"<a href='https://proton.me/download/drive/cli/0.7.0/{platform_name}/proton-drive'>download</a>"
+            f"</td><td><code>{checksum}</code></td></tr></table></html>"
+        ).encode("utf-8")
+
+    def test_install_fetches_matching_architecture_and_verifies_checksum(self):
+        binary = b"\x7fELF official proton cli"
+        manifest = self.manifest(binary)
+        manifest_url = "https://proton.me/download/drive/cli/index.html"
+        binary_url = "https://proton.me/download/drive/cli/0.7.0/linux-x64/proton-drive"
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_DATA_HOME": temporary}
+        ), patch("tuxdrive.proton.platform.machine", return_value="x86_64"), patch.object(
+            self.client,
+            "_open_url",
+            side_effect=[
+                self.response(manifest, manifest_url),
+                self.response(binary, binary_url),
+            ],
+        ) as fetch:
+            installed = self.client.install()
+            self.assertEqual(installed.read_bytes(), binary)
+            self.assertEqual(stat.S_IMODE(installed.stat().st_mode), 0o700)
+            self.assertEqual(self.client.resolve(), str(installed))
+        self.assertEqual(fetch.call_args_list[0].args[0], manifest_url)
+        self.assertEqual(fetch.call_args_list[1].args[0], binary_url)
+
+    def test_install_rejects_checksum_mismatch_and_keeps_existing_binary(self):
+        old = b"existing verified executable"
+        replacement = b"tampered download"
+        manifest = self.manifest(b"expected download")
+        manifest_url = "https://proton.me/download/drive/cli/index.html"
+        binary_url = "https://proton.me/download/drive/cli/0.7.0/linux-x64/proton-drive"
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_DATA_HOME": temporary}
+        ), patch("tuxdrive.proton.platform.machine", return_value="x86_64"):
+            target = self.client.managed_path()
+            target.parent.mkdir(parents=True)
+            target.write_bytes(old)
+            target.chmod(0o700)
+            with patch.object(
+                self.client,
+                "_open_url",
+                side_effect=[
+                    self.response(manifest, manifest_url),
+                    self.response(replacement, binary_url),
+                ],
+            ), self.assertRaisesRegex(ProtonDriveError, "checksum verification failed"):
+                self.client.install()
+            self.assertEqual(target.read_bytes(), old)
+            self.assertEqual(list(target.parent.glob("*.download")), [])
+
+    def test_manifest_must_remain_on_exact_official_location(self):
+        response = self.response(
+            b"<html></html>", "https://example.com/download/drive/cli/index.html"
+        )
+        with patch.object(self.client, "_open_url", return_value=response), self.assertRaisesRegex(
+            ProtonDriveError, "untrusted location"
+        ):
+            self.client.install()
+
+    def test_manifest_rejects_non_proton_binary_even_with_a_checksum(self):
+        checksum = "a" * 128
+        manifest = (
+            "<table><tr><td><a href='https://example.com/linux-x64/proton-drive'>download</a></td>"
+            f"<td>{checksum}</td></tr></table>"
+        )
+        with self.assertRaisesRegex(ProtonDriveError, "no unambiguous"):
+            self.client._manifest_entry(
+                manifest, "https://proton.me/download/drive/cli/index.html", "linux-x64"
+            )
+
+    def test_install_and_login_installs_only_when_missing(self):
+        with patch.object(self.client, "available", return_value=False), patch.object(
+            self.client, "install"
+        ) as install, patch.object(self.client, "login") as login:
+            self.client.install_and_login()
+        install.assert_called_once_with()
+        login.assert_called_once_with()
+
+    def test_cancel_during_install_never_starts_browser_login(self):
+        def cancel_install():
+            self.client.cancel_login()
+            raise ProtonDriveError("Proton CLI installation was cancelled")
+
+        with patch.object(self.client, "available", return_value=False), patch.object(
+            self.client, "install", side_effect=cancel_install
+        ), patch.object(self.client, "login") as login, self.assertRaisesRegex(
+            ProtonDriveError, "cancelled"
+        ):
+            self.client.install_and_login()
+        login.assert_not_called()
 
     def test_environment_forces_secret_service_and_ignores_unsafe_override(self):
         with patch.dict(os.environ, {

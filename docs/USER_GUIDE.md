@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxdrive-logo.png" width="150" alt="TuxDrive penguin head logo"></p>
 
-This guide covers TuxDrive 0.24.0 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including official Proton Drive browser authorization, selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxDrive distributes a `.deb` package only.
+This guide covers TuxDrive 0.24.1 on Ubuntu 24.04/26.04 and Debian 12/13 GNOME, including official Proton Drive browser authorization, selectable Nordic Glass, Bento Cloud, and Midnight Sync designs; drag-reorderable and collapsible synchronized-folder groups; explicit online-only/offline streaming controls; bounded locally verified Nautilus pinning; GitHub repository synchronization; searchable in-app documentation; six UI languages with Arabic/Hebrew RTL text; signed updates; peer sharing; selective synchronization; streaming; and recovery. TuxDrive distributes a `.deb` package only.
 
 Credentials for rclone-backed providers are kept in rclone's authenticated encrypted configuration. TuxDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Proton's official CLI separately stores its browser session in Secret Service under `ch.proton.drive/drive-sdk-cli`; TuxDrive never reads or exports it. Do not delete either secret until the related accounts have been disconnected.
 
-Version 0.24.0 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.24.1 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 > The screenshots use sample names and paths. They do not contain real account information.
 
@@ -15,7 +15,7 @@ Version 0.24.0 is the supported security baseline. Upgrade older installations b
 Download the current Debian package and install it with one command:
 
 ```bash
-sudo apt install ./tuxdrive_0.24.0_all.deb
+sudo apt install ./tuxdrive_0.24.1_all.deb
 ```
 
 Launch **TuxDrive** from Ubuntu's application menu. TuxDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
@@ -58,7 +58,7 @@ The black-and-white penguin identifies TuxDrive itself. Each cloud service uses 
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.24.0 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.24.1 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxDrive
 
@@ -118,7 +118,7 @@ Select `+` or **Connect account**, then choose Google Drive, Microsoft OneDrive,
 
 ### Proton Drive authentication
 
-Install the official `proton-drive` CLI from [Proton's download page](https://proton.me/download/drive/cli). Select **Connect account → Proton Drive → Open browser and connect**. Keep the dialog open while entering the password and any two-factor code on Proton's page. TuxDrive supplies no password, OTP secret, mailbox password, token, or callback data to the CLI; after login, it validates a machine-readable listing of `/my-files` before saving the account.
+Select **Connect account → Proton Drive → Install CLI and connect**. On amd64 or arm64 Linux, TuxDrive reads [Proton's official CLI manifest](https://proton.me/download/drive/cli/index.html), downloads the matching official executable into `~/.local/share/tuxdrive/tools/`, and installs it only after its SHA-512 checksum matches Proton's published value. No `sudo` or terminal command is required. Keep the dialog open while entering the password and any two-factor code on Proton's page. TuxDrive supplies no password, OTP secret, mailbox password, token, or callback data to the CLI; after login, it validates a machine-readable listing of `/my-files` before saving the account.
 
 The official CLI maintains one active Proton account session. To change or refresh it, open the account menu and select **Reconnect / refresh credentials**, then complete browser authorization again. Removing the account runs the official logout command after all jobs have been removed.
 
@@ -539,7 +539,7 @@ Version 0.10.1 writes a streaming preflight block containing the TuxDrive versio
 
 ### Proton Drive asks for a legacy username and password
 
-The account still uses the retired rclone login. Install the official Proton CLI, open the account menu, choose **Reconnect / refresh credentials**, and finish browser authorization. TuxDrive retains existing folder definitions, validates `/my-files`, and never asks for the Proton password or 2FA code.
+The account still uses the retired rclone login. Open the account menu, choose **Reconnect / refresh credentials**, then select **Install CLI and connect** and finish browser authorization. TuxDrive retains existing folder definitions, validates `/my-files`, and never asks for the Proton password or 2FA code.
 
 ### Job reports recovery sync required
 
@@ -563,7 +563,7 @@ cat ~/.local/state/tuxdrive/startup.log
 cat ~/.local/state/tuxdrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxdrive_0.24.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxdrive_0.24.1_all.deb`.
 
 ## 13. Data safety
 
@@ -573,10 +573,10 @@ Reinstall the current package with `sudo apt install ./tuxdrive_0.24.0_all.deb`.
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.24.0
+### Security upgrade checklist for 0.24.1
 
-1. Install `tuxdrive_0.24.0_all.deb`; the upgrade closes an older running TuxDrive instance. Reopen TuxDrive and restart Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.24.0 and no signature or expiry error.
+1. Install `tuxdrive_0.24.1_all.deb`; the upgrade closes an older running TuxDrive instance. Reopen TuxDrive and restart Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.24.1 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.
