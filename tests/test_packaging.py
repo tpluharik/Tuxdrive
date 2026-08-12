@@ -248,7 +248,13 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("mkdir -p android/app/libs", platforms)
         self.assertIn("test -s \"${GITHUB_WORKSPACE}/android/app/libs/rclone.aar\"", platforms)
         self.assertIn("$MsysProjectRoot/branding/tuxindrive-logo.png", windows)
+        self.assertNotIn("cygpath", windows)
+        self.assertIn('if ($LASTEXITCODE -ne 0)', windows)
         self.assertIn('$project_root/branding/tuxindrive-logo.png', macos)
+        android_build = Path("android/app/build.gradle.kts").read_text(encoding="utf-8")
+        self.assertIn("sourceCompatibility = JavaVersion.VERSION_17", android_build)
+        self.assertIn("targetCompatibility = JavaVersion.VERSION_17", android_build)
+        self.assertIn("jvmToolchain(17)", android_build)
 
 
 if __name__ == "__main__":
