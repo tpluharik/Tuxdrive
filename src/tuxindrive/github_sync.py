@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import quote, urlsplit
@@ -51,6 +53,31 @@ def validate_branch(value: str) -> str:
     if not _BRANCH.fullmatch(branch) or branch.endswith(".lock"):
         raise GitHubSyncError("The Git branch name is invalid")
     return branch
+
+
+def repositories_match(first: GitHubRepository, second: GitHubRepository) -> bool:
+    """Compare repositories while honoring GitHub's verified rename redirects."""
+    first_identity = (first.owner.lower(), first.name.lower())
+    second_identity = (second.owner.lower(), second.name.lower())
+    if first_identity == second_identity:
+        return True
+
+    def canonical_identity(repository: GitHubRepository) -> tuple[str, str]:
+        request = urllib.request.Request(
+            repository.web_url,
+            headers={"User-Agent": "TuxInDrive-GitHub-Sync"},
+            method="HEAD",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                canonical = parse_repository_url(response.geturl())
+        except (OSError, urllib.error.URLError) as exc:
+            raise GitHubSyncError(
+                "Could not verify whether the configured GitHub repository was renamed"
+            ) from exc
+        return canonical.owner.lower(), canonical.name.lower()
+
+    return canonical_identity(first) == canonical_identity(second)
 
 
 def repository_item_url(repository_url: str, branch: str, relative: str = "") -> str:

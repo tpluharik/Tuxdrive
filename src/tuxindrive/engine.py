@@ -28,7 +28,7 @@ from .models import Account, ConflictPolicy, PeerRole, Provider, SyncJob, SyncMo
 from .recovery import MassChangeGuard, RecoveryManager
 from .peer import PeerError, PeerLeaseManager
 from .delta import BlockDeltaPlanner, BlockSignature
-from .github_sync import GitHubSyncError, parse_repository_url, validate_branch
+from .github_sync import GitHubSyncError, parse_repository_url, repositories_match, validate_branch
 from .security import UnsafePathError, confined_path, ensure_private_directory, prepare_private_file, sign_json, install_confined, unlink_confined
 from .nautilus_support import is_available_offline
 from .cache_manager import CacheCleanupResult, StreamingCacheManager
@@ -1476,11 +1476,18 @@ class SyncEngine:
                         [git, "-C", str(job.local), "remote", "get-url", "origin"], environment
                     )
                     current = parse_repository_url(origin)
+                    if not repositories_match(current, repository):
+                        raise GitHubSyncError(
+                            "The local folder's origin points to a different GitHub repository"
+                        )
                     if (current.owner.lower(), current.name.lower()) != (
                         repository.owner.lower(), repository.name.lower()
                     ):
-                        raise GitHubSyncError(
-                            "The local folder's origin points to a different GitHub repository"
+                        job.repository_url = origin
+                        repository = current
+                        log.write(
+                            "Updated the saved repository URL to GitHub's canonical "
+                            f"location: {repository.owner}/{repository.name}\n"
                         )
                     current_branch = self._git_output(
                         [git, "-C", str(job.local), "branch", "--show-current"], environment

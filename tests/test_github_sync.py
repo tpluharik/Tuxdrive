@@ -4,11 +4,30 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tuxindrive.engine import SyncEngine
-from tuxindrive.github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
+from tuxindrive.github_sync import (
+    GitHubSyncError,
+    parse_repository_url,
+    repositories_match,
+    repository_item_url,
+    validate_branch,
+)
 from tuxindrive.models import SyncJob, SyncMode
 
 
 class GitHubSyncTests(unittest.TestCase):
+    class _RedirectResponse:
+        def __init__(self, url):
+            self.url = url
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def geturl(self):
+            return self.url
+
     def test_repository_urls_reject_embedded_tokens_and_non_github_hosts(self):
         self.assertEqual(parse_repository_url("git@github.com:owner/repo.git").name, "repo")
         self.assertEqual(parse_repository_url("https://github.com/owner/repo.git").owner, "owner")
@@ -27,6 +46,53 @@ class GitHubSyncTests(unittest.TestCase):
         self.assertEqual(
             repository_item_url("https://github.com/owner/repo.git", "main", "docs/User Guide.md"),
             "https://github.com/owner/repo/tree/main/docs/User%20Guide.md",
+        )
+
+    def test_repository_comparison_accepts_only_matching_github_rename_redirects(self):
+        old = parse_repository_url("https://github.com/owner/old-name.git")
+        renamed = parse_repository_url("https://github.com/owner/new-name.git")
+        unrelated = parse_repository_url("https://github.com/owner/other.git")
+        with patch(
+            "tuxindrive.github_sync.urllib.request.urlopen",
+            side_effect=[
+                self._RedirectResponse("https://github.com/owner/new-name"),
+                self._RedirectResponse("https://github.com/owner/new-name"),
+            ],
+        ):
+            self.assertTrue(repositories_match(old, renamed))
+        with patch(
+            "tuxindrive.github_sync.urllib.request.urlopen",
+            side_effect=[
+                self._RedirectResponse("https://github.com/owner/new-name"),
+                self._RedirectResponse("https://github.com/owner/other"),
+            ],
+        ):
+            self.assertFalse(repositories_match(old, unrelated))
+
+    def test_download_sync_persists_canonical_origin_after_repository_rename(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".git").mkdir()
+            job = SyncJob(
+                account_remote="github-repo",
+                local_path=str(root),
+                repository_url="https://github.com/owner/old-name.git",
+                repository_branch="main",
+                mode=SyncMode.DOWNLOAD_ONLY,
+            )
+            engine = SyncEngine()
+            with patch("tuxindrive.engine.shutil.which", return_value="/usr/bin/git"), \
+                 patch.object(engine, "_git_output", side_effect=[
+                     "https://github.com/owner/new-name.git", "main",
+                 ]), \
+                 patch("tuxindrive.engine.repositories_match", return_value=True), \
+                 patch.object(engine, "_git_dirty", return_value=False), \
+                 patch.object(engine, "_run_git_process", return_value=0):
+                result = engine._run_git_sync(job, root / "sync.log", False)
+        self.assertTrue(result.success)
+        self.assertEqual(
+            job.repository_url,
+            "https://github.com/owner/new-name.git",
         )
 
     def test_two_way_sync_stages_fetches_rebases_and_pushes(self):
