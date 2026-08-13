@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
 from tuxindrive.engine import JobResult, SyncEngine
-from tuxindrive.callbacks import FileChange, FileState, changes_between, is_transient_path
+from tuxindrive.callbacks import FileChange, FileState, changes_between, is_transient_path, normalize_remote_modtime
 from tuxindrive.models import (
     ConflictPolicy, PeerRole, SyncJob, SyncMode, paths_overlap, safe_streaming_overlap,
 )
@@ -48,6 +48,28 @@ class SyncEngineCommandTests(unittest.TestCase):
             command = self.engine.command_for_job(job)
         workdir = Path(command[command.index("--workdir") + 1])
         self.assertEqual(workdir, Path(temporary) / "data" / "tuxindrive" / "bisync" / job.id)
+
+    def test_bisync_remote_listing_seeds_callback_without_timestamp_noise(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_DATA_HOME": temporary},
+        ):
+            job = SyncJob(account_remote="one", local_path="/data/One")
+            workdir = self.engine._prepare_bisync_workdir(job)
+            (workdir / "sync.path2.lst").write_text(
+                '# bisync listing v1\n- 42 - - 2026-08-13T10:20:30.000000000+0000 "Folder/report.txt"\n',
+                encoding="utf-8",
+            )
+            snapshot = self.engine._bisync_remote_snapshot(job)
+        self.assertEqual(
+            snapshot,
+            {"Folder/report.txt": FileState(42, "2026-08-13T10:20:30Z")},
+        )
+
+    def test_remote_timestamp_formats_compare_equally(self):
+        self.assertEqual(
+            normalize_remote_modtime("2026-08-13T10:20:30.000000000+0000"),
+            normalize_remote_modtime("2026-08-13T10:20:30Z"),
+        )
 
     def test_legacy_bisync_state_is_migrated_out_of_cache(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(

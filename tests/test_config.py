@@ -120,6 +120,12 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertEqual(config.settings.streaming_cache_max_gib, 1)
         self.assertEqual(config.settings.streaming_cache_min_free_gib, 5)
 
+    def test_network_usage_feature_flag_defaults_on_and_round_trips(self):
+        self.assertTrue(AppConfig.from_dict({}).settings.show_network_usage)
+        config = AppConfig.from_dict({"settings": {"show_network_usage": False}})
+        self.assertFalse(config.settings.show_network_usage)
+        self.assertFalse(config.to_dict()["settings"]["show_network_usage"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -62,10 +62,13 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     val context = LocalContext.current
     val networkMeter = remember { NetworkUsageMeter(context.applicationContext) }
     var networkUsage by remember { mutableStateOf(networkMeter.current()) }
-    LaunchedEffect(networkMeter) {
-        while (true) {
-            delay(1_000)
-            networkUsage = networkMeter.sample()
+    var showNetworkUsage by remember { mutableStateOf(repository.showNetworkUsage()) }
+    LaunchedEffect(networkMeter, showNetworkUsage) {
+        if (showNetworkUsage) {
+            while (true) {
+                delay(1_000)
+                networkUsage = networkMeter.sample()
+            }
         }
     }
     DisposableEffect(networkMeter) { onDispose { networkMeter.save() } }
@@ -100,7 +103,7 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Header(busy)
-            NetworkMeter(networkUsage)
+            if (showNetworkUsage) NetworkMeter(networkUsage)
             if (error.isNotBlank()) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -112,7 +115,13 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
                 Destination.Sync -> SyncScreen(repository, remotes, events)
                 Destination.Files -> FilesScreen(repository, remotes, events)
                 Destination.Activity -> ActivityScreen(events)
-                Destination.Settings -> SettingsScreen(repository)
+                Destination.Settings -> SettingsScreen(
+                    repository,
+                    showNetworkUsage,
+                ) {
+                    showNetworkUsage = it
+                    repository.setShowNetworkUsage(it)
+                }
             }
         }
     }
@@ -343,9 +352,13 @@ private fun ActivityScreen(events: List<String>) {
 }
 
 @Composable
-private fun SettingsScreen(repository: MobileRepository) {
-    var wifiOnly by remember { mutableStateOf(true) }
-    var chargingOnly by remember { mutableStateOf(false) }
+private fun SettingsScreen(
+    repository: MobileRepository,
+    showNetworkUsage: Boolean,
+    onShowNetworkUsageChange: (Boolean) -> Unit,
+) {
+    var wifiOnly by remember { mutableStateOf(repository.wifiOnly()) }
+    var chargingOnly by remember { mutableStateOf(repository.chargingOnly()) }
     var engine by remember { mutableStateOf("Checking…") }
     LaunchedEffect(Unit) {
         engine = runCatching { withContext(Dispatchers.IO) { repository.engineVersion() } }.getOrElse { "Unavailable" }
@@ -357,6 +370,12 @@ private fun SettingsScreen(repository: MobileRepository) {
         SectionTitle("Mobile settings", "rclone $engine")
         SettingSwitch("Wi-Fi only", "Pause automatic transfers on metered mobile data", wifiOnly) { wifiOnly = it }
         SettingSwitch("Only while charging", "Defer background work until power is connected", chargingOnly) { chargingOnly = it }
+        SettingSwitch(
+            "Show network usage",
+            "Display current speed and daily device totals",
+            showNetworkUsage,
+            onShowNetworkUsageChange,
+        )
         OutlinedButton(onClick = { pickTree.launch(null) }, modifier = Modifier.fillMaxWidth()) {
             Text(if (repository.selectedTree().isBlank()) "Choose offline files folder" else "Change offline files folder")
         }

@@ -272,6 +272,9 @@ class PackagingTests(unittest.TestCase):
         android_ui = Path("android/app/src/main/java/io/github/tuxindrive/mobile/MainActivity.kt").read_text(encoding="utf-8")
         self.assertIn("NetworkMeter(networkUsage)", android_ui)
         self.assertIn("downloadedToday", android_ui)
+        self.assertIn("Show network usage", android_ui)
+        desktop_app = Path("src/tuxindrive/app.py").read_text(encoding="utf-8")
+        self.assertIn("show_network_usage", desktop_app)
 
 
 if __name__ == "__main__":

@@ -120,7 +120,7 @@ class GitHubSyncTests(unittest.TestCase):
                  patch.object(
                      engine,
                      "_git_output",
-                     side_effect=["https://github.com/owner/repo.git", "main"],
+                     side_effect=["https://github.com/owner/repo.git", "main", "1"],
                  ), \
                  patch(
                      "tuxindrive.engine.subprocess.run",
@@ -136,6 +136,33 @@ class GitHubSyncTests(unittest.TestCase):
         self.assertTrue(any("fetch" in command for command in commands))
         self.assertTrue(any("rebase" in command for command in commands))
         self.assertTrue(any("push" in command for command in commands))
+
+    def test_two_way_sync_skips_push_when_branch_is_not_ahead(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / ".git").mkdir()
+            job = SyncJob(
+                account_remote="github-repo", local_path=str(root),
+                repository_url="https://github.com/owner/repo.git",
+                repository_branch="main", mode=SyncMode.TWO_WAY,
+            )
+            engine = SyncEngine()
+            commands = []
+
+            def run(_job, command, _cwd, _log, _environment):
+                commands.append(command)
+                return 0
+
+            with patch("tuxindrive.engine.shutil.which", return_value="/usr/bin/git"), \
+                 patch.object(engine, "_run_git_process", side_effect=run), \
+                 patch.object(engine, "_git_changes", return_value=[]), \
+                 patch.object(
+                     engine, "_git_output",
+                     side_effect=["https://github.com/owner/repo.git", "main", "0"],
+                 ):
+                result = engine._run_git_sync(job, root / "sync.log", False)
+        self.assertTrue(result.success)
+        self.assertFalse(any("push" in command for command in commands))
 
 
 if __name__ == "__main__":

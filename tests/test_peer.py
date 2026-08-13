@@ -2,12 +2,13 @@ import json
 import os
 import tempfile
 import unittest
+import socket
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from tuxindrive.models import AuthorizedPeer, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from tuxindrive.peer import (
-    DiscoveredPeer, FileLease, PeerError, PeerInvitation, PeerLeaseManager,
+    DiscoveredPeer, FileLease, LanDiscovery, PeerError, PeerInvitation, PeerLeaseManager,
     PeerManager, key_fingerprint, normalize_public_key, validate_port,
 )
 from tuxindrive.security import sign_json
@@ -19,6 +20,47 @@ KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIK7mfakebutsyntacticallyvalidkey12345
 
 
 class PeerSharingTests(unittest.TestCase):
+    def test_lan_discovery_queries_instead_of_waiting_for_frequent_beacons(self):
+        invitation = PeerInvitation("Project", "192.0.2.10", 22022, KEY, "share")
+
+        class FakeSocket:
+            def __init__(self):
+                self.sent = []
+                self.delivered = False
+
+            def setsockopt(self, *_args):
+                pass
+
+            def bind(self, *_args):
+                pass
+
+            def settimeout(self, *_args):
+                pass
+
+            def sendto(self, payload, address):
+                self.sent.append((json.loads(payload), address))
+
+            def recvfrom(self, _size):
+                if not self.delivered:
+                    self.delivered = True
+                    return (
+                        json.dumps({
+                            "tuxindrive_lan": 1,
+                            **json.loads(invitation.encode()),
+                        }).encode("utf-8"),
+                        ("192.0.2.10", 47777),
+                    )
+                raise socket.timeout
+
+            def close(self):
+                pass
+
+        fake = FakeSocket()
+        with patch("tuxindrive.peer.socket.socket", return_value=fake):
+            found = LanDiscovery.discover(0.2)
+        self.assertEqual(found[0].share_id, "share")
+        self.assertEqual(fake.sent[0][0], {"tuxindrive_lan_query": 1})
+
     def test_invitation_round_trip_keeps_pinned_host_key(self):
         encoded = PeerInvitation("Project", "198.51.100.20", 22022, KEY).encode()
         decoded = PeerInvitation.decode(encoded)

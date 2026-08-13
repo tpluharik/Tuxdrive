@@ -27,6 +27,7 @@ from .models import AuthorizedPeer, OneTimeDrop, PeerRole, PeerShare, PeerTransp
 from .tor import ONION_V3, TorError, TorServiceManager, enforce_transport_policy
 from .security import confined_path, confined_parent, ensure_private_directory, prepare_private_file, verify_signed_json
 from .process_control import new_process_group, terminate_process
+from .callbacks import InotifyTreeMonitor
 
 
 class PeerError(RuntimeError):
@@ -184,6 +185,7 @@ class LanDiscovery:
 
     GROUP = "239.255.77.77"
     PORT = 47777
+    HEARTBEAT_SECONDS = 60.0
 
     def __init__(self, invitation_provider) -> None:
         self.invitation_provider = invitation_provider
@@ -203,15 +205,45 @@ class LanDiscovery:
     def _announce(self) -> None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
+            try:
+                sock.bind(("", self.PORT))
+                sock.setsockopt(
+                    socket.IPPROTO_IP,
+                    socket.IP_ADD_MEMBERSHIP,
+                    struct.pack("4sL", socket.inet_aton(self.GROUP), socket.INADDR_ANY),
+                )
+                sock.settimeout(0.5)
+                query_driven = True
+            except OSError:
+                query_driven = False
+            next_heartbeat = 0.0
             while not self._stopped.is_set():
-                for invitation in self.invitation_provider():
-                    payload = json.dumps({"tuxindrive_lan": 1, **json.loads(invitation.encode())}).encode("utf-8")
+                now = time.monotonic()
+                announce = now >= next_heartbeat
+                if query_driven:
                     try:
-                        sock.sendto(payload, (self.GROUP, self.PORT))
-                    except OSError:
+                        payload, _address = sock.recvfrom(2048)
+                        announce = announce or json.loads(payload.decode("utf-8")).get(
+                            "tuxindrive_lan_query"
+                        ) == 1
+                    except socket.timeout:
                         pass
-                self._stopped.wait(2.0)
+                    except (OSError, UnicodeError, json.JSONDecodeError):
+                        pass
+                if announce:
+                    for invitation in self.invitation_provider():
+                        payload = json.dumps({"tuxindrive_lan": 1, **json.loads(invitation.encode())}).encode("utf-8")
+                        try:
+                            sock.sendto(payload, (self.GROUP, self.PORT))
+                        except OSError:
+                            pass
+                    next_heartbeat = now + (
+                        self.HEARTBEAT_SECONDS if query_driven else 2.0
+                    )
+                if not query_driven:
+                    self._stopped.wait(0.5)
         finally:
             sock.close()
 
@@ -225,6 +257,11 @@ class LanDiscovery:
         deadline = time.monotonic() + max(0.2, timeout)
         found: dict[tuple[str, int, str], DiscoveredPeer] = {}
         try:
+            try:
+                query = json.dumps({"tuxindrive_lan_query": 1}).encode("utf-8")
+                sock.sendto(query, (cls.GROUP, cls.PORT))
+            except OSError:
+                pass
             while time.monotonic() < deadline:
                 try:
                     payload, address = sock.recvfrom(65535)
@@ -772,46 +809,79 @@ class PeerManager:
         self._close_log(share_id)
 
     def _delta_watch(self, share: PeerShare, process: subprocess.Popen[str]) -> None:
-        queue = Path(share.local_path).expanduser() / ".tuxdrive-delta"
-        while process.poll() is None:
-            if queue.is_dir():
-                for transaction in queue.iterdir():
-                    instruction = transaction / "instruction.json"
-                    if instruction.is_file():
-                        try:
-                            changed_path = self._apply_delta_transaction(
-                                Path(share.local_path).expanduser(), transaction,
-                                [item.public_key for item in share.authorized_peers if item.enabled],
-                            )
-                            self.audit.record("peer", "block delta applied", "success", path=changed_path, detail=share.name)
-                        except (OSError, ValueError, KeyError, json.JSONDecodeError):
-                            continue
-            time.sleep(1.0)
+        root = Path(share.local_path).expanduser()
+        queue = root / ".tuxdrive-delta"
+        try:
+            watcher: InotifyTreeMonitor | None = InotifyTreeMonitor(root, lambda _path: False)
+        except OSError:
+            watcher = None
+        inspect = True
+        try:
+            while process.poll() is None:
+                if watcher is not None and not inspect:
+                    events = watcher.read(1.0)
+                    inspect = bool(events.paths or events.rescan or events.overflow)
+                    if not inspect:
+                        continue
+                if queue.is_dir():
+                    for transaction in queue.iterdir():
+                        instruction = transaction / "instruction.json"
+                        if instruction.is_file():
+                            try:
+                                changed_path = self._apply_delta_transaction(
+                                    root, transaction,
+                                    [item.public_key for item in share.authorized_peers if item.enabled],
+                                )
+                                self.audit.record("peer", "block delta applied", "success", path=changed_path, detail=share.name)
+                            except (OSError, ValueError, KeyError, json.JSONDecodeError):
+                                continue
+                inspect = watcher is None
+                if watcher is None:
+                    time.sleep(1.0)
+        finally:
+            if watcher is not None:
+                watcher.close()
 
     def _drop_watch(self, share: PeerShare, process: subprocess.Popen[str]) -> None:
         root = Path(share.local_path).expanduser()
         markers = self.root / "drop-consumed"
         markers.mkdir(parents=True, exist_ok=True, mode=0o700)
-        while process.poll() is None:
-            for drop in share.one_time_drops:
-                marker = markers / drop.id
-                inbox = root / drop.inbox_path
-                if marker.exists() or not drop.active or not inbox.is_dir():
-                    continue
-                try:
-                    uploaded = next((item for item in inbox.rglob("*") if item.is_file()), None)
-                except OSError:
-                    uploaded = None
-                if uploaded:
-                    marker.touch(mode=0o600, exist_ok=True)
-                    drop.consumed = True
-                    self.audit.record("peer", "one-time drop consumed", "success", peer=drop.name, path=drop.inbox_path, detail=uploaded.name)
-                    threading.Thread(
-                        target=self._restart_after_drop, args=(share,), daemon=True,
-                        name=f"peer-drop-revoke-{share.id[:8]}",
-                    ).start()
-                    return
-            time.sleep(1.0)
+        try:
+            watcher: InotifyTreeMonitor | None = InotifyTreeMonitor(root, lambda _path: False)
+        except OSError:
+            watcher = None
+        inspect = True
+        try:
+            while process.poll() is None:
+                if watcher is not None and not inspect:
+                    events = watcher.read(1.0)
+                    inspect = bool(events.paths or events.rescan or events.overflow)
+                    if not inspect:
+                        continue
+                for drop in share.one_time_drops:
+                    marker = markers / drop.id
+                    inbox = root / drop.inbox_path
+                    if marker.exists() or not drop.active or not inbox.is_dir():
+                        continue
+                    try:
+                        uploaded = next((item for item in inbox.rglob("*") if item.is_file()), None)
+                    except OSError:
+                        uploaded = None
+                    if uploaded:
+                        marker.touch(mode=0o600, exist_ok=True)
+                        drop.consumed = True
+                        self.audit.record("peer", "one-time drop consumed", "success", peer=drop.name, path=drop.inbox_path, detail=uploaded.name)
+                        threading.Thread(
+                            target=self._restart_after_drop, args=(share,), daemon=True,
+                            name=f"peer-drop-revoke-{share.id[:8]}",
+                        ).start()
+                        return
+                inspect = watcher is None
+                if watcher is None:
+                    time.sleep(1.0)
+        finally:
+            if watcher is not None:
+                watcher.close()
 
     def _restart_after_drop(self, share: PeerShare) -> None:
         """Rebuild authorized keys and terminate sessions after a drop is consumed."""

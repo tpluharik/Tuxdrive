@@ -6,6 +6,7 @@ import fnmatch
 import json
 import os
 import platform
+import re
 import selectors
 import struct
 import subprocess
@@ -30,6 +31,22 @@ def is_transient_path(relative: str) -> bool:
         for part in Path(relative).parts
         for pattern in TRANSIENT_PATTERNS
     )
+
+
+def normalize_remote_modtime(value: str) -> str:
+    """Canonicalize rclone JSON and bisync-listing timestamp spellings."""
+    match = re.fullmatch(
+        r"(.+?)(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})", value.strip()
+    )
+    if not match:
+        return value.strip()
+    base, fraction, zone = match.groups()
+    fraction = (fraction or "").rstrip("0")
+    if zone in {"+0000", "+00:00"}:
+        zone = "Z"
+    elif len(zone) == 5:
+        zone = f"{zone[:3]}:{zone[3:]}"
+    return base + (f".{fraction}" if fraction else "") + zone
 
 
 @dataclass(frozen=True, slots=True)
@@ -215,6 +232,7 @@ class ChangeMonitor:
         local_poll_seconds: float = 10.0,
         remote_poll_seconds: float = 30.0,
         remote_backoff: tuple[float, ...] = (30.0, 60.0, 120.0, 300.0),
+        initial_remote_snapshot: dict[str, FileState] | None = None,
         event_factory: Callable[[Path, Callable[[str], bool]], InotifyTreeMonitor] = InotifyTreeMonitor,
     ) -> None:
         self.job = job
@@ -225,6 +243,7 @@ class ChangeMonitor:
         self.local_poll_seconds = max(1.0, local_poll_seconds)
         self.remote_poll_seconds = max(1.0, remote_poll_seconds)
         self.remote_backoff = tuple(max(1.0, value) for value in remote_backoff)
+        self.initial_remote_snapshot = initial_remote_snapshot
         self.event_factory = event_factory
         self.stop_event = threading.Event()
         self.thread = threading.Thread(
@@ -292,19 +311,38 @@ class ChangeMonitor:
         if not isinstance(values, list):
             raise ValueError("Cloud change scan returned an invalid object")
         return {
-            item["Path"]: FileState(int(item.get("Size", -1)), str(item.get("ModTime", "")))
+            item["Path"]: FileState(
+                int(item.get("Size", -1)),
+                normalize_remote_modtime(str(item.get("ModTime", ""))),
+            )
             for item in values
             if isinstance(item, dict) and item.get("Path")
             and not self._excluded(str(item["Path"]))
         }
 
-    @staticmethod
-    def _mirror(snapshot: dict[str, FileState], changes: list[FileChange], source: dict[str, FileState]) -> None:
-        for change in changes:
-            if change.deleted:
-                snapshot.pop(change.path, None)
-            elif change.path in source:
-                snapshot[change.path] = source[change.path]
+    def remote_path_state(self, relative: str) -> FileState | None:
+        """Read one existing remote file without recursively listing the job root.
+
+        A missing object or any provider ambiguity deliberately raises so the
+        caller falls back to the authoritative recursive scan.
+        """
+        safe = relative.strip("/")
+        if not safe or ".." in Path(safe).parts or self._excluded(safe):
+            raise ValueError("Unsafe targeted cloud path")
+        remote = f"{self.job.remote_spec.rstrip('/')}/{safe}"
+        process = subprocess.run(
+            [self.rclone_path(), "lsjson", remote, "--stat", "--no-mimetype"],
+            check=False, capture_output=True, text=True, timeout=30,
+        )
+        if process.returncode:
+            raise RuntimeError(process.stderr.strip() or "Targeted cloud check failed")
+        value = json.loads(process.stdout or "{}")
+        if not isinstance(value, dict) or value.get("IsDir") or "Size" not in value:
+            raise ValueError("Targeted cloud check returned an invalid file")
+        return FileState(
+            int(value.get("Size", -1)),
+            normalize_remote_modtime(str(value.get("ModTime", ""))),
+        )
 
     def _run(self) -> None:
         local = self.local_snapshot()
@@ -312,11 +350,19 @@ class ChangeMonitor:
             events: InotifyTreeMonitor | None = self.event_factory(self.job.local, self._excluded)
         except OSError:
             events = None
-        try:
-            remote = self.remote_snapshot()
+        if self.initial_remote_snapshot is not None:
+            remote = {
+                path: state for path, state in self.initial_remote_snapshot.items()
+                if not self._excluded(path)
+            }
             remote_known = True
-        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
-            remote, remote_known = {}, False
+            self.initial_remote_snapshot = None
+        else:
+            try:
+                remote = self.remote_snapshot()
+                remote_known = True
+            except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+                remote, remote_known = {}, False
         # Close the startup race between the initial snapshot and watch
         # installation/remote baseline. Events remain queued by the kernel,
         # while this second snapshot catches anything changed just before the
@@ -376,23 +422,57 @@ class ChangeMonitor:
                     recovery_due = time.monotonic() + 10.0
                     continue
                 now = time.monotonic()
-                remote_due = bool(local_changes) or now >= last_remote_scan + remote_delay
+                full_remote_due = now >= last_remote_scan + remote_delay
+                remote_due = bool(local_changes) or full_remote_due
                 if recovery_due is not None and now >= recovery_due:
                     remote_due = True
                 if not remote_due:
                     continue
+                targeted = False
                 try:
-                    new_remote = self.remote_snapshot()
+                    # A normal save of an existing file only needs a same-path
+                    # conflict check. The regular full scan remains due at the
+                    # exact same deadline and catches unrelated remote changes.
+                    if (
+                        local_changes and not full_remote_due and remote_known
+                        and all(
+                            not change.deleted
+                            and (self.job.local / change.path).is_file()
+                            for change in local_changes
+                        )
+                    ):
+                        new_remote = dict(remote)
+                        for change in local_changes:
+                            state = self.remote_path_state(change.path)
+                            if state is None:
+                                raise ValueError("Remote file disappeared")
+                            new_remote[change.path] = state
+                        targeted = True
+                    else:
+                        new_remote = self.remote_snapshot()
                 except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
-                    # Network/provider failure must not cause a local full scan.
-                    deferred_local.update({change.path: change for change in local_changes})
-                    remote_delay = min(
-                        300.0, max(remote_delay * 2, self.remote_poll_seconds)
-                    )
-                    if recovery_due is not None:
-                        recovery_due = time.monotonic() + remote_delay
-                    continue
-                last_remote_scan = time.monotonic()
+                    if local_changes and not full_remote_due:
+                        try:
+                            new_remote = self.remote_snapshot()
+                        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+                            deferred_local.update({change.path: change for change in local_changes})
+                            remote_delay = min(
+                                300.0, max(remote_delay * 2, self.remote_poll_seconds)
+                            )
+                            if recovery_due is not None:
+                                recovery_due = time.monotonic() + remote_delay
+                            continue
+                    else:
+                        # Network/provider failure must not cause a local full scan.
+                        deferred_local.update({change.path: change for change in local_changes})
+                        remote_delay = min(
+                            300.0, max(remote_delay * 2, self.remote_poll_seconds)
+                        )
+                        if recovery_due is not None:
+                            recovery_due = time.monotonic() + remote_delay
+                        continue
+                if not targeted:
+                    last_remote_scan = time.monotonic()
                 baseline_uncertain = not remote_known
                 if not remote_known:
                     remote, remote_known = new_remote, True
@@ -429,8 +509,26 @@ class ChangeMonitor:
                     if permitted and applied:
                         local_applied = [item for item in permitted if item.side == "local"]
                         remote_applied = [item for item in permitted if item.side == "remote"]
-                        self._mirror(new_remote, local_applied, local)
-                        self._mirror(local, remote_applied, new_remote)
+                        # Local and provider timestamps use different encodings;
+                        # never mirror one side's FileState into the other side.
+                        # Refresh only the changed paths after transfer.
+                        try:
+                            for item in local_applied:
+                                if item.deleted:
+                                    new_remote.pop(item.path, None)
+                                else:
+                                    state = self.remote_path_state(item.path)
+                                    if state is None:
+                                        raise ValueError("Uploaded path is unavailable")
+                                    new_remote[item.path] = state
+                        except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
+                            remote_known = False
+                        for item in remote_applied:
+                            state = self._file_state(item.path)
+                            if state is None:
+                                local.pop(item.path, None)
+                            else:
+                                local[item.path] = state
                         recovery_due = time.monotonic() + 10.0
                     if permitted and not applied:
                         deferred_local.update({change.path: change for change in local_changes})

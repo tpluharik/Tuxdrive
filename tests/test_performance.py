@@ -9,11 +9,64 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tuxindrive.cache_manager import StreamingCacheManager
-from tuxindrive.callbacks import ChangeMonitor, InotifyTreeMonitor
+from tuxindrive.cache_manager import CacheCleanupResult
+from tuxindrive.callbacks import ChangeMonitor, FileState, InotifyTreeMonitor
+from tuxindrive.engine import SyncEngine
 from tuxindrive.models import SyncJob, SyncMode
 
 
 class PerformanceAndRecoveryTests(unittest.TestCase):
+    def test_verified_bisync_baseline_avoids_immediate_remote_relist(self):
+        class IdleEvents:
+            def __init__(self, *_args):
+                pass
+
+            def read(self, timeout):
+                from tuxindrive.callbacks import LocalEvents
+                time.sleep(min(timeout, 0.01))
+                return LocalEvents()
+
+            def close(self):
+                pass
+
+        with tempfile.TemporaryDirectory() as temporary:
+            job = SyncJob("cloud", temporary, initialized=True)
+            monitor = ChangeMonitor(
+                job, lambda: "rclone", lambda *_args: True, lambda _job: None,
+                initial_remote_snapshot={"ready.txt": FileState(5, "2026-08-13T10:00:00Z")},
+                remote_backoff=(300,), event_factory=IdleEvents,
+            )
+            with patch.object(monitor, "remote_snapshot") as remote_snapshot:
+                monitor.start()
+                time.sleep(0.05)
+                monitor.stop()
+                monitor.thread.join(2)
+        remote_snapshot.assert_not_called()
+
+    @unittest.skipUnless(platform.system() == "Linux", "inotify is Linux-specific")
+    def test_idle_streaming_cache_skips_unchanged_recursive_rescan(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": temporary},
+        ):
+            job = SyncJob("cloud", "/mnt/cloud", mode=SyncMode.VIRTUAL_DRIVE)
+            data = Path(temporary) / "tuxindrive" / "vfs" / job.id / "vfs"
+            data.mkdir(parents=True)
+            engine = SyncEngine()
+            with patch.object(
+                engine.cache_manager, "enforce",
+                return_value=CacheCleanupResult(job.id, examined_bytes=10),
+            ) as enforce:
+                engine.maintain_streaming_cache([job], 100, 0)
+                engine.maintain_streaming_cache([job], 100, 0)
+                self.assertEqual(enforce.call_count, 1)
+                (data / "changed.bin").write_bytes(b"changed")
+                deadline = time.monotonic() + 1
+                while enforce.call_count == 1 and time.monotonic() < deadline:
+                    engine.maintain_streaming_cache([job], 100, 0)
+                    time.sleep(0.01)
+                self.assertEqual(enforce.call_count, 2)
+            engine.shutdown()
+
     @unittest.skipUnless(platform.system() == "Linux", "inotify is Linux-specific")
     def test_inotify_detects_file_save_without_recursive_rescan(self):
         with tempfile.TemporaryDirectory() as temporary:

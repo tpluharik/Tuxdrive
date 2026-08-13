@@ -428,6 +428,7 @@ class AppSettings:
     profile_last_backup: str = ""
     streaming_cache_max_gib: int = 20
     streaming_cache_min_free_gib: int = 5
+    show_network_usage: bool = True
     config_version: int = 1
 
     @classmethod

@@ -161,6 +161,11 @@ class MobileRepository(context: Context) {
     fun wifiOnly(): Boolean = preferences.getBoolean("wifi-only", true)
     fun chargingOnly(): Boolean = preferences.getBoolean("charging-only", false)
     fun automaticSync(): Boolean = preferences.getBoolean("automatic-sync", false)
+    fun showNetworkUsage(): Boolean = preferences.getBoolean("show-network-usage", true)
+
+    fun setShowNetworkUsage(enabled: Boolean) {
+        preferences.edit().putBoolean("show-network-usage", enabled).apply()
+    }
 
     fun enqueueSync(wifiOnly: Boolean, chargingOnly: Boolean) {
         preferences.edit()

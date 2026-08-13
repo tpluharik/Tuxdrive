@@ -431,7 +431,14 @@ class ProtonDriveClient:
             )
 
         after_local = self.local_snapshot(job)
-        after_remote = self.remote_snapshot(job.remote_path, job_id=job.id)
+        # A true no-op cannot have changed Proton Drive. Reusing the guarded
+        # snapshot avoids a second recursive provider traversal while the next
+        # scheduled run still observes any later remote change normally.
+        after_remote = (
+            before_remote
+            if not upload_plan and not download_plan
+            else self.remote_snapshot(job.remote_path, job_id=job.id)
+        )
         self._save_state(job.id, {"local": after_local, "remote": after_remote})
         return ProtonSyncResult(uploaded, downloaded, len(after_remote), len(after_local))
 

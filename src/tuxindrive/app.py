@@ -69,7 +69,7 @@ from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .proton import ProtonDriveClient, ProtonDriveError
 from .updater import UpdateManager, UpdateRelease
-from .policies import TransferPolicy
+from .policies import PolicyDecision, TransferPolicy
 from .migration import MigrationError, ProfileManager
 from .platform_support import format_report, inspect_host
 from .nautilus_support import (
@@ -2705,6 +2705,9 @@ class MainWindow(Gtk.ApplicationWindow):
             self.network_values[key] = value
             self.network_strip.pack_start(item, False, False, 0)
         main.pack_start(self.network_strip, False, False, 0)
+        self.network_strip.set_no_show_all(
+            not self.controller.config.settings.show_network_usage
+        )
         self.summary_strip = Gtk.Box(spacing=12)
         self.summary_values: dict[str, Gtk.Label] = {}
         for key, icon_name, label in (
@@ -2775,18 +2778,51 @@ class MainWindow(Gtk.ApplicationWindow):
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self._network_refreshing = False
         self._network_active = True
-        self._network_source = GLib.timeout_add_seconds(1, self._refresh_network_usage)
+        self._network_source = 0
+        self._network_worker: threading.Thread | None = None
+        self._network_worker_stop = threading.Event()
+        self._network_sample_request = threading.Event()
         self.connect("destroy", self._stop_network_usage)
-        self._render_network_usage(self.controller.network_meter.usage)
+        self.set_network_meter_enabled(
+            self.controller.config.settings.show_network_usage
+        )
         self._refresh_now()
 
     def _refresh_network_usage(self) -> bool:
         if not self._network_active:
             return False
+        if (
+            not self.controller.config.settings.show_network_usage
+            or not self.get_visible()
+        ):
+            return True
         if not self._network_refreshing:
             self._network_refreshing = True
-            _run_thread(self.controller.network_meter.sample, self._network_usage_ready)
+            self._network_sample_request.set()
         return True
+
+    def _start_network_worker(self) -> None:
+        if self._network_worker is not None and self._network_worker.is_alive():
+            return
+        self._network_worker_stop.clear()
+        self._network_worker = threading.Thread(
+            target=self._network_usage_loop,
+            name="tuxindrive-network-meter",
+            daemon=True,
+        )
+        self._network_worker.start()
+
+    def _network_usage_loop(self) -> None:
+        while not self._network_worker_stop.is_set():
+            self._network_sample_request.wait()
+            self._network_sample_request.clear()
+            if self._network_worker_stop.is_set():
+                return
+            try:
+                usage, error = self.controller.network_meter.sample(), None
+            except Exception as exc:
+                usage, error = None, exc
+            GLib.idle_add(self._network_usage_ready, usage, error)
 
     def _network_usage_ready(self, usage, error: Exception | None) -> bool:
         self._network_refreshing = False
@@ -2796,7 +2832,24 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _stop_network_usage(self, *_args) -> None:
         self._network_active = False
+        self._network_worker_stop.set()
+        self._network_sample_request.set()
         if self._network_source:
+            GLib.source_remove(self._network_source)
+            self._network_source = 0
+
+    def set_network_meter_enabled(self, enabled: bool) -> None:
+        self.controller.config.settings.show_network_usage = enabled
+        self.network_strip.set_no_show_all(not enabled)
+        self.network_strip.set_visible(enabled)
+        if enabled:
+            self._start_network_worker()
+            self._render_network_usage(self.controller.network_meter.usage)
+            if not self._network_source and self._network_active:
+                self._network_source = GLib.timeout_add_seconds(
+                    1, self._refresh_network_usage
+                )
+        elif self._network_source:
             GLib.source_remove(self._network_source)
             self._network_source = 0
 
@@ -3639,6 +3692,8 @@ class MainWindow(Gtk.ApplicationWindow):
         minimized.set_active(self.controller.config.settings.start_minimized)
         nautilus = Gtk.CheckButton(label="Enable Nautilus integration (restart Files after changing)")
         nautilus.set_active(self.controller.config.settings.nautilus_integration)
+        network_usage = Gtk.CheckButton(label="Show current and daily network usage")
+        network_usage.set_active(self.controller.config.settings.show_network_usage)
         theme_frame = Gtk.Frame(label=tr("visual_style"))
         theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         theme_box.set_border_width(12)
@@ -3685,7 +3740,7 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, policy, metered, battery, cache_row, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, battery, cache_row, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
@@ -3714,6 +3769,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
             self.controller.config.settings.nautilus_integration = nautilus.get_active()
+            self.controller.config.settings.show_network_usage = network_usage.get_active()
             selected_theme = normalize_theme(theme.get_active_id())
             theme_changed = selected_theme != self.controller.config.settings.visual_theme
             self.controller.config.settings.visual_theme = selected_theme
@@ -3726,6 +3782,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.schedule_end = end_value
             self.controller.save()
             self.controller.configure_autostart()
+            self.set_network_meter_enabled(network_usage.get_active())
             if theme_changed:
                 self.controller.apply_visual_theme(selected_theme)
         dialog.destroy()
@@ -4559,7 +4616,12 @@ class TuxInDriveApplication(Gtk.Application):
             )
         return False
 
-    def run_job(self, job: SyncJob, quiet: bool = False) -> None:
+    def run_job(
+        self,
+        job: SyncJob,
+        quiet: bool = False,
+        decision: PolicyDecision | None = None,
+    ) -> None:
         self.engine.configure_jobs(self.config.jobs, self.config.accounts)
         if not job.enabled and not quiet:
             job.enabled = True
@@ -4567,7 +4629,7 @@ class TuxInDriveApplication(Gtk.Application):
             if self.window and not quiet:
                 self.window.message(f"{job.name} is already synchronizing.")
             return
-        decision = TransferPolicy(self.config.settings).evaluate()
+        decision = decision or TransferPolicy(self.config.settings).evaluate()
         if not decision.allowed:
             job.last_status = decision.reason
             LOGGER.info("Policy deferred job %s: %s", job.id, decision.reason)
@@ -4750,6 +4812,7 @@ class TuxInDriveApplication(Gtk.Application):
             )
             self._last_cache_maintenance = monotonic
         now = datetime.now(timezone.utc)
+        policy_decision: PolicyDecision | None = None
         for job in self.config.jobs:
             if not job.enabled or job.mode is SyncMode.VIRTUAL_DRIVE or job.id in self.engine.running_jobs:
                 continue
@@ -4760,7 +4823,9 @@ class TuxInDriveApplication(Gtk.Application):
                 except ValueError:
                     baseline = None
             if baseline is None or (now - baseline).total_seconds() >= job.interval_minutes * 60:
-                self.run_job(job, quiet=True)
+                if policy_decision is None:
+                    policy_decision = TransferPolicy(self.config.settings).evaluate()
+                self.run_job(job, quiet=True, decision=policy_decision)
         return True
 
     def _cache_maintenance_ready(self, results, error: Exception | None) -> bool:

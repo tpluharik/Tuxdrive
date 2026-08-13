@@ -252,12 +252,13 @@ class ProtonClientTests(unittest.TestCase):
             )
             with patch.dict(os.environ, {"XDG_DATA_HOME": temporary}), patch.object(
                 self.client, "remote_tree", side_effect=[{}, {}]
-            ), patch.object(
+            ) as remote_tree, patch.object(
                 self.client, "_run"
             ) as run, patch.object(self.client, "_save_state"):
                 result = self.client.sync(job)
         self.assertEqual(result.uploaded, 0)
         run.assert_not_called()
+        self.assertEqual(remote_tree.call_count, 1)
 
     def test_nested_exclusions_are_not_uploaded(self):
         with tempfile.TemporaryDirectory() as temporary:

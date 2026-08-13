@@ -15,6 +15,7 @@ import json
 import tempfile
 import uuid
 import hashlib
+import shlex
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,7 +23,7 @@ from typing import Callable
 
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
-from .callbacks import ChangeMonitor, FileChange, TRANSIENT_PATTERNS, is_transient_path
+from .callbacks import ChangeMonitor, FileChange, FileState, InotifyTreeMonitor, TRANSIENT_PATTERNS, is_transient_path, normalize_remote_modtime
 from .config import cache_root, config_root, data_root
 from .models import Account, ConflictPolicy, PeerRole, Provider, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
@@ -80,6 +81,9 @@ class SyncEngine:
         self._job_layout_signature: tuple[tuple[str, str, str, str, str], ...] = ()
         self._remote_backoffs: dict[str, tuple[float, ...]] = {}
         self._job_backends: dict[str, str] = {}
+        self._callback_baselines: dict[str, dict[str, FileState]] = {}
+        self._cache_watchers: dict[str, InotifyTreeMonitor] = {}
+        self._cache_cleanup_state: dict[str, tuple[int, int, bool, int]] = {}
         self.proton = proton or ProtonDriveClient()
 
     @property
@@ -165,13 +169,53 @@ class SyncEngine:
         """Conservatively evict inactive, complete, unpinned VFS objects."""
         results: list[CacheCleanupResult] = []
         mounted = self.mounted_jobs
+        active_ids = {job.id for job in jobs if job.mode is SyncMode.VIRTUAL_DRIVE}
+        for stale in set(self._cache_watchers) - active_ids:
+            self._cache_watchers.pop(stale).close()
+            self._cache_cleanup_state.pop(stale, None)
         for job in jobs:
             if job.mode is not SyncMode.VIRTUAL_DRIVE:
                 continue
-            results.append(self.cache_manager.enforce(
+            cache_data = cache_root() / "vfs" / job.id / "vfs"
+            watcher = self._cache_watchers.get(job.id)
+            state = self._cache_cleanup_state.get(job.id)
+            mounted_now = job.id in mounted
+            dirty = watcher is None
+            if watcher is not None:
+                events = watcher.read(0.0)
+                dirty = bool(events.paths or events.rescan or events.overflow)
+            if not dirty and state is not None:
+                previous_max, previous_free, previous_mounted, previous_total = state
+                try:
+                    enough_free = shutil.disk_usage(cache_data.parent).free >= min_free_bytes
+                except OSError:
+                    enough_free = False
+                if (
+                    previous_max == max_bytes
+                    and previous_free == min_free_bytes
+                    and previous_mounted == mounted_now
+                    and enough_free
+                ):
+                    results.append(CacheCleanupResult(job.id, examined_bytes=previous_total))
+                    continue
+            result = self.cache_manager.enforce(
                 job, max_bytes=max_bytes, min_free_bytes=min_free_bytes,
-                mounted=job.id in mounted,
-            ))
+                mounted=mounted_now,
+            )
+            results.append(result)
+            self._cache_cleanup_state[job.id] = (
+                max_bytes, min_free_bytes, mounted_now, result.examined_bytes,
+            )
+            if watcher is not None:
+                watcher.close()
+                self._cache_watchers.pop(job.id, None)
+            if cache_data.is_dir():
+                try:
+                    self._cache_watchers[job.id] = InotifyTreeMonitor(
+                        cache_data, lambda _path: False
+                    )
+                except OSError:
+                    pass
         return results
 
     def command_for_job(
@@ -281,6 +325,33 @@ class SyncEngine:
             if path2.is_file():
                 return True
         return False
+
+    def _bisync_remote_snapshot(self, job: SyncJob) -> dict[str, FileState] | None:
+        """Convert rclone's verified path2 baseline into a callback snapshot."""
+        try:
+            listings = sorted(
+                self._bisync_workdir(job).glob("*.path2.lst"),
+                key=lambda item: item.stat().st_mtime_ns,
+                reverse=True,
+            )
+            if not listings:
+                return None
+            snapshot: dict[str, FileState] = {}
+            for line in listings[0].read_text(encoding="utf-8").splitlines():
+                if not line or line.startswith("#"):
+                    continue
+                fields = shlex.split(line)
+                if len(fields) < 6 or fields[0] != "-":
+                    continue
+                relative = fields[5].strip("/")
+                if not relative or ".." in Path(relative).parts:
+                    return None
+                snapshot[relative] = FileState(
+                    int(fields[1]), normalize_remote_modtime(fields[4])
+                )
+            return snapshot
+        except (OSError, ValueError):
+            return None
 
     def mount_command(self, job: SyncJob) -> list[str]:
         cache = cache_root() / "vfs" / job.id
@@ -1127,6 +1198,9 @@ class SyncEngine:
             self.cancel(job_id)
         for monitor in list(self._monitors.values()):
             monitor.stop()
+        for watcher in list(self._cache_watchers.values()):
+            watcher.close()
+        self._cache_watchers.clear()
         for job_id, process, path in mounted:
             if process.poll() is None:
                 try:
@@ -1162,6 +1236,7 @@ class SyncEngine:
             remote_backoff=self._remote_backoffs.get(
                 job.id, (30.0, 60.0, 120.0, 300.0)
             ),
+            initial_remote_snapshot=self._callback_baselines.pop(job.id, None),
         )
         self._monitors[job.id] = monitor
         monitor.start()
@@ -1430,6 +1505,11 @@ class SyncEngine:
                 cancelled = return_code in (-signal.SIGTERM, 143)
                 log.write(f"[{datetime.now(timezone.utc).isoformat()}] Exit {return_code}\n")
             if return_code == 0:
+                if job.mode is SyncMode.TWO_WAY and not dry_run:
+                    baseline = self._bisync_remote_snapshot(job)
+                    if baseline is not None:
+                        with self._lock:
+                            self._callback_baselines[job.id] = baseline
                 message = (
                     "Synchronization complete; sync state was reinitialized automatically"
                     if auto_reinitialize
@@ -1632,6 +1712,16 @@ class SyncEngine:
                             "Upload-only synchronization stopped because GitHub contains changes not present locally",
                             log_path,
                         )
+                ahead = self._git_output(
+                    [
+                        git, "-C", str(job.local), "rev-list", "--count",
+                        f"origin/{branch}..HEAD",
+                    ],
+                    environment,
+                )
+                if ahead == "0":
+                    log.write("Remote branch is already current; skipped push.\n")
+                    return JobResult(job.id, True, "GitHub synchronization complete", log_path)
                 code = self._run_git_process(
                     job, [git, "-C", str(job.local), "push", "origin", f"HEAD:{branch}"],
                     job.local, log, environment,
