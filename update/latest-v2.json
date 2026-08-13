@@ -1,8 +1,8 @@
 {
-  "version": "0.26.1",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.1_all.deb",
-  "sha256": "deb881ea93088f68eedced7be5bd6a06bd7a708e9eeb6342a9813bf1340c6eb9",
-  "notes": "Daily live upload/download meter for Linux, Windows, macOS and Android, with persistent per-day totals and release-version publishing fixes.",
-  "expires_at": "2027-02-09T15:04:21.006690+00:00",
-  "signature": "7tPmUrU1WVu8qrUZSzV/cNi1Pb1czwMbsdwDP/Mh5IEYrnR4QYE1tF9ehQV2rSMfOsgcmUrsQ4DJNFsm6pEIBA=="
+  "version": "0.26.2",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.2_all.deb",
+  "sha256": "3e6246de7742971868739dc9b47fa5a1e1b8b3cda586c27cb856e6244b9e50c1",
+  "notes": "Lower idle network activity with duplicate cloud scans removed, no-op Git and Proton transfers reduced, event-driven peer/cache monitoring, and an optional network meter.",
+  "expires_at": "2027-02-09T20:44:50.608942+00:00",
+  "signature": "j3H1HndYoTSSHMzhScQhTYJ9duTu6UIP/qssJ9icdYVH0zQMxgYCPhEw+wZiOvbGvdHKTGYqypjRYI5Vd0ILAA=="
 }

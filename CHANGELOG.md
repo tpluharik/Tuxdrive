@@ -2,6 +2,16 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.2 — lower idle network activity
+
+- Reuse the verified rclone bisync baseline when realtime monitoring restarts, avoiding an immediate duplicate recursive cloud listing.
+- Use targeted same-path provider checks for ordinary local file saves while retaining scheduled full scans, conflict reconciliation, failure deferral and mass-change protection.
+- Skip redundant GitHub pushes when the local branch is not ahead and avoid Proton Drive's second recursive traversal on verified no-op runs.
+- Replace frequent LAN discovery broadcasts with query-driven discovery and a low-frequency compatibility heartbeat.
+- Use filesystem events to avoid idle recursive streaming-cache, peer-delta and one-time-drop inbox scans where supported, with conservative polling fallbacks.
+- Add an enabled-by-default Settings switch for the desktop and Android network meter; disabling it stops sampling and hides the display without deleting accumulated daily totals.
+- Pause desktop meter sampling while the window is hidden and reuse one background worker instead of creating a new thread every second.
+
 ## 0.26.1 — daily network transfer meter
 
 - Added live device download/upload rates and persistent totals for the current day to the Linux, Windows and macOS desktop interface.
