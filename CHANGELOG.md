@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.1 — daily network transfer meter
+
+- Added live device download/upload rates and persistent totals for the current day to the Linux, Windows and macOS desktop interface.
+- Added the same compact traffic meter to the Android mobile interface using private OS traffic counters.
+- Daily counters survive application restarts, reset automatically on a new local day, exclude loopback traffic where supported, and avoid false jumps after a counter reset.
+- Made Debian CI artifact paths derive from the application version so source changes cannot silently rebuild an old release number.
+
 ## 0.26.0 — Windows, macOS, and Android packages
 
 - Added Windows x64 setup/portable packages and a macOS application image built from the same GTK desktop UI as Linux.

@@ -35,7 +35,9 @@ class PackagingTests(unittest.TestCase):
     def test_debian_identity_is_an_explicit_signed_updater_compatibility_abi(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         self.assertIn("Package: tuxdrive", control)
-        self.assertIn("Provides: tuxindrive (= 0.26.0)", control)
+        from tuxindrive import __version__
+        self.assertIn(f"Version: {__version__}", control)
+        self.assertIn(f"Provides: tuxindrive (= {__version__})", control)
         helper = Path("packaging/tuxindrive-rclone-password").read_text(encoding="utf-8")
         self.assertIn("lookup application tuxdrive purpose rclone-config", helper)
 
@@ -253,6 +255,7 @@ class PackagingTests(unittest.TestCase):
         self.assertNotIn("cygpath", windows)
         self.assertIn('if ($LASTEXITCODE -ne 0)', windows)
         self.assertIn("PackageOnly", windows)
+        self.assertIn("VERSION=$(sed", Path("scripts/build-deb.sh").read_text(encoding="utf-8"))
         windows_msys2 = Path("scripts/build-windows-msys2.sh").read_text(encoding="utf-8")
         self.assertIn('--specpath build', windows_msys2)
         self.assertIn('--add-data "../branding/tuxindrive-logo.png:branding"', windows_msys2)
