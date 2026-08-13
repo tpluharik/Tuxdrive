@@ -55,6 +55,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("class CloudFolderTree", app)
         self.assertIn("Gtk.TreeStore(bool, str, str, bool)", app)
         self.assertIn('Gtk.Expander(label=tr("live_log"))', app)
+        self.assertIn('tr("download_now")', app)
+        self.assertIn("NetworkUsageMeter()", app)
         self.assertIn('account.provider.icon_name', app)
         self.assertIn('toggle.set_name("tuxindrive-job-switch")', app)
         themes = Path("src/tuxindrive/themes.py").read_text(encoding="utf-8")
@@ -238,6 +240,7 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue(Path("scripts/build-macos.sh").is_file())
         self.assertTrue(Path("packaging/windows/TuxInDrive.iss").is_file())
         self.assertTrue(Path("android/app/src/main/AndroidManifest.xml").is_file())
+        self.assertTrue(Path("android/app/src/main/java/io/github/tuxindrive/mobile/NetworkUsageMeter.kt").is_file())
 
     def test_native_build_paths_match_ci_runner_layout(self):
         platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
@@ -263,6 +266,9 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("sourceCompatibility = JavaVersion.VERSION_17", android_build)
         self.assertIn("targetCompatibility = JavaVersion.VERSION_17", android_build)
         self.assertIn("jvmToolchain(17)", android_build)
+        android_ui = Path("android/app/src/main/java/io/github/tuxindrive/mobile/MainActivity.kt").read_text(encoding="utf-8")
+        self.assertIn("NetworkMeter(networkUsage)", android_ui)
+        self.assertIn("downloadedToday", android_ui)
 
 
 if __name__ == "__main__":

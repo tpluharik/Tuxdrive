@@ -79,6 +79,7 @@ from .nautilus_support import (
     verified_rules_after,
 )
 from .themes import THEMES, css_for_theme, normalize_theme, theme_by_key
+from .network_usage import NetworkUsageMeter, format_bytes
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -2680,6 +2681,30 @@ class MainWindow(Gtk.ApplicationWindow):
         add_group.connect("clicked", self._create_group)
         heading_row.pack_end(add_group, False, False, 0)
         main.pack_start(heading_row, False, False, 0)
+        self.network_strip = Gtk.Box(spacing=14)
+        self.network_strip.get_style_context().add_class("network-meter")
+        network_title = Gtk.Label(label=tr("network_traffic"), xalign=0)
+        network_title.get_style_context().add_class("network-title")
+        network_title.set_tooltip_text(tr("network_traffic_hint"))
+        self.network_strip.pack_start(network_title, False, False, 0)
+        self.network_values: dict[str, Gtk.Label] = {}
+        for key, icon_name, label in (
+            ("download_rate", "go-down-symbolic", tr("download_now")),
+            ("upload_rate", "go-up-symbolic", tr("upload_now")),
+            ("download_today", "document-save-symbolic", tr("download_today")),
+            ("upload_today", "document-send-symbolic", tr("upload_today")),
+        ):
+            item = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=1)
+            item.pack_start(Gtk.Image.new_from_icon_name(icon_name, Gtk.IconSize.MENU), False, False, 0)
+            caption = Gtk.Label(label=label)
+            caption.get_style_context().add_class("network-label")
+            item.pack_start(caption, False, False, 0)
+            value = Gtk.Label(label="0 B/s" if key.endswith("rate") else "0 B")
+            value.get_style_context().add_class("network-value")
+            item.pack_start(value, False, False, 0)
+            self.network_values[key] = value
+            self.network_strip.pack_start(item, False, False, 0)
+        main.pack_start(self.network_strip, False, False, 0)
         self.summary_strip = Gtk.Box(spacing=12)
         self.summary_values: dict[str, Gtk.Label] = {}
         for key, icon_name, label in (
@@ -2748,7 +2773,42 @@ class MainWindow(Gtk.ApplicationWindow):
         self._pending_update: UpdateRelease | None = None
         self._update_pulsing = False
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
+        self._network_refreshing = False
+        self._network_active = True
+        self._network_source = GLib.timeout_add_seconds(1, self._refresh_network_usage)
+        self.connect("destroy", self._stop_network_usage)
+        self._render_network_usage(self.controller.network_meter.usage)
         self._refresh_now()
+
+    def _refresh_network_usage(self) -> bool:
+        if not self._network_active:
+            return False
+        if not self._network_refreshing:
+            self._network_refreshing = True
+            _run_thread(self.controller.network_meter.sample, self._network_usage_ready)
+        return True
+
+    def _network_usage_ready(self, usage, error: Exception | None) -> bool:
+        self._network_refreshing = False
+        if self._network_active and usage is not None and error is None:
+            self._render_network_usage(usage)
+        return False
+
+    def _stop_network_usage(self, *_args) -> None:
+        self._network_active = False
+        if self._network_source:
+            GLib.source_remove(self._network_source)
+            self._network_source = 0
+
+    def _render_network_usage(self, usage) -> None:
+        if not usage.available:
+            for value in self.network_values.values():
+                value.set_text(tr("unavailable"))
+            return
+        self.network_values["download_rate"].set_text(format_bytes(usage.download_rate, rate=True))
+        self.network_values["upload_rate"].set_text(format_bytes(usage.upload_rate, rate=True))
+        self.network_values["download_today"].set_text(format_bytes(usage.downloaded_today))
+        self.network_values["upload_today"].set_text(format_bytes(usage.uploaded_today))
 
     def apply_visual_theme(self, key: str) -> None:
         """Apply the small structural differences that CSS alone cannot express."""
@@ -3988,6 +4048,7 @@ class TuxInDriveApplication(Gtk.Application):
         self.audit = AuditTimeline()
         self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
         self.profiles = ProfileManager(self.store, self.rclone)
+        self.network_meter = NetworkUsageMeter()
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False
@@ -4942,6 +5003,7 @@ class TuxInDriveApplication(Gtk.Application):
 
     def do_shutdown(self) -> None:
         LOGGER.info("TuxInDrive shutting down")
+        self.network_meter.save()
         self.peers.shutdown()
         self.engine.shutdown()
         self.release()

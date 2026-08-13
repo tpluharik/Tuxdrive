@@ -33,6 +33,7 @@ class VisualThemeTests(unittest.TestCase):
             self.assertIn(b".job-card", source)
             self.assertIn(b".group-card", source)
             self.assertIn(b".activity-panel", source)
+            self.assertIn(b".network-meter", source)
             self.assertIn(b"border-radius", source)
             self.assertIn(b"switch#tuxindrive-job-switch", source)
         self.assertEqual(len(set(rendered.values())), 3)

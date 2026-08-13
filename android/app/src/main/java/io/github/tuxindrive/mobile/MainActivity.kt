@@ -14,6 +14,7 @@ import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -21,6 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -57,6 +59,16 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val networkMeter = remember { NetworkUsageMeter(context.applicationContext) }
+    var networkUsage by remember { mutableStateOf(networkMeter.current()) }
+    LaunchedEffect(networkMeter) {
+        while (true) {
+            delay(1_000)
+            networkUsage = networkMeter.sample()
+        }
+    }
+    DisposableEffect(networkMeter) { onDispose { networkMeter.save() } }
     fun refresh() {
         scope.launch {
             busy = true
@@ -88,6 +100,7 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Header(busy)
+            NetworkMeter(networkUsage)
             if (error.isNotBlank()) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -102,6 +115,37 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
                 Destination.Settings -> SettingsScreen(repository)
             }
         }
+    }
+}
+
+@Composable
+private fun NetworkMeter(usage: MobileNetworkUsage) {
+    Card(
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
+            Text("Network", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+            if (!usage.available) {
+                Text("Traffic counters unavailable", style = MaterialTheme.typography.bodySmall)
+            } else {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    NetworkValue("↓ Now", formatRate(usage.downloadRate))
+                    NetworkValue("↑ Now", formatRate(usage.uploadRate))
+                    NetworkValue("↓ Today", formatBytes(usage.downloadedToday))
+                    NetworkValue("↑ Today", formatBytes(usage.uploadedToday))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NetworkValue(label: String, value: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, style = MaterialTheme.typography.labelSmall)
+        Text(value, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -370,8 +414,12 @@ private fun EmptyState(title: String, detail: String) {
     }
 }
 
-private fun formatBytes(size: Long): String = when {
-    size < 1024 -> "$size B"
-    size < 1024 * 1024 -> "${size / 1024} KiB"
-    else -> "${size / (1024 * 1024)} MiB"
+private fun formatBytes(size: Long): String {
+    var amount = size.coerceAtLeast(0).toDouble()
+    val units = arrayOf("B", "KiB", "MiB", "GiB", "TiB")
+    var index = 0
+    while (amount >= 1024 && index < units.lastIndex) { amount /= 1024; index++ }
+    return if (index == 0) "${amount.toLong()} ${units[index]}" else "%.1f %s".format(amount, units[index])
 }
+
+private fun formatRate(size: Long) = "${formatBytes(size)}/s"

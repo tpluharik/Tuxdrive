@@ -94,6 +94,15 @@ dialog.tuxindrive-dialog button.suggested-action {
 .tuxindrive-root .summary-card { padding: 12px 16px; }
 .tuxindrive-root .summary-value { font-size: 1.55em; font-weight: 700; }
 .tuxindrive-root .summary-label { font-weight: 600; }
+.tuxindrive-root .network-meter {
+  padding: 9px 14px;
+  border-width: 1px;
+  border-style: solid;
+  border-radius: 12px;
+}
+.tuxindrive-root .network-title,
+.tuxindrive-root .network-value { font-weight: 700; }
+.tuxindrive-root .network-label { font-size: 0.90em; }
 .tuxindrive-root switch#tuxindrive-job-switch {
   min-width: 42px;
   min-height: 22px;
@@ -147,6 +156,8 @@ headerbar.tuxindrive-header {
 dialog.tuxindrive-dialog button.suggested-action { background-image: none; background-color: #2563eb; border-color: #1d4ed8; }
 .tuxindrive-root switch:checked { background-color: #2563eb; border-color: #1d4ed8; }
 .tuxindrive-root .activity-log { background-color: #f8fbfe; color: #31445a; }
+.tuxindrive-root .network-meter { background-color: #ffffff; border-color: #dce6ef; }
+.tuxindrive-root .network-value { color: #2563eb; }
 .tuxindrive-root .dim-label,
 dialog.tuxindrive-dialog .theme-description { color: #63758a; }
 """
@@ -190,6 +201,8 @@ dialog.tuxindrive-dialog button.suggested-action { background-image: linear-grad
 .tuxindrive-root #summary-active { background-color: #eef7ff; border-color: #c9e5ff; }
 .tuxindrive-root #summary-protected { background-color: #effbf2; border-color: #ccebd3; }
 .tuxindrive-root .activity-log { background-color: #fffdfb; color: #4e4264; }
+.tuxindrive-root .network-meter { background-color: #f4efff; border-color: #d9cafd; }
+.tuxindrive-root .network-value { color: #5b3fd2; }
 .tuxindrive-root .dim-label,
 dialog.tuxindrive-dialog .theme-description { color: #76698b; }
 """
@@ -233,6 +246,8 @@ dialog.tuxindrive-dialog button.suggested-action { background-image: linear-grad
 .tuxindrive-root switch { background-color: #25364f; border-color: #3c526f; }
 .tuxindrive-root switch:checked { background-color: #6657ed; border-color: #8b7cf6; }
 .tuxindrive-root .activity-log { background-color: #0b1626; color: #b9c9dd; caret-color: #22d3ee; }
+.tuxindrive-root .network-meter { background-color: #101c2e; border-color: #2a3b55; }
+.tuxindrive-root .network-value { color: #22d3ee; }
 .tuxindrive-root .dim-label,
 dialog.tuxindrive-dialog .theme-description { color: #91a3bb; }
 dialog.tuxindrive-dialog entry,
