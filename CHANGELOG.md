@@ -2,6 +2,12 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.4 — durable platform release channels
+
+- Advanced the signed Linux update channel so installations on 0.26.3 can receive the idle-network optimizations.
+- Made the Windows, macOS and Android package directories visible and permanent in the repository, with exact durable GitHub Release locations for installers too large for normal Git storage.
+- Added release preflight checks that bind a release tag to the source version, verify every expected installer, emit SHA-256 checksum files and prevent an ordinary main-branch artifact build from being presented as a published update.
+
 ## 0.26.2 — lower idle network activity
 
 - Reuse the verified rclone bisync baseline when realtime monitoring restarts, avoiding an immediate duplicate recursive cloud listing.

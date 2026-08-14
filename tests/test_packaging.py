@@ -244,6 +244,22 @@ class PackagingTests(unittest.TestCase):
         self.assertTrue(Path("android/app/src/main/AndroidManifest.xml").is_file())
         self.assertTrue(Path("android/app/src/main/java/io/github/tuxindrive/mobile/NetworkUsageMeter.kt").is_file())
 
+    def test_platform_release_channels_are_durable_and_version_bound(self):
+        from tuxindrive import __version__
+
+        platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
+        for platform in ("windows", "macos", "android"):
+            self.assertTrue(Path(f"releases/{platform}/packages/README.md").is_file())
+            channel = Path(f"releases/{platform}/README.md").read_text(encoding="utf-8")
+            self.assertIn("releases/download/vVERSION/", channel)
+        self.assertIn('test "$RELEASE_TAG" = "v$version"', platforms)
+        self.assertIn("SHA256SUMS.txt", platforms)
+        self.assertIn('gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber', platforms)
+        self.assertIn('--target "$GITHUB_SHA"', platforms)
+        self.assertIn(f'version = "{__version__}"', Path("pyproject.toml").read_text(encoding="utf-8"))
+        self.assertIn(f'versionName = "{__version__}"', Path("android/app/build.gradle.kts").read_text(encoding="utf-8"))
+        self.assertIn(f'#define AppVersion "{__version__}"', Path("packaging/windows/TuxInDrive.iss").read_text(encoding="utf-8"))
+
     def test_native_build_paths_match_ci_runner_layout(self):
         platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
         windows = Path("scripts/build-windows.ps1").read_text(encoding="utf-8")

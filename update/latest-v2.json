@@ -1,8 +1,8 @@
 {
-  "version": "0.26.3",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.3_all.deb",
-  "sha256": "1857fe29b766146a0be9d50e93edd0f395328ead568548cceec6d87e94601dba",
-  "notes": "Cross-platform release channels, visible encrypted profile transfer, and Android app identity",
-  "expires_at": "2026-11-12T05:45:47.330943+00:00",
-  "signature": "4KdjGncz6J0NfWLqoippLuzKZb4F2VDpozJzQ3IgfCLFZ990JozyrDeRmshKZOUcsdF6g54u540EApuzZnnIBQ=="
+  "version": "0.26.4",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.4_all.deb",
+  "sha256": "bfaae111fff4ea22fe1cbc4492e672e525a33a74665cd50754c440a10388fd3c",
+  "notes": "Durable platform release channels and lower idle network activity",
+  "expires_at": "2027-02-10T08:48:47.756809+00:00",
+  "signature": "c3TWGrIQ5tBBb+ovQncr4X0GouNiYBRzbkGxWT4JQfPHEt6/3YJllPHpyDnQa19ph2aeq71WX8tfWqdFrKPjBw=="
 }
