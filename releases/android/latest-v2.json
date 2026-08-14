@@ -1,8 +1,8 @@
 {
-  "version": "0.26.5",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.5/TuxInDrive-0.26.5-android.apk",
-  "sha256": "7259d84e36e0b5e598f67d6fb5ee6e873484c1b8568848b8a9ab4fa5f64acbfa",
-  "notes": "Global bandwidth controls and network reliability improvements",
-  "expires_at": "2027-02-10T13:50:15.270994+00:00",
-  "signature": "V0+Axy2HQd2j6GkfcNN9X5lM66sMQ/SbtW2TTUr2DhiQy6kEeO8HDXcxCMn1Fvflf4zF9/sG7VHeSTMtpMVwCg=="
+  "version": "0.26.6",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-android.apk",
+  "sha256": "b165dfcb91732e995355f18074b7f37956c5a631e2deeed4d1475b8ac91f9761",
+  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
+  "expires_at": "2027-02-10T17:18:14.017886+00:00",
+  "signature": "f0Rf6FNnRSPZ/Vood56ZnlQMn49xNu5OpSyBoZ8L4bYr3sWBo7SqrQMTXIunNqeGGvbI/tJYhsNNE1E9OMTTDQ=="
 }

@@ -1,8 +1,8 @@
 {
-  "version": "0.26.5",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.5/TuxInDrive-0.26.5-windows-x64-setup.exe",
-  "sha256": "b7f610215901479133cfd76ff46a672362ce62e125975c977b304cc5db6a8227",
-  "notes": "Global bandwidth controls and network reliability improvements",
-  "expires_at": "2027-02-10T13:50:21.671559+00:00",
-  "signature": "Tls/7VO+XIsZi3aZOROCYerKAWscwmOp9WQgcTUA+8mLMJsi1/YHf/ZNwsqtCvxixAYFy62wxWqvrDqMx7sEDA=="
+  "version": "0.26.6",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-windows-x64-setup.exe",
+  "sha256": "7a9b16a628c6668c2291c50517dc6dd006a511ff37d387af35120dd6a9153408",
+  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
+  "expires_at": "2027-02-10T17:18:14.017886+00:00",
+  "signature": "sspam4cTRj0fxe21rl0SY3Q9+trwEg5EDD4FsLdtrSPKHWfTHxjZtWltLb8TwmaAnom0cr2nxIKkff1udl/hCw=="
 }

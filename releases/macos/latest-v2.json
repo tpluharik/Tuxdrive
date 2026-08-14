@@ -1,8 +1,8 @@
 {
-  "version": "0.26.5",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.5/TuxInDrive-0.26.5-macos-arm64.dmg",
-  "sha256": "58bcc6593a2a8fe356b2e6c918d5579d202aecec257226acb2c829c5dbf7ecd5",
-  "notes": "Global bandwidth controls and network reliability improvements",
-  "expires_at": "2027-02-10T13:50:18.331818+00:00",
-  "signature": "tPBvlyss7+ed5U7vPkwMIUZkRbFbd8rLGcuX1IUnfV6junNFbk8bvljslWT9YihtbHX6ww49wXt5tFSOTJx7CA=="
+  "version": "0.26.6",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-macos-arm64.dmg",
+  "sha256": "1137a0e7b9f904c59abe1b710c4926923f8430e7e541dd3ea5d4b0e1c7af7cd9",
+  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
+  "expires_at": "2027-02-10T17:18:14.017886+00:00",
+  "signature": "Jk5+I0vTs5X4y9QaoBzEujcINvM77liGEMk23VfSKdHVNRjKcDIbEYLKx09e3oUQtNMjzE+7WpVY4ZrnDdHFBw=="
 }
