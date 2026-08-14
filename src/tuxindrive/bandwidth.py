@@ -83,6 +83,7 @@ class GlobalBandwidthController:
         self.max_active = max(1, int(max_active))
         self._slots = threading.BoundedSemaphore(self.max_active)
         self._admission = threading.Lock()
+        self._control_plane = threading.Lock()
         self._lock = threading.RLock()
         self._next_download = 0.0
         self.limit = ""
@@ -118,6 +119,18 @@ class GlobalBandwidthController:
         finally:
             for _index in range(count):
                 self._slots.release()
+
+    @contextlib.contextmanager
+    def control_plane_guard(self) -> Iterator[None]:
+        """Serialize bounded control requests without waiting for transfers.
+
+        Callers must keep their response size bounded and apply the shared byte
+        clock. This lane is intentionally separate from transfer admission so
+        a long-running synchronization cannot starve an interactive manifest
+        or other small control-plane request.
+        """
+        with self._control_plane:
+            yield
 
     def throttle_download(self, byte_count: int) -> None:
         rate = _rate_bytes(self.limit, download=True)

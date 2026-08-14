@@ -85,6 +85,34 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
             completed.append(True)
         self.assertEqual(completed, [True])
 
+    def test_control_plane_request_is_not_starved_by_active_transfer(self):
+        controller = GlobalBandwidthController("1M", max_active=1)
+        transfer_entered = threading.Event()
+        release_transfer = threading.Event()
+        control_completed = threading.Event()
+
+        def transfer() -> None:
+            with controller.guard():
+                transfer_entered.set()
+                release_transfer.wait(timeout=1)
+
+        def control_request() -> None:
+            with controller.control_plane_guard():
+                control_completed.set()
+
+        transfer_thread = threading.Thread(target=transfer)
+        transfer_thread.start()
+        self.assertTrue(transfer_entered.wait(timeout=1))
+        control_thread = threading.Thread(target=control_request)
+        control_thread.start()
+        control_thread.join(timeout=0.2)
+        release_transfer.set()
+        transfer_thread.join(timeout=1)
+
+        self.assertTrue(control_completed.is_set())
+        self.assertFalse(control_thread.is_alive())
+        self.assertFalse(transfer_thread.is_alive())
+
 
 if __name__ == "__main__":
     unittest.main()

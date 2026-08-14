@@ -150,16 +150,17 @@ class UpdateManagerTests(unittest.TestCase):
         with patch("urllib.request.urlopen", return_value=FakeResponse(self.release_payload("0.5.0"))):
             self.assertIsNone(manager.check())
 
-    def test_check_uses_global_admission_and_download_clock(self):
+    def test_check_uses_control_plane_lane_and_download_clock(self):
         bandwidth = Mock()
-        bandwidth.guard.return_value = nullcontext()
+        bandwidth.control_plane_guard.return_value = nullcontext()
         payload = self.release_payload()
         manager = UpdateManager(
             "0.5.0", public_key=self.public, target_platform="linux", bandwidth=bandwidth,
         )
         with patch("urllib.request.urlopen", return_value=FakeResponse(payload)):
             self.assertIsNotNone(manager.check())
-        bandwidth.guard.assert_called_once_with()
+        bandwidth.control_plane_guard.assert_called_once_with()
+        bandwidth.guard.assert_not_called()
         bandwidth.throttle_download.assert_called_once_with(len(payload))
 
     def test_download_verifies_checksum(self):

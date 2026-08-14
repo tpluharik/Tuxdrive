@@ -8,6 +8,7 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 - Replaced the product logo and application icon with the circular black-and-white penguin identity, retaining red only for the bow tie.
 - Propagated the new identity through Linux, Windows, macOS and Android application surfaces, installers, status icons and repository documentation.
+- Kept signed update checks responsive during active synchronization by routing their bounded manifest request through a dedicated control-plane lane while retaining the global byte-rate clock, HTTP timeout and signature verification.
 - Preserved application behavior, configuration compatibility, security controls and update trust roots.
 
 ## 0.26.7 — Linux profile credential-store repair

@@ -131,7 +131,11 @@ class UpdateManager:
 
     def check(self) -> UpdateRelease | None:
         request = urllib.request.Request(self.manifest_url, headers={"User-Agent": "TuxInDrive-Updater"})
-        with self.bandwidth.guard():
+        # A synchronization can hold the transfer gate for minutes. Update
+        # discovery is a bounded control-plane request and must remain
+        # responsive while transfers run; its bytes still use the shared
+        # global download clock below.
+        with self.bandwidth.control_plane_guard():
             with urllib.request.urlopen(request, timeout=20) as response:
                 payload = response.read(128 * 1024)
                 self.bandwidth.throttle_download(len(payload))
