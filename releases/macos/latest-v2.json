@@ -1,8 +1,8 @@
 {
-  "version": "0.26.6",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-macos-arm64.dmg",
-  "sha256": "1137a0e7b9f904c59abe1b710c4926923f8430e7e541dd3ea5d4b0e1c7af7cd9",
-  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
-  "expires_at": "2027-02-10T17:18:14.017886+00:00",
-  "signature": "Jk5+I0vTs5X4y9QaoBzEujcINvM77liGEMk23VfSKdHVNRjKcDIbEYLKx09e3oUQtNMjzE+7WpVY4ZrnDdHFBw=="
+  "version": "0.26.7",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.7/TuxInDrive-0.26.7-macos-arm64.dmg",
+  "sha256": "118073454e2a5a6fe6cc075b73a094ae17e002ffcccc6f4e0bb202f4e60141ed",
+  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
+  "expires_at": "2027-02-10T18:37:46.483801+00:00",
+  "signature": "9bQa3sbDtPG2i5XQuYyn3q7CElX8oa//xyfaERyoFGSFXJN8McMPe7InUrTES1OJtURwQWcmJBc9JFUNFTvPDw=="
 }

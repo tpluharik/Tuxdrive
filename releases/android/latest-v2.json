@@ -1,8 +1,8 @@
 {
-  "version": "0.26.6",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-android.apk",
-  "sha256": "b165dfcb91732e995355f18074b7f37956c5a631e2deeed4d1475b8ac91f9761",
-  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
-  "expires_at": "2027-02-10T17:18:14.017886+00:00",
-  "signature": "f0Rf6FNnRSPZ/Vood56ZnlQMn49xNu5OpSyBoZ8L4bYr3sWBo7SqrQMTXIunNqeGGvbI/tJYhsNNE1E9OMTTDQ=="
+  "version": "0.26.7",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.7/TuxInDrive-0.26.7-android.apk",
+  "sha256": "05b345ffbfc4011c8b79f5d26ca8221e8ccb7971d29169f2f1f9462f98b56987",
+  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
+  "expires_at": "2027-02-10T18:37:46.483801+00:00",
+  "signature": "4Lto1MnIOLDJ0Rnz0crJFH8hLdGXdIvTVt+HfWzmTsujAA0uigG9cbjpNnj9KiyqTB+KqruIDZYCCSYXumhWCQ=="
 }

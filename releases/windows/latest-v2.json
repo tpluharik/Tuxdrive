@@ -1,8 +1,8 @@
 {
-  "version": "0.26.6",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.6/TuxInDrive-0.26.6-windows-x64-setup.exe",
-  "sha256": "7a9b16a628c6668c2291c50517dc6dd006a511ff37d387af35120dd6a9153408",
-  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
-  "expires_at": "2027-02-10T17:18:14.017886+00:00",
-  "signature": "sspam4cTRj0fxe21rl0SY3Q9+trwEg5EDD4FsLdtrSPKHWfTHxjZtWltLb8TwmaAnom0cr2nxIKkff1udl/hCw=="
+  "version": "0.26.7",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.7/TuxInDrive-0.26.7-windows-x64-setup.exe",
+  "sha256": "ae90de4ae14734fea5a76e4bebae0b3226b6277a0be06610598e4f009d907960",
+  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
+  "expires_at": "2027-02-10T18:37:46.483801+00:00",
+  "signature": "577dyiVvI6/W8Os/q9D8HIoriuOC+K3ahNjgh6uubdLHM/byueBKAed2PUERx+0q3z+uWksrd4MQCWDOHnLhCg=="
 }
