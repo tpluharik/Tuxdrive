@@ -3,8 +3,9 @@ import json
 import tempfile
 import base64
 import unittest
+from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from tuxindrive.updater import UpdateManager, release_package_name, version_key
 from tuxindrive.update_helper import PrivilegedUpdateError, stage_verified_package
@@ -38,19 +39,40 @@ class UpdateManagerTests(unittest.TestCase):
             serialization.Encoding.Raw, serialization.PublicFormat.Raw,
         )).decode("ascii")
 
-    def release_payload(self, version="0.5.1", body=b"deb", url=None):
+    def release_payload(
+        self, version="0.5.1", body=b"deb", url=None,
+        expires_at="2999-01-01T00:00:00+00:00", sha256=None,
+    ):
         signed = {
             "version": version,
             "url": url or f"https://raw.githubusercontent.com/tpluharik/TuxInDrive/main/dist/tuxindrive_{version}_all.deb",
-            "sha256": hashlib.sha256(body).hexdigest(),
+            "sha256": sha256 or hashlib.sha256(body).hexdigest(),
             "notes": "Test release",
-            "expires_at": "2999-01-01T00:00:00+00:00",
+            "expires_at": expires_at,
         }
         canonical = json.dumps(signed, sort_keys=True, separators=(",", ":")).encode()
         return json.dumps({**signed, "signature": base64.b64encode(self.private.sign(canonical)).decode("ascii")}).encode()
 
     def test_version_comparison_is_numeric(self):
         self.assertGreater(version_key("0.10.0"), version_key("0.9.9"))
+        for invalid in ("", "v", "1.beta.0", "1.-1", "1..0"):
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                version_key(invalid)
+
+    def test_manifest_rejects_tampering_expiry_and_invalid_checksum(self):
+        tampered = json.loads(self.release_payload())
+        tampered["notes"] = "changed after signing"
+        with self.assertRaisesRegex(ValueError, "signature"):
+            UpdateManager.parse_manifest(json.dumps(tampered).encode(), self.public)
+        for expiry in ("2020-01-01T00:00:00+00:00", "2999-01-01T00:00:00"):
+            with self.subTest(expiry=expiry), self.assertRaisesRegex(ValueError, "expired"):
+                UpdateManager.parse_manifest(
+                    self.release_payload(expires_at=expiry), self.public,
+                )
+        with self.assertRaisesRegex(ValueError, "SHA-256"):
+            UpdateManager.parse_manifest(
+                self.release_payload(sha256="z" * 64), self.public,
+            )
 
     def test_platform_package_names_are_bound_to_the_signed_version(self):
         windows_url = "https://github.com/tpluharik/Tuxindrive/releases/download/v0.5.1/TuxInDrive-0.5.1-windows-x64-setup.exe"
@@ -128,6 +150,18 @@ class UpdateManagerTests(unittest.TestCase):
         with patch("urllib.request.urlopen", return_value=FakeResponse(self.release_payload("0.5.0"))):
             self.assertIsNone(manager.check())
 
+    def test_check_uses_global_admission_and_download_clock(self):
+        bandwidth = Mock()
+        bandwidth.guard.return_value = nullcontext()
+        payload = self.release_payload()
+        manager = UpdateManager(
+            "0.5.0", public_key=self.public, target_platform="linux", bandwidth=bandwidth,
+        )
+        with patch("urllib.request.urlopen", return_value=FakeResponse(payload)):
+            self.assertIsNotNone(manager.check())
+        bandwidth.guard.assert_called_once_with()
+        bandwidth.throttle_download.assert_called_once_with(len(payload))
+
     def test_download_verifies_checksum(self):
         body = b"valid-debian-package-placeholder"
         release = UpdateManager.parse_manifest(self.release_payload(body=body), self.public)
@@ -155,6 +189,16 @@ class UpdateManagerTests(unittest.TestCase):
             with patch("urllib.request.urlopen", return_value=FakeResponse(b"tampered")):
                 with self.assertRaises(ValueError):
                     manager.download(release)
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    def test_oversized_download_is_removed_before_installation(self):
+        body = b"123456"
+        release = UpdateManager.parse_manifest(self.release_payload(body=body), self.public)
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "tuxindrive.updater.MAX_UPDATE_SIZE", 5,
+        ), patch("urllib.request.urlopen", return_value=FakeResponse(body)):
+            with self.assertRaisesRegex(ValueError, "1 GiB"):
+                UpdateManager("0.5.0", Path(directory)).download(release)
             self.assertEqual(list(Path(directory).iterdir()), [])
 
     def test_privileged_helper_reverifies_root_owned_copy(self):

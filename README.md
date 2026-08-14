@@ -216,7 +216,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 284 automated tests, including global bandwidth admission and directional limits; network usage persistence; visual themes; exact Nautilus 4.1 integration; bounded FUSE hydration; drag/drop groups; GitHub and Proton guards; signed update channels; peer isolation; hostile ODF/CRDT input; Android/release packaging; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 316 automated tests (309 Python and 7 Android JVM tests), including global bandwidth admission and directional limits; cross-platform network-counter failure handling; path, symlink and signing-key security; recovery retention and confinement; visual themes; exact Nautilus 4.1 integration; bounded FUSE hydration; drag/drop groups; GitHub and Proton guards; signed update channels; peer isolation; hostile ODF/CRDT input; Android serialization and input validation; release packaging; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 

@@ -2,6 +2,13 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## Unreleased
+
+- Revised the complete automated suite to isolate it from real user configuration and installed provider tools, preventing local credentials or machine state from changing results.
+- Expanded network, bandwidth, transfer-policy, recovery, updater and path/signature security coverage, including malformed operating-system counters and fail-safe cleanup.
+- Added Android JVM tests for bandwidth/version validation and serialized embedded-engine access; both debug and release package workflows now run the matching unit tests before linting and assembly.
+- Removed a brittle desktop UI source-text test that duplicated implementation strings without exercising behavior; visual GTK behavior remains an explicit manual release check.
+
 ## 0.26.4 — durable platform release channels
 
 - Advanced the signed Linux update channel so installations on 0.26.3 can receive the idle-network optimizations.

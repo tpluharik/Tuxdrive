@@ -6,7 +6,6 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.rclone.gomobile.Gomobile
 import java.io.File
-import java.util.concurrent.Semaphore
 
 data class CloudItem(
     val name: String,
@@ -16,19 +15,6 @@ data class CloudItem(
 )
 
 class RcloneException(message: String) : RuntimeException(message)
-
-object MobileNetworkController {
-    private val gate = Semaphore(1, true)
-
-    fun <T> exclusive(operation: () -> T): T {
-        gate.acquire()
-        return try {
-            operation()
-        } finally {
-            gate.release()
-        }
-    }
-}
 
 class RcloneCore(private val context: Context) {
     private val configuration = File(context.noBackupFilesDir, "rclone.conf")
@@ -208,14 +194,7 @@ class MobileRepository(context: Context) {
     fun bandwidthLimit(): String = preferences.getString("global-bandwidth-limit", "10M").orEmpty()
 
     fun setBandwidthLimit(value: String): Boolean {
-        val normalized = value.trim()
-        val valid = normalized.isBlank() || normalized.split(':').let { parts ->
-            parts.size <= 2 && parts.all { part ->
-                part.equals("off", ignoreCase = true) ||
-                    Regex("\\d+(?:\\.\\d+)?[BKMGTP]?", RegexOption.IGNORE_CASE).matches(part)
-            }
-        }
-        if (!valid) return false
+        val normalized = MobileValidation.normalizeBandwidth(value) ?: return false
         preferences.edit().putString("global-bandwidth-limit", normalized).apply()
         runCatching { core.setBandwidthLimit(normalized) }
         return true

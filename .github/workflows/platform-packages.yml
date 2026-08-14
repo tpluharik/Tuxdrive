@@ -136,10 +136,10 @@ jobs:
             test -n "$TUXINDRIVE_ANDROID_KEY_PASSWORD"
             export TUXINDRIVE_ANDROID_KEYSTORE="$RUNNER_TEMP/tuxindrive-release.jks"
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$TUXINDRIVE_ANDROID_KEYSTORE"
-            gradle -p android --no-daemon :app:lintRelease :app:assembleRelease
+            gradle -p android --no-daemon :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
             package=android/app/build/outputs/apk/release/app-release.apk
           else
-            gradle -p android --no-daemon :app:lintDebug :app:assembleDebug
+            gradle -p android --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
             package=android/app/build/outputs/apk/debug/app-debug.apk
           fi
           test -s "$package"

@@ -10,20 +10,22 @@ From the repository root:
 python3 -m pip install .
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
+cd android
+gradle :app:testDebugUnitTest
 ```
 
 The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Python-package builds require `cryptography>=50.0.0,<51`; Ubuntu `.deb` installations use the distribution-maintained `python3-cryptography` package so official Ubuntu backported security fixes are recognized by APT rather than compared only by the upstream version string.
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **284 automated tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Bandwidth tests cover directional parsing, stricter global/job limits, shared admission and byte-rate control; engine tests cover jitter and atomic incremental reservation; network-meter tests cover rate/daily persistence. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache protection and unchanged-write suppression. Packaging/updater tests cover Windows, macOS and signed Android outputs, dedicated release channels, exact current manifests and the fixed original-key 0.19.1 bridge.
+The TuxInDrive development suite contains **316 automated tests: 309 Python tests and 7 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Bandwidth tests cover directional parsing, stricter global/job limits, shared admission and byte-rate control; engine tests cover jitter and atomic incremental reservation; network-meter tests cover rate/daily persistence and malformed or unavailable operating-system counters. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache protection and unchanged-write suppression. Packaging/updater tests cover Windows, macOS and signed Android outputs, dedicated release channels, exact current manifests and the fixed original-key 0.19.1 bridge. Android unit tests exercise bandwidth parsing, version comparison and serialized access to the embedded transfer engine.
 
 ## Test groups
 
 | Test module | Tests | What it verifies |
 |---|---:|---|
 | `test_audit.py` | 2 | Private audit persistence, filtering and malformed historical-line handling. |
-| `test_bandwidth.py` | 4 | Directional syntax, stricter global/job limits, network-slot admission, update byte clock and scan jitter. |
+| `test_bandwidth.py` | 9 | Directional syntax and invalid values, stricter global/job limits, network-slot admission and release, update byte clock and bounded scan jitter. |
 | `test_bootstrap.py` | 7 | Linux/macOS transfer-engine selection, rejection and identity-cached revalidation of incompatible/replaced rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_capabilities.py` | 3 | Complete provider records and conservative adaptive-mode restrictions. |
 | `test_config.py` | 10 | Round-trip persistence, bandwidth/theme/cache validation, legacy path compatibility, unchanged-write suppression, private permissions, and invalid configuration quarantine. |
@@ -37,21 +39,23 @@ The TuxInDrive development suite contains **284 automated tests**. Tests use tem
 | `test_migration.py` | 7 | AES-GCM profile round trips, wrong-password/tamper rejection, visible and legacy cloud discovery/migration, secret opt-in, private permissions and validation. |
 | `test_offline_action.py` | 9 | Mounted-drive fast dispatch, cold-start queuing, both supported command-line availability option forms, lexical file routing without FUSE resolution, sibling-prefix rejection, exact file-rule isolation, nested offline/online-only precedence, and green-state publication only for locally verified rules. |
 | `test_nautilus_extension.py` | 12 | Exact path/menu isolation, cached/coalesced badge refresh, URI lifecycle, Nautilus 4.1 construction, sensitivity and verified offline transitions. |
-| `test_network_usage.py` | 5 | Cross-platform counter handling, current rates, daily reset, counter rollover and private persistent totals. |
-| `test_packaging.py` | 16 | Debian/Windows/macOS/Android packaging, release-channel layout, native UI/assets, upgrade process, Nautilus routing and emblem metadata. |
+| `test_network_usage.py` | 10 | Linux/macOS/Windows counter parsing and failure handling, platform dispatch, current rates, daily reset, counter rollover and private persistent totals. |
+| `test_packaging.py` | 15 | Debian/Windows/macOS/Android packaging, release-channel layout, native assets, upgrade process, Nautilus routing and emblem metadata. |
 | `test_password_helper.py` | 3 | Private credential-helper input/output and rejection behavior. |
 | `test_performance.py` | 12 | Inotify delivery/startup race, remote retry, overflow reconciliation, monitor safety, cache protection, fail-closed markers and performance hooks. |
 | `test_process_control.py` | 4 | Portable process creation, cancellation, process-group cleanup and timeout behavior. |
 | `test_proton.py` | 29 | Official CLI install/login/session, Secret Service, redaction/confinement, backend migration, safety previews, global admission and fail-closed routing. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
 | `test_peer.py` | 22 | Invitation compatibility, roles/drops/transports, signed atomic deltas, isolated device roots, authorization/revocation, host-key pinning, leases and private identities. |
-| `test_policies.py` | 3 | Maximum-usage defaults plus controlled battery and schedule deferral. |
-| `test_recovery.py` | 3 | Local archive/restore behavior, mass-change and ransomware-suffix blocking, and integrity-audit result parsing. |
-| `test_security.py` | 4 | Symlink/parent escape rejection, confined atomic installation and Ed25519 transaction tamper detection. |
+| `test_policies.py` | 7 | Maximum-usage defaults plus controlled battery, metered-network and normal/overnight schedule decisions, including fail-open probe handling. |
+| `test_recovery.py` | 8 | Local archive/restore behavior, disabled retention, malformed/foreign record rejection, expiry pruning, mass-change and ransomware-suffix blocking, and integrity-audit parsing. |
+| `test_security.py` | 8 | Empty/absolute/parent path rejection, symlink refusal, confined atomic installation, Ed25519-only keys and signed transaction tamper detection. |
 | `test_themes.py` | 5 | Nordic Glass, Bento Cloud and Midnight Sync registration; shared components and distinct palettes; Midnight-only dark preference; persisted selection; safe legacy/invalid fallback. |
 | `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 19 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
-| `test_updater.py` | 13 | Version comparison, platform-channel selection, trusted URLs, rate-limited download/progress, verification, partial cleanup, privileged immutable staging and signed release coherence. |
+| `test_updater.py` | 16 | Version validation/comparison, platform-channel selection, trusted URLs, expiry/checksum/tamper rejection, globally rate-limited downloads, size/partial cleanup, privileged immutable staging and signed release coherence. |
+
+Android JVM coverage is kept beside the mobile source: `MobileValidationTest` contains 5 tests for bandwidth and version inputs, and `MobileNetworkControllerTest` contains 2 tests for serialized access and exception-safe permit release. Release CI runs `testReleaseUnitTest`; main-branch package CI runs `testDebugUnitTest` before lint and assembly. The Android build also needs the pinned `rclone.aar`; CI creates it before Gradle runs.
 
 ## Important safety invariants covered
 

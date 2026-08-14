@@ -59,11 +59,14 @@ class ProtonClientTests(unittest.TestCase):
         return process
 
     def test_missing_official_cli_has_actionable_error(self):
-        client = ProtonDriveClient("proton-drive")
-        with patch("tuxindrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
-            ProtonDriveError, "Install CLI and connect"
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_DATA_HOME": temporary}, clear=False,
         ):
-            client.resolve()
+            client = ProtonDriveClient("proton-drive")
+            with patch("tuxindrive.proton.shutil.which", return_value=None), self.assertRaisesRegex(
+                ProtonDriveError, "Install CLI and connect"
+            ):
+                client.resolve()
 
     @staticmethod
     def response(value: bytes, url: str, content_length: str | None = None):

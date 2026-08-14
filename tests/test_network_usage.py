@@ -3,8 +3,12 @@ import tempfile
 import unittest
 from datetime import date
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from tuxindrive.network_usage import NetworkUsageMeter, _linux_counters, format_bytes
+from tuxindrive.network_usage import (
+    NetworkUsageMeter, _linux_counters, _macos_counters, _windows_counters,
+    format_bytes, read_network_counters,
+)
 
 
 class Sequence:
@@ -66,10 +70,53 @@ class NetworkUsageTests(unittest.TestCase):
             )
             self.assertEqual(_linux_counters(path), (1234, 5678))
 
+    def test_linux_parser_fails_closed_on_malformed_counters(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "dev"
+            path.write_text(
+                "Inter-| Receive | Transmit\n"
+                " face |bytes packets errs drop fifo frame compressed multicast|bytes packets errs drop fifo colls carrier compressed\n"
+                "eth0: not-a-number\n",
+                encoding="utf-8",
+            )
+            self.assertIsNone(_linux_counters(path))
+
+    def test_macos_parser_deduplicates_interface_rows_and_excludes_loopback(self):
+        output = (
+            "Name Mtu Network Address Ipkts Ierrs Ibytes Opkts Oerrs Obytes Coll\n"
+            "en0 1500 link aa 1 0 100 2 0 200 0\n"
+            "en0 1500 link bb 2 0 150 3 0 250 0\n"
+            "lo0 16384 link cc 3 0 999 4 0 999 0\n"
+        )
+        with patch("tuxindrive.network_usage.subprocess.run", return_value=Mock(returncode=0, stdout=output)):
+            self.assertEqual(_macos_counters(), (150, 250))
+
+    def test_macos_and_windows_probe_failures_are_nonfatal(self):
+        with patch("tuxindrive.network_usage.subprocess.run", side_effect=FileNotFoundError):
+            self.assertIsNone(_macos_counters())
+        with patch("tuxindrive.network_usage.platform.system", return_value="Linux"):
+            self.assertIsNone(_windows_counters())
+
+    def test_counter_dispatch_selects_the_current_platform(self):
+        with patch("tuxindrive.network_usage.platform.system", return_value="Darwin"), patch(
+            "tuxindrive.network_usage._macos_counters", return_value=(7, 8),
+        ) as macos:
+            self.assertEqual(read_network_counters(), (7, 8))
+        macos.assert_called_once_with()
+
+    def test_unavailable_counters_preserve_totals_without_writing_garbage(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "usage.json"
+            meter = NetworkUsageMeter(path, reader=lambda: None, clock=lambda: 1.0)
+            usage = meter.sample()
+        self.assertFalse(usage.available)
+        self.assertEqual((usage.downloaded_today, usage.uploaded_today), (0, 0))
+
     def test_human_readable_units(self):
         self.assertEqual(format_bytes(0), "0 B")
         self.assertEqual(format_bytes(1536), "1.5 KiB")
         self.assertEqual(format_bytes(1024 * 1024, rate=True), "1.0 MiB/s")
+        self.assertEqual(format_bytes(-5), "0 B")
 
 
 if __name__ == "__main__":

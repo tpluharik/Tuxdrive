@@ -53,7 +53,7 @@ class AndroidUpdater(private val context: Context) {
         }
         require(sha256.matches(Regex("[0-9a-f]{64}"))) { "The Android update checksum is invalid" }
         return AndroidUpdate(version, url, sha256, notes).takeIf {
-            isNewer(it.version, BuildConfig.VERSION_NAME)
+            MobileValidation.isNewer(it.version, BuildConfig.VERSION_NAME)
         }
     }
 
@@ -97,7 +97,9 @@ class AndroidUpdater(private val context: Context) {
     }
 
     private fun throttle(byteCount: Int) {
-        val rate = downloadRateBytes(preferences.getString("global-bandwidth-limit", "10M").orEmpty())
+        val rate = MobileValidation.downloadRateBytes(
+            preferences.getString("global-bandwidth-limit", "10M").orEmpty(),
+        )
         if (rate <= 0.0 || byteCount <= 0) return
         val now = System.nanoTime()
         val scheduled = synchronized(this) {
@@ -111,23 +113,6 @@ class AndroidUpdater(private val context: Context) {
             val nanos = (delay % 1_000_000L).toInt()
             Thread.sleep(millis, nanos)
         }
-    }
-
-    private fun downloadRateBytes(value: String): Double {
-        val part = value.trim().split(':').let { if (it.size == 2) it[1] else it[0] }
-        if (part.isBlank() || part.equals("off", ignoreCase = true)) return 0.0
-        val match = Regex("(\\d+(?:\\.\\d+)?)([BKMGTP]?)", RegexOption.IGNORE_CASE)
-            .matchEntire(part) ?: return 0.0
-        val scale = when (match.groupValues[2].uppercase()) {
-            "B" -> 1.0
-            "K" -> 1024.0
-            "M" -> 1024.0 * 1024.0
-            "G" -> 1024.0 * 1024.0 * 1024.0
-            "T" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
-            "P" -> 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0
-            else -> 1024.0
-        }
-        return match.groupValues[1].toDouble() * scale
     }
 
     fun openInstaller(packageFile: File) {
@@ -160,17 +145,4 @@ class AndroidUpdater(private val context: Context) {
         }
     }
 
-    private fun versionKey(value: String): List<Int> = value.removePrefix("v").split('.').map {
-        it.toIntOrNull() ?: throw IllegalArgumentException("Invalid release version")
-    }
-
-    private fun isNewer(candidate: String, current: String): Boolean {
-        val left = versionKey(candidate)
-        val right = versionKey(current)
-        for (index in 0 until maxOf(left.size, right.size)) {
-            val comparison = left.getOrElse(index) { 0 }.compareTo(right.getOrElse(index) { 0 })
-            if (comparison != 0) return comparison > 0
-        }
-        return false
-    }
 }

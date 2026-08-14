@@ -33,7 +33,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
 | GitHub repositories | Credential-free GitHub-only URLs, validated branches/origins, noninteractive system Git credentials, fast-forward/rebase guards, conflict abort | Avoid token leakage, command injection and silent Git history overwrite |
 | Offline hydration | Root/child confinement, symlink rejection, progress-based inactivity timeout with one isolated retry, failed-pin rollback, exact file rules, stable no-remount retention, explicit nested online-only exceptions, and confined local pin manifests checked without remote reads | Avoid indefinitely blocked helpers, stale pending badges, sibling downloads, detached Nautilus views, silent reconnect downloads, false offline claims, generic-cache eviction of pinned content, and path escape |
-| CI/release | Pinned release dependencies, 284 tests, compile checks, high-severity Bandit, `pip-audit`, Debian/platform inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
+| CI/release | Pinned release dependencies, 316 Python/Android tests, compile checks, high-severity Bandit, `pip-audit`, Debian/platform inspection, CycloneDX SBOM, signed-manifest verification | Make security regressions and vulnerable dependencies release blockers |
 
 ## Dependency advisory response
 

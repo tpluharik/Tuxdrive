@@ -169,13 +169,16 @@ class RcloneClientTests(unittest.TestCase):
         self.assertEqual(Provider.PEER.rclone_type, "sftp")
 
     def test_nextcloud_configuration_sets_webdav_vendor(self):
-        client = RcloneClient()
-        with patch.object(
-            client,
-            "_run_oauth",
-            return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
-        ) as run:
-            self.assertTrue(client.begin_oauth("cloud", Provider.NEXTCLOUD).complete)
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_CONFIG_HOME": temporary}, clear=False,
+        ):
+            client = RcloneClient()
+            with patch.object(
+                client,
+                "_run_oauth",
+                return_value=subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+            ) as run:
+                self.assertTrue(client.begin_oauth("cloud", Provider.NEXTCLOUD).complete)
         self.assertEqual(
             run.call_args.args[0][:6],
             ["config", "create", "cloud", "webdav", "vendor", "nextcloud"],

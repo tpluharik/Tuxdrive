@@ -18,6 +18,16 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             normalize_bandwidth_limit("weekday 10M")
 
+    def test_invalid_shapes_and_units_are_rejected(self):
+        for value in ("1M:2M:3M", "-1M", "1MiB", "NaN", "1 M", "off:bad"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                normalize_bandwidth_limit(value)
+
+    def test_unlimited_direction_never_overrides_a_finite_limit(self):
+        self.assertEqual(effective_rclone_limit("off:10M", "2M:off"), "2M:10M")
+        self.assertEqual(effective_rclone_limit("off", "3M"), "3M")
+        self.assertEqual(effective_rclone_limit("4M", "invalid schedule"), "4M")
+
     def test_rclone_uses_global_limit_unless_job_is_stricter(self):
         controller = GlobalBandwidthController("10M")
         self.assertEqual(controller.rclone_args(), ["--bwlimit", "10M"])
@@ -33,6 +43,20 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
             controller.throttle_download(1024)
             controller.throttle_download(1024)
         sleep.assert_called_once_with(1.0)
+
+    def test_zero_unlimited_and_empty_downloads_do_not_sleep(self):
+        with patch("tuxindrive.bandwidth.time.sleep") as sleep:
+            for limit, count in (("", 1024), ("off", 1024), ("0", 1024), ("1M", 0), ("1M", -1)):
+                GlobalBandwidthController(limit).throttle_download(count)
+        sleep.assert_not_called()
+
+    def test_scan_jitter_is_bounded_and_handles_nonpositive_intervals(self):
+        with patch("tuxindrive.bandwidth.random.uniform", return_value=0.25) as uniform:
+            self.assertEqual(GlobalBandwidthController.scan_jitter(120), 0.25)
+            uniform.assert_called_once_with(0.0, 30.0)
+        with patch("tuxindrive.bandwidth.random.uniform", return_value=0.0) as uniform:
+            GlobalBandwidthController.scan_jitter(-10)
+            uniform.assert_called_once_with(0.0, 0.25)
 
     def test_parallel_exclusive_callers_do_not_deadlock(self):
         controller = GlobalBandwidthController("1M", max_active=2)
@@ -50,6 +74,16 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
             thread.join(timeout=1)
         self.assertTrue(all(not thread.is_alive() for thread in threads))
         self.assertCountEqual(completed, [0, 1])
+
+    def test_guard_releases_every_slot_after_an_exception(self):
+        controller = GlobalBandwidthController("1M", max_active=2)
+        with self.assertRaisesRegex(RuntimeError, "stop"):
+            with controller.guard(exclusive=True):
+                raise RuntimeError("stop")
+        completed = []
+        with controller.guard(exclusive=True):
+            completed.append(True)
+        self.assertEqual(completed, [True])
 
 
 if __name__ == "__main__":
