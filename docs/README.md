@@ -1,5 +1,7 @@
 # TuxInDrive documentation
 
+<p align="center"><img src="../branding/tuxindrive-logo.png" width="140" alt="TuxInDrive circular penguin logo with a red bow tie"></p>
+
 This index separates end-user instructions, operator guidance, implementation
 details, security controls, and release procedures. Documentation describes
 TuxInDrive 0.26.7 unless a section is explicitly historical.

@@ -19,6 +19,7 @@ OutputBaseFilename=TuxInDrive-{#AppVersion}-windows-x64-setup
 Compression=lzma2/max
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\..\branding\tuxindrive-icon.ico
 UninstallDisplayIcon={app}\TuxInDrive.exe
 CloseApplications=yes
 RestartApplications=no

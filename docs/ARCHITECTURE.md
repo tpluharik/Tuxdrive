@@ -236,6 +236,12 @@ names and a process mutex prevent duplicate scheduled/manual jobs.
 
 See [Platform support](PLATFORM_SUPPORT.md) for the supported matrix.
 
+## Brand asset pipeline
+
+`branding/tuxindrive-logo.png` is the transparent high-resolution master: a black-and-white penguin inside a white circle with a red bow tie. Desktop windows resolve this master from the source tree, PyInstaller bundle, or installed Debian documentation path and fall back to the icon theme only when no packaged asset is available. Linux packages install the scalable mark plus 16–256 px hicolor variants; the syncing and attention icons retain the mark and add distinct blue/red state badges.
+
+PyInstaller receives the checked-in Windows ICO and macOS ICNS explicitly, so executable, installer, application bundle, taskbar, and dock identities do not depend on host defaults. Android adaptive icons use the same transparent master over a neutral black background, while a separate alpha-only resource supplies the system-themed monochrome icon. README and user-documentation images reference the master directly. Provider and Nautilus state icons remain function-specific and are not replaced by the application brand.
+
 ## Module map
 
 | Module | Responsibility |

@@ -1,28 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="256"
-    android:viewportHeight="256">
-    <group
-        android:scaleX="0.72"
-        android:scaleY="0.72"
-        android:translateX="35.84"
-        android:translateY="35.84">
-        <path
-            android:fillColor="#111111"
-            android:pathData="M128,13c-48,0 -87,43 -87,101 0,56 35,116 87,129 52,-13 87,-73 87,-129 0,-58 -39,-101 -87,-101Z" />
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M128,196C91,174 66,142 68,105c1,-27 17,-49 41,-51 9,-1 16,5 19,16 3,-11 10,-17 19,-16 24,2 40,24 41,51 2,37 -23,69 -60,91Z" />
-        <path
-            android:fillColor="#111111"
-            android:pathData="M104,91a10,13 0,1 0,0 26a10,13 0,1 0,0 -26M152,91a10,13 0,1 0,0 26a10,13 0,1 0,0 -26" />
-        <path
-            android:fillColor="#E6A728"
-            android:pathData="M128,111l27,21 -27,27 -27,-27Z" />
-        <path
-            android:fillColor="#111111"
-            android:pathData="M82,185c-18,13 -27,28 -26,45 21,2 39,-3 53,-14M174,185c18,13 27,28 26,45 -21,2 -39,-3 -53,-14" />
-    </group>
-</vector>
+<bitmap xmlns:android="http://schemas.android.com/apk/res/android"
+    android:src="@drawable/tuxindrive_logo"
+    android:gravity="fill" />

@@ -7,6 +7,7 @@ rm -rf build/windows build/pyinstaller-windows build/pyinstaller-password-window
 mkdir -p build/windows dist
 python -m PyInstaller --noconfirm --clean --windowed --onedir --name TuxInDrive \
   --distpath build/windows --workpath build/pyinstaller-windows --specpath build \
+  --icon "../branding/tuxindrive-icon.ico" \
   --collect-all gi --hidden-import=keyring.backends.Windows \
   --add-data "../branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
 python -m PyInstaller --noconfirm --clean --console --onefile \

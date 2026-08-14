@@ -1,6 +1,6 @@
 # TuxInDrive User Guide
 
-<p align="center"><img src="../branding/tuxindrive-logo.png" width="150" alt="TuxInDrive penguin head logo"></p>
+<p align="center"><img src="../branding/tuxindrive-logo.png" width="150" alt="TuxInDrive circular black-and-white penguin logo with a red bow tie"></p>
 
 This guide covers TuxInDrive 0.26.7 on Linux, Windows, macOS and Android. Windows and macOS retain the Linux GTK desktop layout, while Android reorganizes accounts, synchronized folders, cloud files, activity and settings for touch displays. Platform-specific installation and signing details are in [Platform support](PLATFORM_SUPPORT.md). Administrators and developers can continue with the [documentation index](README.md), [operations guide](OPERATIONS.md), and [architecture reference](ARCHITECTURE.md).
 
@@ -73,7 +73,7 @@ Select **?** in the top bar. Choose a chapter on the left or type a word in the 
 
 Select the flag next to **?** and choose **🇬🇧 English**, **🇩🇪 Deutsch**, **🇫🇷 Français**, **🇪🇸 Español**, **🇸🇦 العربية**, or **🇮🇱 עברית**. TuxInDrive saves the language in `~/.config/tuxindrive/config.json` and rebuilds only the visible window; background synchronization, mounts and peer listeners continue. Arabic and Hebrew labels, search fields, topic titles and documentation bodies render right-to-left, but the window, sidebar and controls retain their familiar positions. Provider-generated OAuth questions, raw rclone errors, logs and some advanced dialogs remain in their technical source language to preserve diagnostic accuracy.
 
-The black-and-white penguin identifies TuxInDrive itself. Each cloud service uses its provider icon while connected and in the account chooser; blue sync and red error badges show changing activity.
+The black-and-white penguin inside a white circle, with its red bow tie, identifies TuxInDrive itself. It is the same mark in the window header, dialogs, launcher, taskbar or dock, system tray, Android launcher, installers, and repository documentation. Content and wording outside the source circle are not part of the TuxInDrive identity. Each cloud service keeps its own provider icon while connected and in the account chooser; blue sync and red error badges communicate changing activity without altering the primary mark.
 
 ### Update TuxInDrive
 

@@ -41,6 +41,7 @@ try:
     gi.require_version("Gdk", "3.0")
     gi.require_version("Gtk", "3.0")
     from gi.repository import Gtk, Gdk, Gio, GLib
+    from gi.repository import GdkPixbuf
 except (ImportError, ValueError) as exc:  # pragma: no cover - depends on host desktop
     message = (
         "TuxInDrive could not load its desktop runtime. Reinstall with:\n\n"
@@ -92,6 +93,46 @@ except (ImportError, ValueError):  # pragma: no cover - optional desktop compone
 
 APP_ID = "io.github.tuxindrive.TuxInDrive"
 JOB_DND_TARGET = "UTF8_STRING"
+
+
+def _brand_logo_path() -> Path | None:
+    candidates: list[Path] = []
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if bundle_root:
+        candidates.append(Path(bundle_root) / "branding" / "tuxindrive-logo.png")
+    candidates.extend(
+        (
+            Path(__file__).resolve().parents[2] / "branding" / "tuxindrive-logo.png",
+            Path("/usr/share/doc/tuxindrive/tuxindrive-logo.png"),
+        )
+    )
+    return next((path for path in candidates if path.is_file()), None)
+
+
+def _brand_pixbuf(icon_size: Gtk.IconSize):
+    path = _brand_logo_path()
+    if path is None:
+        return None
+    found, width, height = Gtk.icon_size_lookup(icon_size)
+    pixels = max(width, height) if found else 32
+    try:
+        return GdkPixbuf.Pixbuf.new_from_file_at_scale(str(path), pixels, pixels, True)
+    except GLib.Error:
+        LOGGER.warning("Could not load application logo from %s", path)
+        return None
+
+
+def _brand_image(icon_size: Gtk.IconSize) -> Gtk.Image:
+    pixbuf = _brand_pixbuf(icon_size)
+    return Gtk.Image.new_from_pixbuf(pixbuf) if pixbuf else Gtk.Image.new_from_icon_name("tuxindrive", icon_size)
+
+
+def _set_window_brand_icon(window: Gtk.Window) -> None:
+    pixbuf = _brand_pixbuf(Gtk.IconSize.DIALOG)
+    if pixbuf:
+        window.set_icon(pixbuf)
+    else:
+        window.set_icon_name("tuxindrive")
 
 
 def _desktop_open_command(target: str) -> list[str]:
@@ -1387,7 +1428,7 @@ class CollaborativeEditorDialog(Gtk.Dialog):
             "document_capability": _document_capability,
         })
         super().__init__(title="Collaborative document", transient_for=parent, modal=False)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         self.set_default_size(820, 700)
         self.workspace: CollaborationWorkspace | None = None
         self.crdt = None
@@ -1608,7 +1649,7 @@ class PeerSharingDialog(Gtk.Dialog):
 
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
         super().__init__(title="Peer-to-peer shared folders", transient_for=parent, modal=True)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         self.set_default_size(760, 680)
         self.controller = controller
         self.loaded_invitation: PeerInvitation | None = None
@@ -2335,7 +2376,7 @@ class ProfileDialog(Gtk.Dialog):
         super().__init__(title="TuxInDrive Profile and device migration", transient_for=parent, modal=True)
         self.controller = controller
         self.set_default_size(650, 470)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         area = self.get_content_area()
         area.set_border_width(24)
         area.set_spacing(12)
@@ -2567,7 +2608,7 @@ class OperationsDashboard(Gtk.Dialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
         super().__init__(title="TuxInDrive sync health and audit", transient_for=parent, modal=False)
         self.set_default_size(920, 620)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         notebook = Gtk.Notebook()
         notebook.append_page(self._health(controller), Gtk.Label(label="Sync health"))
         notebook.append_page(self._audit(controller), Gtk.Label(label="Audit timeline"))
@@ -2622,7 +2663,7 @@ class HelpCenterDialog(Gtk.Dialog):
     def __init__(self, parent: Gtk.Window) -> None:
         from .help_content import topics as help_topics
         super().__init__(title=tr("documentation"), transient_for=parent, modal=False)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         self.set_default_size(900, 700)
         self._topics = help_topics(get_language())
         self._rtl = is_rtl()
@@ -2703,7 +2744,7 @@ class MainWindow(Gtk.ApplicationWindow):
         super().__init__(application=application, title="TuxInDrive")
         self.controller = application
         self.set_default_size(920, 620)
-        self.set_icon_name("tuxindrive")
+        _set_window_brand_icon(self)
         self.get_style_context().add_class("tuxindrive-surface")
         self.connect("delete-event", self._hide_instead_of_close)
 
@@ -2711,7 +2752,7 @@ class MainWindow(Gtk.ApplicationWindow):
         header.get_style_context().add_class("tuxindrive-header")
         header.set_show_close_button(True)
         self.set_titlebar(header)
-        brand = Gtk.Image.new_from_icon_name("tuxindrive", Gtk.IconSize.LARGE_TOOLBAR)
+        brand = _brand_image(Gtk.IconSize.LARGE_TOOLBAR)
         brand.set_tooltip_text("TuxInDrive")
         header.pack_start(brand)
         add_account = Gtk.Button.new_from_icon_name("list-add-symbolic", Gtk.IconSize.BUTTON)
@@ -3776,12 +3817,12 @@ class MainWindow(Gtk.ApplicationWindow):
 
     def _show_settings(self, _button: Gtk.Widget) -> None:
         dialog = Gtk.Dialog(title="TuxInDrive settings", transient_for=self, modal=True)
-        dialog.set_icon_name("tuxindrive")
+        _set_window_brand_icon(dialog)
         dialog.set_default_size(580, 700)
         dialog.get_style_context().add_class("tuxindrive-dialog")
         dialog.get_content_area().set_border_width(24)
         identity = Gtk.Box(spacing=12)
-        identity.pack_start(Gtk.Image.new_from_icon_name("tuxindrive", Gtk.IconSize.DIALOG), False, False, 0)
+        identity.pack_start(_brand_image(Gtk.IconSize.DIALOG), False, False, 0)
         version = Gtk.Label(xalign=0)
         version.set_markup(f"<b>TuxInDrive {GLib.markup_escape_text(__version__)}</b>\n<small>Cloud desktop client</small>")
         identity.pack_start(version, True, True, 0)
@@ -3928,7 +3969,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.update_dialog.present()
             return
         dialog = Gtk.Dialog(title="TuxInDrive update", transient_for=self, modal=True)
-        dialog.set_icon_name("tuxindrive")
+        _set_window_brand_icon(dialog)
         dialog.set_default_size(520, 210)
         area = dialog.get_content_area()
         area.set_border_width(24)

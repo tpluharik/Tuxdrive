@@ -86,6 +86,26 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("dropbox box pcloud mega proton-drive nextcloud github", build_script)
         self.assertIn("git", Path("packaging/DEBIAN/control").read_text(encoding="utf-8"))
 
+    def test_primary_brand_assets_cover_every_platform(self):
+        for asset in (
+            "branding/tuxindrive-logo.png",
+            "branding/tuxindrive-icon.ico",
+            "branding/tuxindrive-icon.icns",
+            "packaging/tuxindrive.svg",
+            "packaging/tuxindrive-sync.svg",
+            "packaging/tuxindrive-error.svg",
+            "android/app/src/main/res/drawable-nodpi/tuxindrive_logo.png",
+            "android/app/src/main/res/drawable-nodpi/tuxindrive_logo_monochrome.png",
+        ):
+            self.assertTrue(Path(asset).is_file(), asset)
+        logo = Path("packaging/tuxindrive.svg").read_text(encoding="utf-8")
+        self.assertIn("#e31b23", logo)
+        self.assertIn("circular penguin with red bow tie", logo)
+        foreground = Path("android/app/src/main/res/drawable/ic_launcher_foreground.xml").read_text(encoding="utf-8")
+        monochrome = Path("android/app/src/main/res/drawable/ic_launcher_monochrome.xml").read_text(encoding="utf-8")
+        self.assertIn("@drawable/tuxindrive_logo", foreground)
+        self.assertIn("@drawable/tuxindrive_logo_monochrome", monochrome)
+
     def test_nautilus_extension_is_packaged_with_safe_app_actions(self):
         control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
@@ -223,6 +243,10 @@ class PackagingTests(unittest.TestCase):
             Path("android/app/build.gradle.kts").read_text(encoding="utf-8"),
         )
         self.assertIn(f'#define AppVersion "{__version__}"', Path("packaging/windows/TuxInDrive.iss").read_text(encoding="utf-8"))
+        self.assertIn(
+            "SetupIconFile=..\\..\\branding\\tuxindrive-icon.ico",
+            Path("packaging/windows/TuxInDrive.iss").read_text(encoding="utf-8"),
+        )
 
     def test_native_build_paths_match_ci_runner_layout(self):
         platforms = Path(".github/workflows/platform-packages.yml").read_text(encoding="utf-8")
@@ -239,12 +263,16 @@ class PackagingTests(unittest.TestCase):
         windows_msys2 = Path("scripts/build-windows-msys2.sh").read_text(encoding="utf-8")
         self.assertIn('--specpath build', windows_msys2)
         self.assertIn('--add-data "../branding/tuxindrive-logo.png:branding"', windows_msys2)
+        self.assertIn('--icon "../branding/tuxindrive-icon.ico"', windows_msys2)
         self.assertTrue((Path("build") / "../branding/tuxindrive-logo.png").resolve().is_file())
+        self.assertTrue((Path("build") / "../branding/tuxindrive-icon.ico").resolve().is_file())
         self.assertNotIn('$project_root/branding/tuxindrive-logo.png', windows_msys2)
         self.assertIn("test -s build/windows/TuxInDrive/TuxInDrive.exe", windows_msys2)
         self.assertIn("run: sh scripts/build-windows-msys2.sh", platforms)
         self.assertIn("run: scripts/build-windows.ps1 -PackageOnly", platforms)
         self.assertIn('$project_root/branding/tuxindrive-logo.png', macos)
+        self.assertIn('--icon "$project_root/branding/tuxindrive-icon.icns"', macos)
+        self.assertTrue(Path("branding/tuxindrive-icon.icns").is_file())
         android_build = Path("android/app/build.gradle.kts").read_text(encoding="utf-8")
         self.assertIn("sourceCompatibility = JavaVersion.VERSION_17", android_build)
         self.assertIn("targetCompatibility = JavaVersion.VERSION_17", android_build)

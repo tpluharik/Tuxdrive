@@ -1,6 +1,6 @@
 # TuxInDrive
 
-<p align="center"><img src="branding/tuxindrive-logo.png" width="180" alt="TuxInDrive black-and-white penguin head logo"></p>
+<p align="center"><img src="branding/tuxindrive-logo.png" width="180" alt="TuxInDrive circular black-and-white penguin logo with a red bow tie"></p>
 
 TuxInDrive is a native Linux, Windows, macOS and Android client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. Linux, Windows and macOS share the GTK desktop interface; Android uses a native mobile layout over the same rclone synchronization engine and platform-safe storage controls.
 
@@ -11,6 +11,8 @@ TuxInDrive is a native Linux, Windows, macOS and Android client for **Google Dri
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
 ## TuxInDrive rebrand and upgrade compatibility
+
+The primary TuxInDrive identity is the penguin inside a white circle with a red bow tie. The artwork outside the source circle and its former wording are not part of the application brand. The same mark is embedded in the GTK header and dialogs, Linux icon theme, Windows executable and installer, macOS application bundle, Android adaptive/themed launcher icon, repository overview, and user documentation.
 
 Version 0.26.7 repairs credential-enabled profile backup, restore, and QR export in Linux packages by using the packaged GNOME Secret Service backend directly. Version 0.26.6 added secure desktop-to-Android QR transfer, while 0.26.5 introduced one configurable application-wide bandwidth controller for synchronization, streaming, metadata scans, verification, updates, GitHub, Proton, and Android. Existing installations continue to read their private legacy configuration/state directories, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
 

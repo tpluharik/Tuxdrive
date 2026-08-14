@@ -9,6 +9,7 @@ mkdir -p build/macos dist
 "$python_bin" -m PyInstaller --noconfirm --clean --windowed --onedir \
   --name TuxInDrive --osx-bundle-identifier io.github.tuxindrive.TuxInDrive \
   --distpath build/macos --workpath build/pyinstaller-macos --specpath build \
+  --icon "$project_root/branding/tuxindrive-icon.icns" \
   --collect-all gi --hidden-import=keyring.backends.macOS \
   --add-data "$project_root/branding/tuxindrive-logo.png:branding" packaging/desktop-entry.py
 "$python_bin" -m PyInstaller --noconfirm --clean --console --onefile \

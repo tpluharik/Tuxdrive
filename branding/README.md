@@ -1,11 +1,13 @@
 # TuxInDrive visual identity
 
-The TuxInDrive mark is an original black-and-white penguin head with a geometric amber beak. It is designed to remain recognizable in Ubuntu launchers, window chrome, notifications, and the system tray.
+The primary TuxInDrive mark is the black-and-white penguin contained by a white circle with a red bow tie. Nothing outside the source circle—including its former black canvas and wording—is part of the TuxInDrive brand. The red bow tie is the only color in the primary mark.
 
-- `tuxindrive-logo.png` is the high-resolution transparent master.
-- `packaging/tuxindrive.svg` is the scalable application and repository icon.
-- Sync and error variants add blue activity and red attention badges.
-- The application identity appears in the Nautilus context submenu. Configured-path overlays deliberately omit the brand and use six functional color/shape/glyph-distinct status badges instead.
-- All eight supported cloud services retain provider-specific colors in account-selection screens. Multi-peer folders, LAN discovery, and QR pairing use network/pairing identities, while encrypted vaults use a protection/lock identity so they cannot be mistaken for their backing provider.
+- `tuxindrive-logo.png` is the high-resolution transparent master used by the application and documentation.
+- `tuxindrive-icon.ico` supplies the Windows executable, shortcuts, taskbar, and installer.
+- `tuxindrive-icon.icns` supplies the macOS application bundle and dock.
+- `packaging/tuxindrive.svg` and the 16–256 px hicolor PNGs supply Linux launchers, windows, notifications, and the system tray.
+- `packaging/tuxindrive-sync.svg` and `packaging/tuxindrive-error.svg` retain the primary mark and add accessible blue/red status badges.
+- Android adaptive icons use `drawable-nodpi/tuxindrive_logo.png`; the separate alpha-only resource is used for Android themed icons.
+- The GTK interface resolves the packaged master for its header and dialogs, with the system icon theme as a safe fallback.
 
-The TuxInDrive artwork is distributed under the repository's MIT license. Cloud-service names and visual identifiers belong to their respective owners; their appearance only identifies interoperability.
+Cloud services retain their provider-specific visual identities. Configured-path Nautilus overlays deliberately remain functional state badges rather than brand marks, and peer, pairing, and vault controls keep their network/protection symbols.
