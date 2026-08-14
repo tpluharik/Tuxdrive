@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.InflaterInputStream
+import java.util.zip.ZipException
 
 data class ProfileQrProgress(
     val received: Int,
@@ -59,7 +60,11 @@ class ProfileQrAssembler {
         } catch (_: IllegalArgumentException) {
             throw IllegalArgumentException("The profile QR data is invalid")
         }
-        val profile = boundedInflate(compressed)
+        val profile = try {
+            boundedInflate(compressed)
+        } catch (_: ZipException) {
+            throw IllegalArgumentException("The profile QR data is invalid")
+        }
         val actual = MessageDigest.getInstance("SHA-256").digest(profile)
             .joinToString("") { "%02x".format(it) }
         require(actual == expectedDigest && actual.startsWith(transferId)) {
