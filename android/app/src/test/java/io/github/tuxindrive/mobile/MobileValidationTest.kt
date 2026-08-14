@@ -34,14 +34,14 @@ class MobileValidationTest {
     @Test
     fun versionComparisonIsNumericAndPadsMissingParts() {
         assertTrue(MobileValidation.isNewer("0.10.0", "0.9.9"))
-        assertFalse(MobileValidation.isNewer("0.26.5", "0.26.5"))
+        assertFalse(MobileValidation.isNewer("0.26.6", "0.26.6"))
         assertFalse(MobileValidation.isNewer("0.26", "0.26.0"))
     }
 
     @Test
     fun invalidVersionsAreRejected() {
         assertThrows(IllegalArgumentException::class.java) {
-            MobileValidation.isNewer("0.beta.0", "0.26.5")
+            MobileValidation.isNewer("0.beta.0", "0.26.6")
         }
     }
 }

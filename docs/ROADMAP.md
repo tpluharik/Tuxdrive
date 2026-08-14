@@ -7,7 +7,16 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.5
+## Current baseline: 0.26.6
+
+### Completed in 0.26.6
+
+Version 0.26.6 adds encrypted multi-frame QR transfer from desktop to Android,
+repairs credential-enabled `.tdx` imports by carrying and securely persisting
+the separate rclone configuration unlock key, verifies imported cloud accounts
+before replacement, and rejects incomplete or corrupted profiles actionably.
+The Android scanner, profile importer, lint checks, and platform packages are
+covered by the expanded cross-platform test and release workflows.
 
 ### Completed in 0.26.5
 

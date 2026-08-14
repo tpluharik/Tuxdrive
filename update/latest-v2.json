@@ -1,8 +1,8 @@
 {
-  "version": "0.26.5",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.5_all.deb",
-  "sha256": "1fdb1324f356988f3c9d3f865e224aa6baf3ef879103e10c4a188d1b6073b2ec",
-  "notes": "Global bandwidth controls and network reliability improvements",
-  "expires_at": "2027-02-10T13:49:58.551827+00:00",
-  "signature": "ld0ILRKnh3OeBo0CCsvPn2WsxBM5qug3d2gOsHuO0R4MVuYbtkaVBC6FVxNmFoQ+maK+xV5gbrIRiAeSDLBoBg=="
+  "version": "0.26.6",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.6_all.deb",
+  "sha256": "d2bb9a67da14f7ca0a0715d41636b5e52955ba240eb3828b887b5ea22e7626ff",
+  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
+  "expires_at": "2026-11-12T16:59:24.713957+00:00",
+  "signature": "8LqymEV0O8X1/mTHsQYhEVfAJHKmluHPNXa1BUoZ06uZGEnPZ1I6mIwzWZ8Yw7u+KQBzkAc88sKNLoGyvqdHDA=="
 }
