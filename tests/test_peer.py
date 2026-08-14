@@ -238,6 +238,10 @@ class PeerSharingTests(unittest.TestCase):
         with self.assertRaises(PeerError):
             validate_port(22)
 
+    def test_router_port_mapping_is_opt_in(self):
+        share = PeerShare("Project", "/data/project", "192.0.2.10")
+        self.assertFalse(share.nat_traversal)
+
     def test_server_uses_authorized_peer_key_and_explicit_host_key(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary) / "peer"

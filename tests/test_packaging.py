@@ -289,6 +289,11 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("NetworkMeter(networkUsage)", android_ui)
         self.assertIn("downloadedToday", android_ui)
         self.assertIn("Show network usage", android_ui)
+        android_worker = Path(
+            "android/app/src/main/java/io/github/tuxindrive/mobile/MobileSyncWorker.kt"
+        ).read_text(encoding="utf-8")
+        self.assertIn("syncMutex.withLock", android_worker)
+        self.assertIn("private val syncMutex = Mutex()", android_worker)
         desktop_app = Path("src/tuxindrive/app.py").read_text(encoding="utf-8")
         self.assertIn("show_network_usage", desktop_app)
 

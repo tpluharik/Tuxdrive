@@ -303,7 +303,7 @@ class PeerShare:
     authorized_peers: list[AuthorizedPeer] = field(default_factory=list)
     lan_discovery: bool = True
     lease_minutes: int = 10
-    nat_traversal: bool = True
+    nat_traversal: bool = False
     relay_host: str = ""
     relay_user: str = ""
     relay_ssh_port: int = 22

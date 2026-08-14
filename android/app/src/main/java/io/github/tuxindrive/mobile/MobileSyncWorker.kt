@@ -9,6 +9,8 @@ import androidx.core.app.NotificationCompat
 import androidx.documentfile.provider.DocumentFile
 import androidx.work.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -20,7 +22,7 @@ class MobileSyncWorker(
     private val repository = (appContext.applicationContext as TuxInDriveMobileApp).repository
     private val preferences = appContext.getSharedPreferences("mobile-state", Context.MODE_PRIVATE)
 
-    override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+    override suspend fun doWork(): Result = syncMutex.withLock { withContext(Dispatchers.IO) {
         setForeground(foregroundInfo("Preparing synchronization…"))
         val treeValue = repository.selectedTree()
         val remote = repository.syncRemote()
@@ -54,7 +56,7 @@ class MobileSyncWorker(
         }.getOrElse { error ->
             failure(error.message ?: "Synchronization failed")
         }
-    }
+    } }
 
     private fun copyFromDocuments(source: DocumentFile, destination: File) {
         for (document in source.listFiles()) {
@@ -153,6 +155,7 @@ class MobileSyncWorker(
     companion object {
         private const val CHANNEL = "tuxindrive-sync"
         private const val NOTIFICATION_ID = 253
+        private val syncMutex = Mutex()
 
         fun enqueue(context: Context, wifiOnly: Boolean, chargingOnly: Boolean) {
             val constraints = Constraints.Builder()

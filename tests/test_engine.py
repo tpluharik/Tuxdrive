@@ -240,6 +240,28 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertIn("--log-level", command)
             self.assertIn("--stats", command)
 
+    def test_all_rclone_transfer_modes_honor_bandwidth_limit(self):
+        job = SyncJob(
+            account_remote="google",
+            local_path="/data/Drive",
+            bandwidth_limit="5M",
+        )
+        full = self.engine.command_for_job(job)
+        incremental = self.engine._incremental_command(
+            job, FileChange("report.pdf", "local")
+        )
+        job.mode = SyncMode.VIRTUAL_DRIVE
+        streaming = self.engine.mount_command(job)
+        for command in (full, incremental, streaming):
+            self.assertEqual(command[command.index("--bwlimit") + 1], "5M")
+
+    def test_full_jobs_use_conservative_connection_fanout(self):
+        command = self.engine.command_for_job(
+            SyncJob(account_remote="google", local_path="/data/Drive")
+        )
+        self.assertEqual(command[command.index("--transfers") + 1], "2")
+        self.assertEqual(command[command.index("--checkers") + 1], "4")
+
     def test_streaming_refresh_modes_change_only_polling_policy(self):
         job = SyncJob("google", "/data/stream", mode=SyncMode.VIRTUAL_DRIVE)
         self.engine.configure_streaming_refresh("balanced")
@@ -740,6 +762,42 @@ class SyncEngineCommandTests(unittest.TestCase):
         )
         self.assertNotIn("--drive-acknowledge-abuse", self.engine.command_for_job(safe))
         self.assertIn("--drive-acknowledge-abuse", self.engine.command_for_job(allowed))
+
+    def test_async_jobs_are_globally_bounded_and_queued_jobs_are_visible(self):
+        entered = 0
+        maximum = 0
+        completed = []
+        lock = threading.Lock()
+        two_started = threading.Event()
+        release = threading.Event()
+
+        def worker(job, log_path, callback, dry_run):
+            nonlocal entered, maximum
+            with lock:
+                entered += 1
+                maximum = max(maximum, entered)
+                if entered == 2:
+                    two_started.set()
+            release.wait(3)
+            callback(JobResult(job.id, True, "done", log_path))
+            with lock:
+                entered -= 1
+
+        with tempfile.TemporaryDirectory() as temporary, patch.object(
+            self.engine, "_run_worker", side_effect=worker
+        ):
+            jobs = [SyncJob("google", str(Path(temporary) / str(index))) for index in range(3)]
+            for job in jobs:
+                self.assertTrue(self.engine.run_async(job, completed.append))
+            self.assertTrue(two_started.wait(2))
+            self.assertEqual(self.engine.running_jobs, {job.id for job in jobs})
+            self.assertEqual(maximum, 2)
+            release.set()
+            deadline = time.monotonic() + 3
+            while len(completed) < 3 and time.monotonic() < deadline:
+                time.sleep(0.01)
+        self.assertEqual(len(completed), 3)
+        self.assertEqual(maximum, 2)
 
     def test_worker_replaces_incompatible_rclone_before_launch(self):
         job = SyncJob(account_remote="google", local_path="/data/Drive")

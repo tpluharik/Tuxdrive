@@ -240,7 +240,7 @@ class LanDiscovery:
                         except OSError:
                             pass
                     next_heartbeat = now + (
-                        self.HEARTBEAT_SECONDS if query_driven else 2.0
+                        self.HEARTBEAT_SECONDS
                     )
                 if not query_driven:
                     self._stopped.wait(0.5)

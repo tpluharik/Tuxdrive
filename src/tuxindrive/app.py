@@ -1910,7 +1910,7 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_peer_key.set_text("")
         self.share_discovery.set_active(share.lan_discovery if share else True)
         self.share_lease_minutes.set_value(share.lease_minutes if share else 10)
-        self.share_nat.set_active(share.nat_traversal if share else True)
+        self.share_nat.set_active(share.nat_traversal if share else False)
         self.relay_host.set_text(share.relay_host if share else "")
         self.relay_user.set_text(share.relay_user if share else "")
         self.relay_ssh_port.set_value(share.relay_ssh_port if share else 22)

@@ -56,6 +56,7 @@ class JobResult:
 
 
 class SyncEngine:
+    _MAX_ACTIVE_TRANSFERS = 2
     _OFFLINE_READ_INACTIVITY_TIMEOUT = 60.0
     _OFFLINE_READ_ATTEMPTS = 2
     _PROVIDER_REMOTE_BACKOFF = {
@@ -70,6 +71,10 @@ class SyncEngine:
     ) -> None:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
+        self._active_jobs: set[str] = set()
+        self._waiting_jobs: set[str] = set()
+        self._cancelled_queued_jobs: set[str] = set()
+        self._transfer_slots = threading.BoundedSemaphore(self._MAX_ACTIVE_TRANSFERS)
         self._mounts: dict[str, subprocess.Popen[str]] = {}
         self._mount_paths: dict[str, Path] = {}
         self._monitors: dict[str, ChangeMonitor] = {}
@@ -130,7 +135,7 @@ class SyncEngine:
     @property
     def running_jobs(self) -> set[str]:
         with self._lock:
-            return set(self._processes)
+            return set(self._active_jobs) | set(self._processes)
 
     @property
     def mounted_jobs(self) -> set[str]:
@@ -276,9 +281,9 @@ class SyncEngine:
         common = [
             "--create-empty-src-dirs",
             "--transfers",
-            "4",
+            "2",
             "--checkers",
-            "8",
+            "4",
             "--stats",
             "5s",
             "--stats-one-line",
@@ -448,7 +453,7 @@ class SyncEngine:
             "--vfs-read-chunk-size-limit",
             "128M",
             "--vfs-read-chunk-streams",
-            "4",
+            "2",
             "--vfs-cache-max-age",
             "87600h",
             "--vfs-cache-max-size",
@@ -474,6 +479,8 @@ class SyncEngine:
             "022",
             "--vfs-fast-fingerprint",
         ]
+        if job.bandwidth_limit.strip():
+            command.extend(["--bwlimit", job.bandwidth_limit.strip()])
         # Keep one stable VFS policy for the lifetime of the mount. Switching
         # policy on the first/last pin required a FUSE remount; Nautilus then
         # held a directory view from the detached mount, lost its TuxInDrive
@@ -952,9 +959,13 @@ class SyncEngine:
             except (OSError, ValueError):
                 return False
             instruction.update({"signer": signer, "signature": signature})
+            traffic_args = (
+                ["--bwlimit", job.bandwidth_limit.strip()]
+                if job.bandwidth_limit.strip() else []
+            )
             if changed:
                 first = subprocess.run(
-                    [self.rclone_path, "copy", str(blocks), f"{remote_root}/blocks"],
+                    [self.rclone_path, "copy", str(blocks), f"{remote_root}/blocks", *traffic_args],
                     stdout=log, stderr=subprocess.STDOUT, text=True, check=False,
                 )
                 if first.returncode:
@@ -962,7 +973,7 @@ class SyncEngine:
             instruction_path = temporary / "instruction.json"
             instruction_path.write_text(json.dumps(instruction), encoding="utf-8")
             final = subprocess.run(
-                [self.rclone_path, "copyto", str(instruction_path), f"{remote_root}/instruction.json"],
+                [self.rclone_path, "copyto", str(instruction_path), f"{remote_root}/instruction.json", *traffic_args],
                 stdout=log, stderr=subprocess.STDOUT, text=True, check=False,
             )
             if final.returncode:
@@ -1001,13 +1012,16 @@ class SyncEngine:
                         daemon=True,
                     ).start()
             return result.success
-        with self._lock:
-            if job.id in self._processes:
-                return False
         job.local.mkdir(parents=True, exist_ok=True)
+        with self._lock:
+            if job.id in self._active_jobs or job.id in self._processes:
+                return False
+            self._active_jobs.add(job.id)
+            self._waiting_jobs.add(job.id)
+            self._cancelled_queued_jobs.discard(job.id)
         log_path = self._log_path(job)
         thread = threading.Thread(
-            target=self._run_worker,
+            target=self._run_bounded_worker,
             args=(job, log_path, callback, dry_run),
             name=f"tuxindrive-sync-{job.id[:8]}",
             daemon=True,
@@ -1015,14 +1029,41 @@ class SyncEngine:
         thread.start()
         return True
 
+    def _run_bounded_worker(
+        self,
+        job: SyncJob,
+        log_path: Path,
+        callback: Callable[[JobResult], None],
+        dry_run: bool,
+    ) -> None:
+        """Run at most a small number of provider transfers concurrently."""
+        try:
+            with self._transfer_slots:
+                with self._lock:
+                    self._waiting_jobs.discard(job.id)
+                    cancelled = job.id in self._cancelled_queued_jobs
+                    self._cancelled_queued_jobs.discard(job.id)
+                if cancelled:
+                    callback(JobResult(job.id, False, "Synchronization cancelled", log_path, True))
+                    return
+                self._run_worker(job, log_path, callback, dry_run)
+        finally:
+            with self._lock:
+                self._active_jobs.discard(job.id)
+                self._waiting_jobs.discard(job.id)
+                self._cancelled_queued_jobs.discard(job.id)
+
     def cancel(self, job_id: str) -> bool:
         with self._lock:
             process = self._processes.get(job_id)
             native = self._job_backends.get(job_id) == "proton_cli"
+            queued = job_id in self._waiting_jobs
+            if queued:
+                self._cancelled_queued_jobs.add(job_id)
         if native:
             self.proton.cancel(job_id)
         if not process or process.poll() is not None:
-            return native
+            return native or queued
         try:
             terminate_process(process)
         except ProcessLookupError:
@@ -1271,7 +1312,7 @@ class SyncEngine:
 
     def shutdown(self) -> None:
         with self._lock:
-            job_ids = list(self._processes)
+            job_ids = list(self._active_jobs | set(self._processes))
             mounted = [
                 (job_id, process, self._mount_paths.get(job_id))
                 for job_id, process in self._mounts.items()
@@ -1345,11 +1386,18 @@ class SyncEngine:
         remote = f"{job.remote_spec.rstrip('/')}/{relative}"
         if change.side == "local":
             if change.deleted:
-                return [self.rclone_path, "deletefile", remote]
-            return [self.rclone_path, "copyto", local, remote]
+                command = [self.rclone_path, "deletefile", remote]
+            else:
+                command = [self.rclone_path, "copyto", local, remote]
+            if job.bandwidth_limit.strip():
+                command.extend(["--bwlimit", job.bandwidth_limit.strip()])
+            return command
         if change.deleted:
             return None
-        return [self.rclone_path, "copyto", remote, local]
+        command = [self.rclone_path, "copyto", remote, local]
+        if job.bandwidth_limit.strip():
+            command.extend(["--bwlimit", job.bandwidth_limit.strip()])
+        return command
 
     def _apply_incremental(
         self,
@@ -1358,8 +1406,17 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
     ) -> bool:
         with self._lock:
-            if job.id in self._processes:
+            if job.id in self._processes or job.id in self._active_jobs:
                 return False
+        with self._transfer_slots:
+            return self._apply_incremental_unlocked(job, changes, callback)
+
+    def _apply_incremental_unlocked(
+        self,
+        job: SyncJob,
+        changes: list[FileChange],
+        callback: Callable[[JobResult], None],
+    ) -> bool:
         log_path = self._log_path(job)
         ensure_private_directory(log_path.parent)
         completed = 0
@@ -1429,7 +1486,7 @@ class SyncEngine:
                     if change.side == "remote":
                         staging = ensure_private_directory(cache_root() / "incoming" / job.id)
                         staged_download = staging / f"{uuid.uuid4().hex}.download"
-                        command[-1] = str(staged_download)
+                        command[3] = str(staged_download)
                     try:
                         process = subprocess.Popen(
                             command,
@@ -1532,7 +1589,9 @@ class SyncEngine:
                                 manifest.write(relative + "\n")
                         process = subprocess.Popen(
                             command + ["--files-from-raw", manifest_name, "--no-traverse",
-                                       "--stats", "1s", "--stats-one-line"],
+                                       "--stats", "1s", "--stats-one-line"]
+                            + (["--bwlimit", job.bandwidth_limit.strip()]
+                               if job.bandwidth_limit.strip() else []),
                             stdout=log, stderr=subprocess.STDOUT, text=True,
                             **new_process_group(),
                         )
