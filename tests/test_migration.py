@@ -5,7 +5,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tuxindrive.config import ConfigStore
-from tuxindrive.migration import MigrationError, ProfileManager, decrypt_profile, encrypt_profile
+from tuxindrive.migration import (
+    LEGACY_PROFILE_PATH,
+    PROFILE_PATH,
+    MigrationError,
+    ProfileManager,
+    decrypt_profile,
+    encrypt_profile,
+)
 from tuxindrive.models import Account, AppConfig, Provider, SyncJob
 
 
@@ -66,6 +73,21 @@ class MigrationTests(unittest.TestCase):
             restored = manager.restore(manager.download("google"), "a-secure-password")
             self.assertEqual(restored.jobs[0].remote_path, "Projects")
             self.assertEqual(store.load().accounts[0].display_name, "Personal")
+
+    def test_profile_uses_visible_drive_path_and_reads_hidden_legacy_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            rclone = FakeRclone(root)
+            manager = ProfileManager(ConfigStore(root / "config.json"), rclone)
+            data = manager.create_bytes(AppConfig(), "a-secure-password")
+            visible = rclone._path(manager.remote_spec("google"))
+            self.assertEqual(visible.relative_to(root / "cloud" / "google").as_posix(), PROFILE_PATH)
+            legacy = rclone._path(manager.remote_spec("google", LEGACY_PROFILE_PATH))
+            legacy.parent.mkdir(parents=True)
+            legacy.write_bytes(data)
+            self.assertTrue(manager.available("google"))
+            self.assertEqual(manager.download("google"), data)
+            self.assertEqual(visible.read_bytes(), data)
 
     def test_credentials_are_opt_in_and_restore_with_private_permissions(self):
         with tempfile.TemporaryDirectory() as temporary:

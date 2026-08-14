@@ -21,7 +21,8 @@ from .models import AppConfig
 from .rclone import RcloneClient
 
 
-PROFILE_PATH = ".tuxdrive-profile/tuxdrive-profile.tdx"
+PROFILE_PATH = "TuxInDrive/TuxInDrive-Profile.tdx"
+LEGACY_PROFILE_PATH = ".tuxdrive-profile/tuxdrive-profile.tdx"
 FORMAT = "tuxindrive-encrypted-profile"
 LEGACY_FORMAT = "tuxdrive-encrypted-profile"
 MAX_PROFILE_SIZE = 128 * 1024 * 1024
@@ -92,10 +93,17 @@ class ProfileManager:
         self.peer_root = peer_root or config_root() / "peer"
 
     @staticmethod
-    def remote_spec(remote: str) -> str:
+    def remote_spec(remote: str, path: str = PROFILE_PATH) -> str:
         if not remote or any(character in remote for character in ":/\\"):
             raise MigrationError("Choose a valid connected profile account")
-        return f"{remote}:{PROFILE_PATH}"
+        return f"{remote}:{path}"
+
+    def _available_spec(self, remote: str) -> str | None:
+        for path in (PROFILE_PATH, LEGACY_PROFILE_PATH):
+            spec = self.remote_spec(remote, path)
+            if self.rclone.object_exists(spec):
+                return spec
+        return None
 
     def _secrets(self) -> dict[str, Any]:
         rclone_file = self.rclone.config_file()
@@ -139,15 +147,21 @@ class ProfileManager:
         return self.summary(data, password)
 
     def download(self, remote: str) -> bytes:
+        source = self._available_spec(remote)
+        if source is None:
+            raise MigrationError("No TuxInDrive profile backup was found in this account")
         with tempfile.TemporaryDirectory(prefix="tuxindrive-profile-") as temporary:
             destination = Path(temporary) / "profile.tdx"
-            self.rclone.copy_to(self.remote_spec(remote), destination)
+            self.rclone.copy_to(source, destination)
             if destination.stat().st_size > MAX_PROFILE_SIZE:
                 raise MigrationError("The downloaded profile exceeds the 128 MiB safety limit")
-            return destination.read_bytes()
+            data = destination.read_bytes()
+            if source == self.remote_spec(remote, LEGACY_PROFILE_PATH):
+                self.rclone.copy_to(destination, self.remote_spec(remote))
+            return data
 
     def available(self, remote: str) -> bool:
-        return self.rclone.object_exists(self.remote_spec(remote))
+        return self._available_spec(remote) is not None
 
     def summary(self, data: bytes, password: str) -> ProfileSummary:
         payload = decrypt_profile(data, password)

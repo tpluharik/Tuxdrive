@@ -12,14 +12,34 @@ android {
         applicationId = "io.github.tuxindrive.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 262
-        versionName = "0.26.2"
+        versionCode = 263
+        versionName = "0.26.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        val storePath = System.getenv("TUXINDRIVE_ANDROID_KEYSTORE")
+        val storePasswordValue = System.getenv("TUXINDRIVE_ANDROID_STORE_PASSWORD")
+        val keyAliasValue = System.getenv("TUXINDRIVE_ANDROID_KEY_ALIAS")
+        val keyPasswordValue = System.getenv("TUXINDRIVE_ANDROID_KEY_PASSWORD")
+        if (!storePath.isNullOrBlank() && !storePasswordValue.isNullOrBlank() &&
+            !keyAliasValue.isNullOrBlank() && !keyPasswordValue.isNullOrBlank()
+        ) {
+            create("releaseChannel") {
+                storeFile = file(storePath)
+                storePassword = storePasswordValue
+                keyAlias = keyAliasValue
+                keyPassword = keyPasswordValue
+                enableV1Signing = true
+                enableV2Signing = true
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = true
+            signingConfig = signingConfigs.findByName("releaseChannel")
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
     }
@@ -40,6 +60,7 @@ dependencies {
     implementation(files("libs/rclone.aar"))
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.activity:activity-compose:1.10.0")
+    implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
@@ -48,6 +69,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     implementation("androidx.work:work-runtime-ktx:2.10.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.80")
     debugImplementation("androidx.compose.ui:ui-tooling")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.12.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")

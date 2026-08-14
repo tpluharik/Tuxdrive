@@ -1,8 +1,8 @@
 {
-  "version": "0.26.2",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.2_all.deb",
-  "sha256": "3e6246de7742971868739dc9b47fa5a1e1b8b3cda586c27cb856e6244b9e50c1",
-  "notes": "Lower idle network activity with duplicate cloud scans removed, no-op Git and Proton transfers reduced, event-driven peer/cache monitoring, and an optional network meter.",
-  "expires_at": "2027-02-09T20:44:50.608942+00:00",
-  "signature": "j3H1HndYoTSSHMzhScQhTYJ9duTu6UIP/qssJ9icdYVH0zQMxgYCPhEw+wZiOvbGvdHKTGYqypjRYI5Vd0ILAA=="
+  "version": "0.26.3",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.3_all.deb",
+  "sha256": "1857fe29b766146a0be9d50e93edd0f395328ead568548cceec6d87e94601dba",
+  "notes": "Cross-platform release channels, visible encrypted profile transfer, and Android app identity",
+  "expires_at": "2026-11-12T05:45:47.330943+00:00",
+  "signature": "4KdjGncz6J0NfWLqoippLuzKZb4F2VDpozJzQ3IgfCLFZ990JozyrDeRmshKZOUcsdF6g54u540EApuzZnnIBQ=="
 }

@@ -3744,10 +3744,7 @@ class MainWindow(Gtk.ApplicationWindow):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
-        dialog.add_button(
-            "Check for updates" if platform.system() == "Linux" else "Download updates online",
-            2,
-        )
+        dialog.add_button("Check for updates", 2)
         dialog.add_button("Cancel", Gtk.ResponseType.CANCEL)
         dialog.add_button("Save", Gtk.ResponseType.OK)
         dialog.show_all()
@@ -3787,10 +3784,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.controller.apply_visual_theme(selected_theme)
         dialog.destroy()
         if response == 2:
-            if platform.system() == "Linux":
-                self._check_for_updates()
-            else:
-                webbrowser.open("https://github.com/tpluharik/TuxInDrive/releases")
+            self._check_for_updates()
         elif response == 3:
             self._show_peer_sharing(_button)
         elif response == 4:
@@ -3921,7 +3915,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self._update_pulsing = True
         GLib.timeout_add(120, self._pulse_update_progress)
         self.update_progress.set_text("Installing…")
-        self.update_status.set_text("Package verified. Approve Ubuntu's system authorization prompt to install it…")
+        if platform.system() == "Linux":
+            message = "Package verified. Approve the system authorization prompt to install it…"
+        else:
+            message = "Package verified. The signed platform installer is opening…"
+        self.update_status.set_text(message)
         _run_thread(self.controller.updater.install, self._update_installed, package)
         return False
 

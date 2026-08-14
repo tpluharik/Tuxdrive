@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
+    tags: ["v*"]
     paths:
       - "src/**"
       - "android/**"
@@ -46,12 +47,18 @@ jobs:
       - name: Build Windows installer and portable archive
         shell: pwsh
         run: scripts/build-windows.ps1 -PackageOnly
+      - name: Stage dedicated Windows release folder
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force releases/windows/packages | Out-Null
+          Copy-Item dist/TuxInDrive-*-windows-x64-setup.exe releases/windows/packages/
+          Copy-Item dist/TuxInDrive-*-windows-x64-portable.zip releases/windows/packages/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-windows-x64
           path: |
-            dist/TuxInDrive-*-windows-x64-setup.exe
-            dist/TuxInDrive-*-windows-x64-portable.zip
+            releases/windows/packages/TuxInDrive-*-windows-x64-setup.exe
+            releases/windows/packages/TuxInDrive-*-windows-x64-portable.zip
 
   macos:
     runs-on: macos-14
@@ -70,10 +77,14 @@ jobs:
         env:
           PYTHON_BIN: .venv-macos/bin/python
         run: sh scripts/build-macos.sh
+      - name: Stage dedicated macOS release folder
+        run: |
+          mkdir -p releases/macos/packages
+          cp dist/TuxInDrive-*-macos-*.dmg releases/macos/packages/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-macos
-          path: dist/TuxInDrive-*-macos-*.dmg
+          path: releases/macos/packages/TuxInDrive-*-macos-*.dmg
 
   android:
     runs-on: ubuntu-latest
@@ -109,13 +120,52 @@ jobs:
             github.com/rclone/rclone/librclone/gomobile
           test -s "${GITHUB_WORKSPACE}/android/app/libs/rclone.aar"
       - name: Build Android APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          TUXINDRIVE_ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          TUXINDRIVE_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          TUXINDRIVE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          gradle -p android --no-daemon :app:lintDebug :app:assembleDebug
-          test -s android/app/build/outputs/apk/debug/app-debug.apk
           version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            test -n "$ANDROID_KEYSTORE_BASE64"
+            test -n "$TUXINDRIVE_ANDROID_STORE_PASSWORD"
+            test -n "$TUXINDRIVE_ANDROID_KEY_ALIAS"
+            test -n "$TUXINDRIVE_ANDROID_KEY_PASSWORD"
+            export TUXINDRIVE_ANDROID_KEYSTORE="$RUNNER_TEMP/tuxindrive-release.jks"
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$TUXINDRIVE_ANDROID_KEYSTORE"
+            gradle -p android --no-daemon :app:lintRelease :app:assembleRelease
+            package=android/app/build/outputs/apk/release/app-release.apk
+          else
+            gradle -p android --no-daemon :app:lintDebug :app:assembleDebug
+            package=android/app/build/outputs/apk/debug/app-debug.apk
+          fi
+          test -s "$package"
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/TuxInDrive-${version}-android.apk"
+          cp "$package" "dist/TuxInDrive-${version}-android.apk"
+          mkdir -p releases/android/packages
+          cp "dist/TuxInDrive-${version}-android.apk" releases/android/packages/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-android
-          path: dist/TuxInDrive-*-android.apk
+          path: releases/android/packages/TuxInDrive-*-android.apk
+
+  publish-release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Publish durable platform packages
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          mapfile -t packages < <(find release-assets -type f -print)
+          test "${#packages[@]}" -ge 4
+          gh release create "$RELEASE_TAG" "${packages[@]}" --generate-notes --title "TuxInDrive ${RELEASE_TAG#v}"

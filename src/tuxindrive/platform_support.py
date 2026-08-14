@@ -67,7 +67,7 @@ def inspect_host() -> dict[str, object]:
         FeatureCheck("Finder integration", False, False, "Not included in the desktop package", "Use the TuxInDrive application controls") if is_macos else
         FeatureCheck("Explorer integration", False, False, "Not included in the first desktop package", "Use the TuxInDrive application controls") if is_windows else
         _command("nautilus", False, "Nautilus integration unavailable", "Install nautilus and python3-nautilus, or leave integration disabled"),
-        FeatureCheck("signed updater", False, False, "Install updates using a newly signed desktop installer", "In-app Debian updater is Linux-only") if is_macos or is_windows else
+        FeatureCheck("signed updater", True, False, "Signed in-app platform update channel") if is_macos or is_windows else
         _command("pkexec", False, "In-app package installation unavailable", "Install the distribution's PolicyKit pkexec package"),
         FeatureCheck("desktop notifications", True, False, "Windows notification service") if is_windows else
         _command("osascript" if is_macos else "notify-send", False, "Desktop notifications unavailable", "Install libnotify-bin"),

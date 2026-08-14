@@ -20,6 +20,10 @@ def main() -> None:
     parser.add_argument("--package", type=Path, required=True)
     parser.add_argument("--private-key", type=Path, required=True)
     parser.add_argument("--output", type=Path, default=Path("update/latest.json"))
+    parser.add_argument(
+        "--url",
+        help="Trusted HTTPS package URL (defaults to the legacy Linux raw-repository URL)",
+    )
     parser.add_argument("--valid-days", type=int, default=90)
     parser.add_argument("--notes", default="Security and reliability update")
     args = parser.parse_args()
@@ -29,11 +33,23 @@ def main() -> None:
     private = serialization.load_pem_private_key(args.private_key.read_bytes(), password=None)
     if not isinstance(private, Ed25519PrivateKey):
         parser.error("the release key must be Ed25519")
+    package_url = args.url or (
+        "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/"
+        f"dist/tuxdrive_{args.version}_all.deb"
+    )
+    trusted_prefixes = (
+        "https://raw.githubusercontent.com/tpluharik/TuxInDrive/",
+        "https://raw.githubusercontent.com/tpluharik/Tuxdrive/",
+        "https://github.com/tpluharik/Tuxindrive/releases/download/",
+        "https://github.com/tpluharik/TuxInDrive/releases/download/",
+    )
+    if not package_url.startswith(trusted_prefixes):
+        parser.error("--url must point to the trusted TuxInDrive repository or its release assets")
+    if package_url.rsplit("/", 1)[-1] != args.package.name:
+        parser.error("--url filename must match --package")
     signed = {
         "version": args.version,
-        # Keep the signed bridge URL accepted by pre-rebrand 0.24.x clients.
-        # GitHub redirects it after the repository rename.
-        "url": f"https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_{args.version}_all.deb",
+        "url": package_url,
         "sha256": hashlib.sha256(package).hexdigest(),
         "notes": args.notes,
         "expires_at": (datetime.now(timezone.utc) + timedelta(days=args.valid_days)).isoformat(),

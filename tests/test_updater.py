@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from tuxindrive.updater import UpdateManager, version_key
+from tuxindrive.updater import UpdateManager, release_package_name, version_key
 from tuxindrive.update_helper import PrivilegedUpdateError, stage_verified_package
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -38,10 +38,10 @@ class UpdateManagerTests(unittest.TestCase):
             serialization.Encoding.Raw, serialization.PublicFormat.Raw,
         )).decode("ascii")
 
-    def release_payload(self, version="0.5.1", body=b"deb"):
+    def release_payload(self, version="0.5.1", body=b"deb", url=None):
         signed = {
             "version": version,
-            "url": f"https://raw.githubusercontent.com/tpluharik/TuxInDrive/main/dist/tuxindrive_{version}_all.deb",
+            "url": url or f"https://raw.githubusercontent.com/tpluharik/TuxInDrive/main/dist/tuxindrive_{version}_all.deb",
             "sha256": hashlib.sha256(body).hexdigest(),
             "notes": "Test release",
             "expires_at": "2999-01-01T00:00:00+00:00",
@@ -51,6 +51,20 @@ class UpdateManagerTests(unittest.TestCase):
 
     def test_version_comparison_is_numeric(self):
         self.assertGreater(version_key("0.10.0"), version_key("0.9.9"))
+
+    def test_platform_package_names_are_bound_to_the_signed_version(self):
+        windows_url = "https://github.com/tpluharik/Tuxindrive/releases/download/v0.5.1/TuxInDrive-0.5.1-windows-x64-setup.exe"
+        macos_url = "https://github.com/tpluharik/Tuxindrive/releases/download/v0.5.1/TuxInDrive-0.5.1-macos-arm64.dmg"
+        windows = UpdateManager.parse_manifest(
+            self.release_payload(url=windows_url), self.public, "windows",
+        )
+        macos = UpdateManager.parse_manifest(
+            self.release_payload(url=macos_url), self.public, "macos",
+        )
+        self.assertEqual(release_package_name(windows, "windows"), windows_url.rsplit("/", 1)[-1])
+        self.assertEqual(release_package_name(macos, "macos"), macos_url.rsplit("/", 1)[-1])
+        with self.assertRaisesRegex(ValueError, "filename"):
+            UpdateManager.parse_manifest(self.release_payload(url=windows_url), self.public, "macos")
 
     def test_repository_manifest_matches_current_debian_release(self):
         """Block releases whose signed update channel was left behind."""
@@ -90,7 +104,7 @@ class UpdateManagerTests(unittest.TestCase):
             UpdateManager.parse_manifest(payload, self.public)
 
     def test_check_reports_only_newer_version(self):
-        manager = UpdateManager("0.5.0", public_key=self.public)
+        manager = UpdateManager("0.5.0", public_key=self.public, target_platform="linux")
         with patch("urllib.request.urlopen", return_value=FakeResponse(self.release_payload())):
             self.assertEqual(manager.check().version, "0.5.1")
         with patch("urllib.request.urlopen", return_value=FakeResponse(self.release_payload("0.5.0"))):

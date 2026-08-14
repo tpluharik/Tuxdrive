@@ -39,24 +39,35 @@ class RcloneCore(private val context: Context) {
     fun version(): String = rpc("core/version").optString("version", "rclone")
 
     fun importConfiguration(uri: Uri) {
-        val temporary = File(configuration.parentFile, "rclone.conf.new")
-        context.contentResolver.openInputStream(uri).use { input ->
+        replaceConfiguration(readConfiguration(uri, 2 * 1024 * 1024))
+    }
+
+    fun importProfile(uri: Uri, password: String) {
+        replaceConfiguration(ProfileImporter(context).rcloneConfiguration(uri, password))
+    }
+
+    private fun readConfiguration(uri: Uri, limit: Int): ByteArray {
+        val bytes = context.contentResolver.openInputStream(uri).use { input ->
             requireNotNull(input) { "Selected configuration could not be opened" }
-            temporary.outputStream().use { output ->
-                val buffer = ByteArray(64 * 1024)
-                var total = 0
-                while (true) {
-                    val count = input.read(buffer)
-                    if (count < 0) break
-                    total += count
-                    if (total > 2 * 1024 * 1024) {
-                        temporary.delete()
-                        throw RcloneException("The configuration exceeds the 2 MiB safety limit")
-                    }
-                    output.write(buffer, 0, count)
-                }
+            val output = java.io.ByteArrayOutputStream()
+            val buffer = ByteArray(64 * 1024)
+            var total = 0
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                total += count
+                if (total > limit) throw RcloneException("The configuration exceeds the 2 MiB safety limit")
+                output.write(buffer, 0, count)
             }
+            output.toByteArray()
         }
+        return bytes
+    }
+
+    private fun replaceConfiguration(bytes: ByteArray) {
+        require(bytes.size <= 2 * 1024 * 1024) { "The cloud configuration exceeds the 2 MiB safety limit" }
+        val temporary = File(configuration.parentFile, "rclone.conf.new")
+        temporary.writeBytes(bytes)
         if (!temporary.renameTo(configuration)) {
             temporary.copyTo(configuration, overwrite = true)
             temporary.delete()
@@ -130,10 +141,15 @@ class MobileRepository(context: Context) {
     private val appContext = context.applicationContext
     private val core = RcloneCore(appContext)
     private val preferences = appContext.getSharedPreferences("mobile-state", Context.MODE_PRIVATE)
+    private val updater = AndroidUpdater(appContext)
 
     fun initialize() = core.initialize()
     fun engineVersion() = core.version()
+    fun checkUpdate() = updater.check()
+    fun downloadUpdate(update: AndroidUpdate) = updater.download(update)
+    fun installUpdate(packageFile: File) = updater.openInstaller(packageFile)
     fun importConfiguration(uri: Uri) = core.importConfiguration(uri)
+    fun importProfile(uri: Uri, password: String) = core.importProfile(uri, password)
     fun unlock(password: String) = core.unlock(password)
     fun remotes() = core.listRemotes()
     fun files(remote: String, path: String = "") = core.list(remote, path)

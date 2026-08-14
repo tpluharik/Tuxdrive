@@ -194,6 +194,17 @@ private fun AccountsScreen(
                 .onFailure { status = it.message ?: "Import failed" }
         }
     }
+    val importProfile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) scope.launch {
+            runCatching { withContext(Dispatchers.IO) { repository.importProfile(uri, password) } }
+                .onSuccess {
+                    status = "Encrypted TuxInDrive profile imported"
+                    events.add(0, status)
+                    refresh()
+                }
+                .onFailure { status = it.message ?: "Profile import failed" }
+        }
+    }
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
@@ -217,6 +228,11 @@ private fun AccountsScreen(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
+            OutlinedButton(
+                onClick = { importProfile.launch(arrayOf("application/octet-stream", "application/json", "*/*")) },
+                enabled = password.length >= 10,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Import TuxInDrive-Profile.tdx") }
             OutlinedButton(onClick = {
                 scope.launch {
                     runCatching { withContext(Dispatchers.IO) { repository.unlock(password) } }
@@ -360,6 +376,9 @@ private fun SettingsScreen(
     var wifiOnly by remember { mutableStateOf(repository.wifiOnly()) }
     var chargingOnly by remember { mutableStateOf(repository.chargingOnly()) }
     var engine by remember { mutableStateOf("Checking…") }
+    var updateStatus by remember { mutableStateOf("TuxInDrive ${BuildConfig.VERSION_NAME}") }
+    var updateBusy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         engine = runCatching { withContext(Dispatchers.IO) { repository.engineVersion() } }.getOrElse { "Unavailable" }
     }
@@ -379,6 +398,30 @@ private fun SettingsScreen(
         OutlinedButton(onClick = { pickTree.launch(null) }, modifier = Modifier.fillMaxWidth()) {
             Text(if (repository.selectedTree().isBlank()) "Choose offline files folder" else "Change offline files folder")
         }
+        OutlinedButton(
+            enabled = !updateBusy,
+            onClick = {
+                scope.launch {
+                    updateBusy = true
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            val update = repository.checkUpdate() ?: return@withContext null
+                            update to repository.downloadUpdate(update)
+                        }
+                    }.onSuccess { result ->
+                        if (result == null) {
+                            updateStatus = "TuxInDrive ${BuildConfig.VERSION_NAME} is up to date"
+                        } else {
+                            updateStatus = "TuxInDrive ${result.first.version} verified; opening installer"
+                            repository.installUpdate(result.second)
+                        }
+                    }.onFailure { updateStatus = it.message ?: "Update check failed" }
+                    updateBusy = false
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text(if (updateBusy) "Checking and verifying…" else "Check for updates") }
+        Text(updateStatus, style = MaterialTheme.typography.bodySmall)
         Text(
             "Android grants access only to folders you choose. Long transfers use OS-managed background work and remain visible to you.",
             style = MaterialTheme.typography.bodySmall,
