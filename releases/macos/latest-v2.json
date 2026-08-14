@@ -1,8 +1,8 @@
 {
-  "version": "0.26.4",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.4/TuxInDrive-0.26.4-macos-arm64.dmg",
-  "sha256": "2d35734d53ae4e200f397273e6eafedcf90a32e14c630f7a60beb447c76d3e7e",
-  "notes": "Durable macOS release and platform update channels",
-  "expires_at": "2027-02-10T09:40:03.478506+00:00",
-  "signature": "pIh9yJ/g+PCsrf9urDJtyud7/221DFCOmR/pPLBfsPs6VJOh1Ytz1lFz9Ny7+cxnXVDgSZViuj53nTVirqnXBw=="
+  "version": "0.26.5",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.5/TuxInDrive-0.26.5-macos-arm64.dmg",
+  "sha256": "58bcc6593a2a8fe356b2e6c918d5579d202aecec257226acb2c829c5dbf7ecd5",
+  "notes": "Global bandwidth controls and network reliability improvements",
+  "expires_at": "2027-02-10T13:50:18.331818+00:00",
+  "signature": "tPBvlyss7+ed5U7vPkwMIUZkRbFbd8rLGcuX1IUnfV6junNFbk8bvljslWT9YihtbHX6ww49wXt5tFSOTJx7CA=="
 }
