@@ -1,8 +1,8 @@
 {
-  "version": "0.26.7",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.7_all.deb",
-  "sha256": "98babfa24233bb214b1e2b00032943b96f41128f309184b52df70d8d6c8f0954",
-  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
-  "expires_at": "2027-02-10T18:19:24.598149+00:00",
-  "signature": "Rf7bRpKJrJZtpkkj6uJW6TTaJFhn1aYhrDBj+lGef8+WE9CZvdCHTav6cdU0zYLK1tJohOl8Jhn2pLtgc13fCw=="
+  "version": "0.26.8",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.8_all.deb",
+  "sha256": "8bd323941416664ebb87e4a8b2e9e5b2c162e335900a187bb596643b4181a433",
+  "notes": "Circular penguin identity and responsive update checks",
+  "expires_at": "2027-02-10T21:01:40.357708+00:00",
+  "signature": "Bo2lQM1p/NMC3E1/ZrcxMp8xbGZG56GHhdeYloGTQit5Si0hUjLJz1hGyBQF8QgKop0YwJgKABYp1dO+XM6/AQ=="
 }

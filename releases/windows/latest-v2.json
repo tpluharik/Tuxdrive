@@ -1,8 +1,8 @@
 {
-  "version": "0.26.7",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.7/TuxInDrive-0.26.7-windows-x64-setup.exe",
-  "sha256": "ae90de4ae14734fea5a76e4bebae0b3226b6277a0be06610598e4f009d907960",
-  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
-  "expires_at": "2027-02-10T18:37:46.483801+00:00",
-  "signature": "577dyiVvI6/W8Os/q9D8HIoriuOC+K3ahNjgh6uubdLHM/byueBKAed2PUERx+0q3z+uWksrd4MQCWDOHnLhCg=="
+  "version": "0.26.8",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.8/TuxInDrive-0.26.8-windows-x64-setup.exe",
+  "sha256": "0f363c9de717b619cb70618dfc0806214e131a5bd5623d979b4b3aac4bf7d7bc",
+  "notes": "Circular penguin identity and responsive update checks",
+  "expires_at": "2027-02-10T21:01:40.441192+00:00",
+  "signature": "TtXyZeBGIg4oLwT78EyFMIsA/aSDjK2e6y+Zop62gq3Qq+rZyoGYChqJ7pCf7tv5DkQOsp0oYCa88ViBBZ7ZAA=="
 }
