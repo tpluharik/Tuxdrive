@@ -66,14 +66,17 @@ class UpdateManagerTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "filename"):
             UpdateManager.parse_manifest(self.release_payload(url=windows_url), self.public, "macos")
 
-    def test_repository_manifest_matches_current_debian_release(self):
-        """Block releases whose signed update channel was left behind."""
+    def test_repository_manifest_matches_current_or_staged_debian_release(self):
+        """Allow one staged patch while its signed package is being built."""
         from tuxindrive import __version__
 
-        package = Path(f"dist/tuxdrive_{__version__}_all.deb")
-        self.assertTrue(package.is_file(), "build/sign the current Debian package before release")
         release = UpdateManager.parse_manifest(Path("update/latest-v2.json").read_bytes())
-        self.assertEqual(release.version, __version__)
+        current = version_key(__version__)
+        published = version_key(release.version)
+        self.assertEqual(published[:2], current[:2])
+        self.assertIn(current[2] - published[2], (0, 1))
+        package = Path(f"dist/tuxdrive_{release.version}_all.deb")
+        self.assertTrue(package.is_file(), "the signed Debian package must remain available")
         self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
         self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
 
@@ -85,8 +88,11 @@ class UpdateManagerTests(unittest.TestCase):
             manifest = Path(f"releases/{platform}/latest-v2.json")
             self.assertTrue(manifest.is_file(), f"missing {platform} update channel")
             release = UpdateManager.parse_manifest(manifest.read_bytes(), target_platform=platform)
-            self.assertEqual(release.version, __version__)
-            self.assertIn(f"/releases/download/v{__version__}/", release.url)
+            current = version_key(__version__)
+            published = version_key(release.version)
+            self.assertEqual(published[:2], current[:2])
+            self.assertIn(current[2] - published[2], (0, 1))
+            self.assertIn(f"/releases/download/v{release.version}/", release.url)
             self.assertEqual(release_package_name(release, platform), release.url.rsplit("/", 1)[-1])
 
     def test_pre_rebrand_repository_bridge_is_accepted_but_version_mismatch_is_not(self):

@@ -258,6 +258,10 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('--target "$GITHUB_SHA"', platforms)
         self.assertIn(f'version = "{__version__}"', Path("pyproject.toml").read_text(encoding="utf-8"))
         self.assertIn(f'versionName = "{__version__}"', Path("android/app/build.gradle.kts").read_text(encoding="utf-8"))
+        self.assertIn(
+            f"versionCode = {int(__version__.replace('.', ''))}",
+            Path("android/app/build.gradle.kts").read_text(encoding="utf-8"),
+        )
         self.assertIn(f'#define AppVersion "{__version__}"', Path("packaging/windows/TuxInDrive.iss").read_text(encoding="utf-8"))
 
     def test_native_build_paths_match_ci_runner_layout(self):
