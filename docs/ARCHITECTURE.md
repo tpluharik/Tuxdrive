@@ -214,8 +214,12 @@ Android is a native Compose application rather than a GTK port:
   deletion thresholds, runs bisync, then reconciles back to the selected tree.
 - `MobileNetworkController` serializes browsing, sync and update downloads.
 - `NetworkUsageMeter.kt` records current and daily device totals.
-- `ProfileImporter.kt` imports the encrypted desktop profile format without
-  exposing provider credentials outside app-private storage.
+- `ProfileImporter.kt` decrypts the desktop profile, requires the separately
+  protected rclone unlock key, and exposes both only to the transactional
+  app-private import path. `ProfileQr.kt` assembles bounded multi-frame QR
+  transfers with sequence and SHA-256 validation. `MobileCredentialStore.kt`
+  encrypts the imported unlock key with Android Keystore so restart does not
+  relock the configuration.
 
 Only persisted URI permissions grant Android folder access. Unique WorkManager
 names and a process mutex prevent duplicate scheduled/manual jobs.

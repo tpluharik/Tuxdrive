@@ -100,13 +100,51 @@ class MigrationTests(unittest.TestCase):
             manager = ProfileManager(store, rclone, peer)
             plain = manager.create_bytes(AppConfig(), "a-secure-password", False)
             self.assertNotIn("secrets", decrypt_profile(plain, "a-secure-password"))
-            protected = manager.create_bytes(AppConfig(), "a-secure-password", True)
+            with patch("tuxindrive.migration.configuration_password", return_value="rclone-unlock-key"):
+                protected = manager.create_bytes(AppConfig(), "a-secure-password", True)
+            self.assertEqual(
+                decrypt_profile(protected, "a-secure-password")["secrets"]["rclone_config_password"],
+                "rclone-unlock-key",
+            )
             rclone.config.write_text("changed", encoding="utf-8")
             (peer / "identity").unlink()
-            manager.restore(protected, "a-secure-password", restore_credentials=True)
+            with patch("tuxindrive.migration.store_configuration_password") as store_password:
+                manager.restore(protected, "a-secure-password", restore_credentials=True)
+            store_password.assert_called_once_with("rclone-unlock-key")
             self.assertIn("token = secret", rclone.config.read_text(encoding="utf-8"))
             self.assertEqual((peer / "identity").read_text(encoding="utf-8"), "private-key")
             self.assertEqual(rclone.config.stat().st_mode & 0o777, 0o600)
+
+    def test_mobile_profile_contains_unlock_key_but_omits_peer_private_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            peer = root / "peer"
+            peer.mkdir()
+            (peer / "identity").write_text("private-key", encoding="utf-8")
+            manager = ProfileManager(ConfigStore(root / "config.json"), FakeRclone(root), peer)
+            with patch("tuxindrive.migration.configuration_password", return_value="mobile-unlock-key"):
+                data = manager.create_mobile_bytes(AppConfig(), "a-secure-password")
+            payload = decrypt_profile(data, "a-secure-password")
+            self.assertTrue(payload["metadata"]["mobile_transfer"])
+            self.assertEqual(payload["secrets"]["rclone_config_password"], "mobile-unlock-key")
+            self.assertEqual(payload["secrets"]["peer_files"], {})
+
+    def test_old_credential_profile_without_unlock_key_is_not_partially_restored(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            store = ConfigStore(root / "config.json")
+            rclone = FakeRclone(root)
+            manager = ProfileManager(store, rclone, root / "peer")
+            data = encrypt_profile(
+                {
+                    "config": AppConfig().to_dict(),
+                    "secrets": {"rclone_config": "Y29uZmln"},
+                },
+                "a-secure-password",
+            )
+            with self.assertRaisesRegex(MigrationError, "unlock key"):
+                manager.restore(data, "a-secure-password", restore_credentials=True)
+            self.assertEqual(rclone.config.read_text(encoding="utf-8"), "[google]\ntype = drive\ntoken = secret\n")
 
     def test_remote_name_and_short_password_are_rejected(self):
         with self.assertRaises(MigrationError):

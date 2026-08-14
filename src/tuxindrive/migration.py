@@ -18,6 +18,7 @@ from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from . import __version__
 from .config import ConfigStore, config_root
 from .models import AppConfig
+from .password_helper import configuration_password, store_configuration_password
 from .rclone import RcloneClient
 
 
@@ -105,16 +106,17 @@ class ProfileManager:
                 return spec
         return None
 
-    def _secrets(self) -> dict[str, Any]:
+    def _secrets(self, include_peer_files: bool = True) -> dict[str, Any]:
         rclone_file = self.rclone.config_file()
         peers: dict[str, str] = {}
-        if self.peer_root.is_dir():
+        if include_peer_files and self.peer_root.is_dir():
             for path in self.peer_root.rglob("*"):
                 if path.is_file():
                     relative = path.relative_to(self.peer_root)
                     peers[str(relative)] = base64.b64encode(path.read_bytes()).decode()
         return {
             "rclone_config": base64.b64encode(rclone_file.read_bytes()).decode(),
+            "rclone_config_password": configuration_password(),
             "peer_files": peers,
         }
 
@@ -135,6 +137,21 @@ class ProfileManager:
         }
         if include_credentials:
             payload["secrets"] = self._secrets()
+        return encrypt_profile(payload, password)
+
+    def create_mobile_bytes(self, config: AppConfig, password: str) -> bytes:
+        """Create a compact encrypted profile for local desktop-to-phone transfer."""
+        payload: dict[str, Any] = {
+            "metadata": {
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "app_version": __version__,
+                "device_name": socket.gethostname(),
+                "includes_credentials": True,
+                "mobile_transfer": True,
+            },
+            "config": config.to_dict(),
+            "secrets": self._secrets(include_peer_files=False),
+        }
         return encrypt_profile(payload, password)
 
     def upload(self, remote: str, config: AppConfig, password: str, include_credentials: bool = False) -> ProfileSummary:
@@ -188,6 +205,9 @@ class ProfileManager:
             secrets = payload["secrets"]
             try:
                 rclone_bytes = base64.b64decode(secrets["rclone_config"], validate=True)
+                rclone_password = str(secrets["rclone_config_password"])
+                if not rclone_password or len(rclone_password) > 1024:
+                    raise ValueError("invalid rclone configuration password")
                 peer_bytes: list[tuple[Path, bytes]] = []
                 root = self.peer_root.resolve()
                 for relative, encoded in secrets.get("peer_files", {}).items():
@@ -196,8 +216,11 @@ class ProfileManager:
                         raise MigrationError("The profile contains an unsafe peer-key path")
                     peer_bytes.append((target, base64.b64decode(encoded, validate=True)))
             except (KeyError, TypeError, ValueError) as exc:
-                raise MigrationError("The profile contains invalid credential data") from exc
+                raise MigrationError(
+                    "The profile lacks the cloud-configuration unlock key; create a new credential-enabled backup on the old device"
+                ) from exc
             rclone_file = self.rclone.config_file()
+            store_configuration_password(rclone_password)
             rclone_file.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             rclone_file.write_bytes(rclone_bytes)
             os.chmod(rclone_file, 0o600)

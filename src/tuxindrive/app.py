@@ -71,6 +71,7 @@ from .proton import ProtonDriveClient, ProtonDriveError
 from .updater import UpdateManager, UpdateRelease
 from .policies import PolicyDecision, TransferPolicy
 from .migration import MigrationError, ProfileManager
+from .profile_qr import encode_profile_frames
 from .platform_support import format_report, inspect_host
 from .nautilus_support import (
     availability_route,
@@ -2360,7 +2361,7 @@ class ProfileDialog(Gtk.Dialog):
         self.password = Gtk.Entry()
         self.password.set_visibility(False)
         self.password.set_input_purpose(Gtk.InputPurpose.PASSWORD)
-        self.password.set_placeholder_text("At least 10 characters")
+        self.password.set_placeholder_text("At least 14 characters")
         self.confirm = Gtk.Entry()
         self.confirm.set_visibility(False)
         self.confirm.set_input_purpose(Gtk.InputPurpose.PASSWORD)
@@ -2393,6 +2394,7 @@ class ProfileDialog(Gtk.Dialog):
         self.add_button("Inspect cloud backup", 1)
         self.add_button("Restore this device", 2)
         self.add_button("Store encrypted backup", 3)
+        self.add_button("Show mobile transfer QR", 4)
         self.connect("response", self._response)
         self.show_all()
         if not accounts:
@@ -2407,17 +2409,18 @@ class ProfileDialog(Gtk.Dialog):
             dialog.destroy()
             return
         remote, password = self.remote.get_active_id(), self.password.get_text()
-        if not remote:
+        if response != 4 and not remote:
             self._status("Choose a connected OAuth account.", True)
             return
-        if response == 3 and password != self.confirm.get_text():
+        if response in (3, 4) and password != self.confirm.get_text():
             self._status("The backup passwords do not match.", True)
             return
         self.spinner.start()
         self.set_response_sensitive(1, False)
         self.set_response_sensitive(2, False)
         self.set_response_sensitive(3, False)
-        operation = {1: self._inspect, 2: self._restore, 3: self._backup}[response]
+        self.set_response_sensitive(4, False)
+        operation = {1: self._inspect, 2: self._restore, 3: self._backup, 4: self._mobile_qr}[response]
         _run_thread(operation, self._done, remote, password)
 
     def _inspect(self, remote: str, password: str):
@@ -2440,14 +2443,28 @@ class ProfileDialog(Gtk.Dialog):
         restored.settings.profile_remote = remote
         return ("restore", summary, restored)
 
+    def _mobile_qr(self, _remote: str | None, password: str):
+        data = self.controller.profiles.create_mobile_bytes(self.controller.config, password)
+        return ("qr", encode_profile_frames(data))
+
     def _done(self, result, error: Exception | None) -> bool:
         self.spinner.stop()
-        for response in (1, 2, 3):
+        for response in (1, 2, 3, 4):
             self.set_response_sensitive(response, True)
         if error:
             self._status(f"Profile operation failed safely: {error}", True)
             return False
-        action, summary = result[0], result[1]
+        action = result[0]
+        if action == "qr":
+            try:
+                ProfileQrDialog(self, result[1]).run_and_close()
+                self._status(
+                    f"Generated {len(result[1])} encrypted QR frame(s). Scan every frame on Android."
+                )
+            except Exception as exc:
+                self._status(f"QR transfer failed safely: {exc}", True)
+            return False
+        summary = result[1]
         if action == "restore":
             self.controller.config = result[2]
             self.controller.rclone = RcloneClient(self.controller.config.settings.rclone_path)
@@ -2476,6 +2493,74 @@ class ProfileDialog(Gtk.Dialog):
             f"{summary.accounts} account(s), {summary.jobs} job(s), {secret}."
         )
         return False
+
+
+class ProfileQrDialog(Gtk.Dialog):
+    """Display one encrypted profile transfer frame at a time."""
+
+    def __init__(self, parent: Gtk.Window, frames: list[str]) -> None:
+        super().__init__(title="Transfer encrypted profile to Android", transient_for=parent, modal=True)
+        encoder = shutil.which("qrencode")
+        if not encoder:
+            raise MigrationError("QR support is missing; install qrencode or use the .tdx file")
+        self.encoder = encoder
+        self.frames = frames
+        self.index = 0
+        self.temporary = tempfile.TemporaryDirectory(prefix="tuxindrive-profile-qr-")
+        self.image_path = Path(self.temporary.name) / "profile.png"
+        self.set_default_size(620, 720)
+        area = self.get_content_area()
+        area.set_border_width(18)
+        area.set_spacing(10)
+        warning = Gtk.Label(xalign=0)
+        warning.set_line_wrap(True)
+        warning.set_markup(
+            "<b>Encrypted local transfer.</b> Scan every frame in order or any order. "
+            "This mobile transfer includes the cloud credentials and configuration unlock key, "
+            "but excludes peer private-key files. "
+            "The QR data remains protected by the 14+ character backup passphrase; "
+            "enter that passphrase on Android and do not display these frames publicly."
+        )
+        area.pack_start(warning, False, False, 0)
+        self.image = Gtk.Image()
+        area.pack_start(self.image, True, True, 0)
+        self.detail = Gtk.Label()
+        area.pack_start(self.detail, False, False, 0)
+        self.add_button("Previous", 1)
+        self.add_button("Next", 2)
+        self.add_button("Close", Gtk.ResponseType.CLOSE)
+        self.connect("response", self._response)
+        self._render()
+        self.show_all()
+
+    def _render(self) -> None:
+        result = subprocess.run(
+            [self.encoder, "-l", "L", "-m", "2", "-s", "5", "-o", str(self.image_path), "--", self.frames[self.index]],
+            capture_output=True, text=True, timeout=20, check=False,
+        )
+        if result.returncode:
+            raise MigrationError((result.stderr or "Could not generate profile QR code").strip())
+        self.image.set_from_file(str(self.image_path))
+        self.detail.set_text(f"Frame {self.index + 1} of {len(self.frames)}")
+        self.set_response_sensitive(1, self.index > 0)
+        self.set_response_sensitive(2, self.index + 1 < len(self.frames))
+
+    def _response(self, _dialog: Gtk.Dialog, response: int) -> None:
+        if response == 1 and self.index > 0:
+            self.index -= 1
+            self._render()
+        elif response == 2 and self.index + 1 < len(self.frames):
+            self.index += 1
+            self._render()
+        else:
+            self.destroy()
+
+    def run_and_close(self) -> None:
+        try:
+            self.run()
+        finally:
+            self.destroy()
+            self.temporary.cleanup()
 
 
 class OperationsDashboard(Gtk.Dialog):

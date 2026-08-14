@@ -134,6 +134,16 @@ A profile is not a backup of synchronized user files. Maintain provider
 versions or an independent backup for irreplaceable data. Peer private keys
 and rclone credentials are included only when explicitly requested.
 
+For Android, create a new credential-enabled profile after upgrading. Either
+select `TuxInDrive/TuxInDrive-Profile.tdx` in Android's document picker or
+choose **Show mobile transfer QR** on the desktop, enter/confirm the same
+14-character-or-longer profile passphrase, and scan every numbered frame with
+**Accounts → Scan encrypted profile QR**. A successful import reports the
+number of unlocked, verified cloud accounts. A message that an older profile
+lacks the mobile unlock key means the old file cannot complete migration;
+create a fresh backup on the source desktop. Do not confuse the profile
+passphrase with the separate raw-rclone password field.
+
 Before a manual configuration repair:
 
 1. Stop TuxInDrive and confirm no transfer/mount process remains.

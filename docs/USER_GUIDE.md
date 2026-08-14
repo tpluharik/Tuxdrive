@@ -32,14 +32,14 @@ Run the Windows setup executable or drag TuxInDrive from the macOS DMG to Applic
 
 Install the APK, then:
 
-1. Open **Accounts** and import a trusted encrypted TuxInDrive profile (`.tdx`) through Android's system file picker. Enter its passphrase only into the transient unlock field.
+1. Open **Accounts**, enter the 14-character-or-longer profile passphrase, and either import a newly created credential-enabled TuxInDrive profile (`.tdx`) through Android's system file picker or choose **Scan encrypted profile QR** and scan every numbered frame shown by **Show mobile transfer QR** on the desktop. Success reports how many cloud accounts were unlocked and verified.
 2. Open **Sync**, select a cloud account and optional cloud subfolder, then choose the Android directory through the system folder picker. TuxInDrive retains only the URI permission explicitly granted by Android.
 3. Select Wi-Fi and charging constraints, automatic scheduling, and the global bandwidth ceiling, then choose **Sync now**. WorkManager owns deferred work and a foreground notification identifies long transfers.
 4. Use **Files** to browse a connected cloud root without granting broad device storage access. File transfer uses the selected synchronized tree. **Activity** shows current and previous results; **Settings** controls background constraints, bandwidth, traffic display, and signed updates.
 
 Android stages data in app-private storage, retains durable two-way baselines, keeps conflict copies, and blocks suspicious deletion batches before reconciling the selected Storage Access Framework tree. One process-wide network controller serializes browsing, synchronization, and update downloads; the native rclone core receives the configured byte rate. Android does not expose a transparent FUSE drive because the operating system does not permit desktop-style unrestricted mounts.
 
-Encrypted profile backups are stored visibly as `TuxInDrive/TuxInDrive-Profile.tdx`. To move one to a phone, create the backup with **Include credentials** enabled, then download that file or choose Google Drive (or another document provider) in Android's picker. Android imports the protected rclone configuration; a configuration-only backup is intentionally rejected. The old hidden `.tuxdrive-profile` object is recognized for desktop migration but should not be used for new phone transfers.
+Encrypted profile backups are stored visibly as `TuxInDrive/TuxInDrive-Profile.tdx`. To move one to a phone, create a fresh backup with **Include credentials** enabled, then download/select that file or use the encrypted QR option. Android verifies the profile passphrase, the embedded rclone unlock key, and at least one usable remote before replacing its previous configuration; it stores the key through Android Keystore for restart continuity. A configuration-only or older credential backup without that key is rejected with an actionable message. The old hidden `.tuxdrive-profile` object is recognized for desktop migration but should not be used for new phone transfers.
 
 ![Main window overview](assets/01-main-window.svg)
 
@@ -110,7 +110,7 @@ TuxInDrive sets `GIT_TERMINAL_PROMPT=0` and never asks for or stores a GitHub to
 
 ![Encrypted profile backup and restore](assets/10-profile-migration.svg)
 
-Open **Settings → TuxInDrive Profile / migrate** after connecting Google Drive, OneDrive, Dropbox, Box, or pCloud. Choose the account that will hold the profile, enter and confirm a unique backup password of at least 14 characters, then choose **Store encrypted backup**. New version-2 profiles use AES-256-GCM with scrypt `N=131072`; version-1 profiles remain readable for migration. TuxInDrive encrypts locally before uploading `.tuxindrive-profile/tuxindrive-profile.tdx`. TuxInDrive operates no account or configuration server and cannot see or recover the password.
+Open **Settings → TuxInDrive Profile / migrate** after connecting Google Drive, OneDrive, Dropbox, Box, or pCloud. Choose the account that will hold the profile, enter and confirm a unique backup password of at least 14 characters, then choose **Store encrypted backup**. New version-2 profiles use AES-256-GCM with scrypt `N=131072`; version-1 profiles remain readable for desktop migration. TuxInDrive encrypts locally before uploading `TuxInDrive/TuxInDrive-Profile.tdx`. TuxInDrive operates no account or configuration server and cannot see or recover the password. For a phone, enable credential inclusion before storing a `.tdx`, or choose **Show mobile transfer QR**; the QR path always includes only the cloud configuration and its unlock key, omits peer private files, and remains protected by the same profile passphrase.
 
 On a replacement or additional computer:
 

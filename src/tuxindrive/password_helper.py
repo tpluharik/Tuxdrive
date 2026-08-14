@@ -33,6 +33,12 @@ def configuration_password(ensure: bool = False) -> str:
     return password
 
 
+def store_configuration_password(password: str) -> None:
+    if not password or len(password) > 1024:
+        raise RuntimeError("The TuxInDrive configuration key is invalid")
+    _keyring().set_password(SERVICE, ACCOUNT, password)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--ensure", action="store_true")

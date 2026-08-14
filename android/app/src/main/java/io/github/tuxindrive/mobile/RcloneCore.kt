@@ -18,6 +18,7 @@ class RcloneException(message: String) : RuntimeException(message)
 
 class RcloneCore(private val context: Context) {
     private val configuration = File(context.noBackupFilesDir, "rclone.conf")
+    private val credentialStore = MobileCredentialStore(context)
     private var initialized = false
 
     @Synchronized
@@ -26,6 +27,15 @@ class RcloneCore(private val context: Context) {
         Gomobile.rcloneInitialize()
         initialized = true
         rpc("config/setpath", JSONObject().put("path", configuration.absolutePath))
+        if (configuration.isFile) {
+            credentialStore.load()?.let { password ->
+                runCatching {
+                    rpc("config/unlock", JSONObject().put("configPassword", password))
+                }.onFailure {
+                    credentialStore.clear()
+                }
+            }
+        }
     }
 
     @Synchronized
@@ -46,8 +56,49 @@ class RcloneCore(private val context: Context) {
         replaceConfiguration(readConfiguration(uri, 2 * 1024 * 1024))
     }
 
-    fun importProfile(uri: Uri, password: String) {
-        replaceConfiguration(ProfileImporter(context).rcloneConfiguration(uri, password))
+    fun importProfile(uri: Uri, password: String): Int {
+        return importProfile(ProfileImporter(context).import(uri, password))
+    }
+
+    fun importProfile(bytes: ByteArray, password: String): Int {
+        return importProfile(ProfileImporter.decode(bytes, password))
+    }
+
+    private fun importProfile(profile: ImportedProfile): Int {
+        require(profile.configuration.size <= 2 * 1024 * 1024) {
+            "The cloud configuration exceeds the 2 MiB safety limit"
+        }
+        val previousConfiguration = configuration.takeIf { it.isFile }?.readBytes()
+        val previousPassword = credentialStore.load()
+        val temporary = File(configuration.parentFile, "rclone.conf.import")
+        temporary.writeBytes(profile.configuration)
+        try {
+            rpc("config/setpath", JSONObject().put("path", temporary.absolutePath))
+            rpc("config/unlock", JSONObject().put("configPassword", profile.configurationPassword))
+            val remotes = listRemotes()
+            require(remotes.isNotEmpty()) { "The imported profile contains no usable cloud accounts" }
+            credentialStore.store(profile.configurationPassword)
+            if (!temporary.renameTo(configuration)) {
+                temporary.copyTo(configuration, overwrite = true)
+                temporary.delete()
+            }
+            rpc("config/setpath", JSONObject().put("path", configuration.absolutePath))
+            rpc("config/unlock", JSONObject().put("configPassword", profile.configurationPassword))
+            return remotes.size
+        } catch (error: Exception) {
+            temporary.delete()
+            if (previousConfiguration == null) configuration.delete()
+            else configuration.writeBytes(previousConfiguration)
+            if (previousPassword == null) credentialStore.clear()
+            else runCatching { credentialStore.store(previousPassword) }
+            runCatching {
+                rpc("config/setpath", JSONObject().put("path", configuration.absolutePath))
+                if (previousPassword != null) {
+                    rpc("config/unlock", JSONObject().put("configPassword", previousPassword))
+                }
+            }
+            throw error
+        }
     }
 
     private fun readConfiguration(uri: Uri, limit: Int): ByteArray {
@@ -76,12 +127,15 @@ class RcloneCore(private val context: Context) {
             temporary.copyTo(configuration, overwrite = true)
             temporary.delete()
         }
+        credentialStore.clear()
         rpc("config/setpath", JSONObject().put("path", configuration.absolutePath))
     }
 
     fun unlock(password: String) {
         if (password.isBlank()) throw RcloneException("Enter the configuration password")
         rpc("config/unlock", JSONObject().put("configPassword", password))
+        require(listRemotes().isNotEmpty()) { "The configuration contains no usable cloud accounts" }
+        credentialStore.store(password)
     }
 
     fun listRemotes(): List<String> {
@@ -162,6 +216,7 @@ class MobileRepository(context: Context) {
     fun installUpdate(packageFile: File) = updater.openInstaller(packageFile)
     fun importConfiguration(uri: Uri) = core.importConfiguration(uri)
     fun importProfile(uri: Uri, password: String) = core.importProfile(uri, password)
+    fun importProfile(bytes: ByteArray, password: String) = core.importProfile(bytes, password)
     fun unlock(password: String) = core.unlock(password)
     fun remotes() = core.listRemotes()
     fun files(remote: String, path: String = "") =

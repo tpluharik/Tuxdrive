@@ -4,6 +4,9 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+- Added encrypted desktop-to-Android configuration transfer through bounded multi-frame QR codes with sequence and SHA-256 integrity checks.
+- Fixed `.tdx` mobile migration by including the separate rclone configuration unlock key inside the AES-GCM envelope, validating usable remotes before replacement, and reporting the imported account count instead of claiming success after decryption alone.
+- Store the imported rclone unlock key through Android Keystore so cloud accounts remain usable after an application restart; raw rclone imports keep a separate explicit unlock flow.
 - Revised the complete automated suite to isolate it from real user configuration and installed provider tools, preventing local credentials or machine state from changing results.
 - Expanded network, bandwidth, transfer-policy, recovery, updater and path/signature security coverage, including malformed operating-system counters and fail-safe cleanup.
 - Added Android JVM tests for bandwidth/version validation and serialized embedded-engine access; both debug and release package workflows now run the matching unit tests before linting and assembly.

@@ -1,7 +1,13 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
-from tuxindrive.password_helper import ACCOUNT, LEGACY_SERVICE, SERVICE, configuration_password
+from tuxindrive.password_helper import (
+    ACCOUNT,
+    LEGACY_SERVICE,
+    SERVICE,
+    configuration_password,
+    store_configuration_password,
+)
 
 
 class PasswordHelperTests(unittest.TestCase):
@@ -27,6 +33,13 @@ class PasswordHelperTests(unittest.TestCase):
         keyring.get_password.return_value = None
         self.assertEqual(configuration_password(ensure=True), "new-secret")
         keyring.set_password.assert_called_once_with(SERVICE, ACCOUNT, "new-secret")
+
+    @patch("tuxindrive.password_helper._keyring")
+    def test_explicit_migration_key_is_stored_in_current_service(self, keyring_factory):
+        store_configuration_password("migrated-secret")
+        keyring_factory.return_value.set_password.assert_called_once_with(
+            SERVICE, ACCOUNT, "migrated-secret"
+        )
 
 
 if __name__ == "__main__":

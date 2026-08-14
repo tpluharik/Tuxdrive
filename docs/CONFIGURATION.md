@@ -166,7 +166,21 @@ Android imports the same `.tdx` file through the system file picker. For a
 phone transfer, create it with credentials included, then download the visible
 object or choose it from a Drive provider exposed by Android's picker; do not
 rename it to `.json`. Android rejects a configuration-only profile because it
-does not contain the encrypted rclone configuration required to connect.
+does not contain the encrypted rclone configuration required to connect. New
+credential-enabled profiles also carry rclone's independent random
+configuration unlock key inside the authenticated AES-GCM envelope. Android
+validates that the imported configuration can be unlocked and contains at
+least one remote before replacing the previous file, then protects the unlock
+key with Android Keystore for subsequent launches.
+
+**Show mobile transfer QR** creates a compact credential-enabled profile in
+memory, compresses the still-encrypted `.tdx` bytes, and divides them into at
+most 256 QR frames. Each frame binds one transfer ID, sequence position, total,
+and SHA-256 digest. Android accepts frames in any order, rejects mixed,
+oversized, malformed, incomplete, or modified sets, and decrypts only after all
+frames pass integrity verification. Peer private files are omitted from QR
+transfers. Profiles larger than the 2 MiB QR safety limit must use the `.tdx`
+file path.
 
 ## Environment and command-line integration
 

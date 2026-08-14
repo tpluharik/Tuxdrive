@@ -103,7 +103,7 @@ Version 0.13.0 adds read/write, read-only, send-only and receive-only peer invit
 
 ### 0.14.0 encrypted profiles and device migration
 
-TuxInDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new device, connect the same provider and restore from Settings. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its password never leaves the device. OAuth tokens and peer private keys remain excluded unless the user explicitly enables sensitive full-device migration.
+TuxInDrive Profile links the application to an existing Google Drive, OneDrive, Dropbox, Box, or pCloud OAuth account and stores a locally encrypted configuration backup in that user-owned cloud. On a new desktop, connect the same provider and restore from Settings. For Android, create a credential-enabled profile and either select the searchable `.tdx` file or scan the encrypted multi-frame QR transfer shown by the desktop. AES-256-GCM authentication and a memory-hard scrypt key derivation protect the bundle; its passphrase never leaves the devices. OAuth tokens, the separate rclone unlock key, and peer private keys remain excluded unless the user explicitly enables sensitive migration; the compact QR profile includes cloud credentials but deliberately omits peer private files.
 
 ## What works
 
@@ -216,7 +216,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 316 automated tests (309 Python and 7 Android JVM tests), including global bandwidth admission and directional limits; cross-platform network-counter failure handling; path, symlink and signing-key security; recovery retention and confinement; visual themes; exact Nautilus 4.1 integration; bounded FUSE hydration; drag/drop groups; GitHub and Proton guards; signed update channels; peer isolation; hostile ODF/CRDT input; Android serialization and input validation; release packaging; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 326 automated tests (315 Python and 11 Android JVM tests), including encrypted `.tdx`/QR interoperability and malformed-frame rejection; global bandwidth admission and directional limits; cross-platform network-counter failure handling; path, symlink and signing-key security; recovery retention and confinement; visual themes; exact Nautilus 4.1 integration; bounded FUSE hydration; drag/drop groups; GitHub and Proton guards; signed update channels; peer isolation; hostile ODF/CRDT input; Android serialization and input validation; release packaging; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 

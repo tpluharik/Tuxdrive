@@ -21,6 +21,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.journeyapps.barcodescanner.ScanContract
+import com.journeyapps.barcodescanner.ScanOptions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -181,28 +183,57 @@ private fun AccountsScreen(
     refresh: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    var password by remember { mutableStateOf("") }
+    var profilePassword by remember { mutableStateOf("") }
+    var configurationPassword by remember { mutableStateOf("") }
     var status by remember { mutableStateOf("") }
+    val qrAssembler = remember { ProfileQrAssembler() }
     val importConfig = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
             runCatching { withContext(Dispatchers.IO) { repository.importConfiguration(uri) } }
                 .onSuccess {
-                    status = "Configuration imported"
+                    status = "Raw configuration imported. Unlock it below before using cloud accounts."
                     events.add(0, status)
-                    refresh()
                 }
                 .onFailure { status = it.message ?: "Import failed" }
         }
     }
     val importProfile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            runCatching { withContext(Dispatchers.IO) { repository.importProfile(uri, password) } }
-                .onSuccess {
-                    status = "Encrypted TuxInDrive profile imported"
+            runCatching { withContext(Dispatchers.IO) { repository.importProfile(uri, profilePassword) } }
+                .onSuccess { accountCount ->
+                    status = "Imported, unlocked, and verified $accountCount cloud account(s)"
                     events.add(0, status)
                     refresh()
                 }
                 .onFailure { status = it.message ?: "Profile import failed" }
+        }
+    }
+    val scanProfileQr = rememberLauncherForActivityResult(ScanContract()) { result ->
+        val contents = result.contents
+        if (contents != null) {
+            runCatching { qrAssembler.add(contents) }
+                .onSuccess { progress ->
+                    if (progress.profile == null) {
+                        status = "Scanned ${progress.received}/${progress.total} encrypted QR frames. Scan the next frame."
+                    } else {
+                        status = "All ${progress.total} QR frames received; verifying cloud configuration…"
+                        scope.launch {
+                            val profile = progress.profile
+                            runCatching {
+                                withContext(Dispatchers.IO) {
+                                    repository.importProfile(profile, profilePassword)
+                                }
+                            }.onSuccess { accountCount ->
+                                status = "QR transfer imported, unlocked, and verified $accountCount cloud account(s)"
+                                events.add(0, status)
+                                qrAssembler.reset()
+                                refresh()
+                            }.onFailure { status = it.message ?: "QR profile import failed" }
+                            profile.fill(0)
+                        }
+                    }
+                }
+                .onFailure { status = it.message ?: "QR scan failed" }
         }
     }
     LazyColumn(
@@ -220,9 +251,9 @@ private fun AccountsScreen(
             }
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Encrypted config password") },
+                value = profilePassword,
+                onValueChange = { profilePassword = it },
+                label = { Text("Profile backup passphrase") },
                 leadingIcon = { Icon(Icons.Outlined.Lock, null) },
                 visualTransformation = PasswordVisualTransformation(),
                 singleLine = true,
@@ -230,16 +261,46 @@ private fun AccountsScreen(
             )
             OutlinedButton(
                 onClick = { importProfile.launch(arrayOf("application/octet-stream", "application/json", "*/*")) },
-                enabled = password.length >= 10,
+                enabled = profilePassword.length >= 14,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Import TuxInDrive-Profile.tdx") }
+            Button(
+                onClick = {
+                    scanProfileQr.launch(
+                        ScanOptions()
+                            .setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+                            .setPrompt("Scan every TuxInDrive profile frame shown on the desktop")
+                            .setBeepEnabled(false)
+                            .setOrientationLocked(false),
+                    )
+                },
+                enabled = profilePassword.length >= 14,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Scan encrypted profile QR") }
+            OutlinedButton(
+                onClick = {
+                    qrAssembler.reset()
+                    status = "QR scan reset"
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Reset QR scan") }
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
+            OutlinedTextField(
+                value = configurationPassword,
+                onValueChange = { configurationPassword = it },
+                label = { Text("Raw rclone configuration password") },
+                leadingIcon = { Icon(Icons.Outlined.Key, null) },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
             OutlinedButton(onClick = {
                 scope.launch {
-                    runCatching { withContext(Dispatchers.IO) { repository.unlock(password) } }
+                    runCatching { withContext(Dispatchers.IO) { repository.unlock(configurationPassword) } }
                         .onSuccess { status = "Configuration unlocked"; refresh() }
                         .onFailure { status = it.message ?: "Unlock failed" }
                 }
-            }) { Text("Unlock") }
+            }, enabled = configurationPassword.isNotBlank()) { Text("Unlock manually imported rclone config") }
             if (status.isNotBlank()) Text(status, style = MaterialTheme.typography.bodySmall)
         }
         items(remotes) { remote -> CloudCard(remote, "Ready for secure browsing and transfer") }
