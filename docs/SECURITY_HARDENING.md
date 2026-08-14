@@ -1,12 +1,12 @@
-# TuxInDrive 0.26.6 security hardening and secure operation
+# TuxInDrive 0.26.7 security hardening and secure operation
 
-This document explains the controls retained through TuxInDrive 0.26.6, including critical/high remediation, explicit online-only/offline retention, GitHub and Proton boundaries, global traffic control, signed platform updates, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md), implementation [architecture](ARCHITECTURE.md), and operational [runbook](OPERATIONS.md).
+This document explains the controls retained through TuxInDrive 0.26.7, including critical/high remediation, explicit online-only/offline retention, GitHub and Proton boundaries, global traffic control, signed platform updates, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md), implementation [architecture](ARCHITECTURE.md), and operational [runbook](OPERATIONS.md).
 
 ## Supported baseline and immediate action
 
 Version 0.25.0 changes product identifiers without changing cryptographic trust roots or silently relocating sensitive state. Fresh installations use TuxInDrive directories; upgrades use an existing legacy directory when no new directory exists. The credential helper checks the TuxInDrive Secret Service entry first and the pre-rebrand entry second. Existing encrypted profile formats, peer invitations and hidden remote metadata remain readable. The signed update bridge retains the old repository/package alias required by 0.24.x, while accepting only the two exact official GitHub raw prefixes and a filename matching the signed version.
 
-Version **0.26.6** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots, bounded ODF/CRDT parsing, verified GitHub rename migration, durable bisync baselines, guarded reinitialization, exact offline rules, stable VFS policy, bounded FUSE reads, and URI-safe Nautilus integration. It adds signed platform-specific release channels and one global bandwidth/admission controller. Rate limiting, scan jitter, and atomic incremental reservation reduce congestion and duplicate network work without weakening authentication, path confinement, deletion previews, digest/signature checks, or recovery. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version **0.26.7** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots, bounded ODF/CRDT parsing, verified GitHub rename migration, durable bisync baselines, guarded reinitialization, exact offline rules, stable VFS policy, bounded FUSE reads, URI-safe Nautilus integration, signed platform channels, and the global bandwidth/admission controller. It repairs Linux credential-enabled profile and QR migration by using the packaged GNOME Secret Service command directly, while retaining legacy key lookup and keeping secret values out of process arguments. Rate limiting, scan jitter, and atomic incremental reservation reduce congestion and duplicate network work without weakening authentication, path confinement, deletion previews, digest/signature checks, or recovery. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Version 0.23.0 preserves those controls while adding event-driven monitoring and cache limits. Inotify queue overflow triggers full reconciliation; executable-validation caches are invalidated by binary identity changes; atomic writes remain mandatory for changed configuration; and cache cleanup refuses to evict pinned, dirty, active, symlinked or ambiguously described objects. Invalid pin metadata disables eviction for that job rather than guessing.
 
@@ -16,7 +16,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 
 ## Security control inventory
 
-| Area | 0.26.6 behavior | Security purpose |
+| Area | 0.26.7 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxInDrive JSON, ordinary arguments, and world-readable files |
@@ -28,7 +28,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 | Peer roles | One listener and authorization file per key; server read-only for read/receive roles; private inbox root for send-only | Prevent hostile generic clients from bypassing a role label |
 | One-time drops | Dedicated key/port/inbox root, consumption marker, authorization rebuild, endpoint restart and expiry validation | Prevent parent-workspace browsing and retire a temporary grant promptly after use |
 | Collaborative inputs | Defused XML, ZIP count/size/ratio/path limits, bounded operation JSON/schema/count and iterative CRDT traversal | Prevent archive/XML/operation resource-exhaustion attacks arriving through sync or peers |
-| Configuration backup | Version-2 AES-256-GCM, scrypt `N=131072`, unique minimum 14-character password, 128 MiB bundle limit; credential profiles bind rclone data to its separate unlock key; QR frames retain encryption plus sequence/digest and 2 MiB/256-frame limits; Android Keystore protects the imported key | Increase offline-guessing cost, prevent incomplete/mixed mobile migration and bound memory/storage abuse while preserving desktop read compatibility |
+| Configuration backup | Version-2 AES-256-GCM, scrypt `N=131072`, unique minimum 14-character password, 128 MiB bundle limit; credential profiles bind rclone data to its separate unlock key; Linux reads/writes that key through packaged Secret Service with stdin-only storage; QR frames retain encryption plus sequence/digest and 2 MiB/256-frame limits; Android Keystore protects the imported key | Increase offline-guessing cost, prevent incomplete/mixed mobile migration and bound memory/storage abuse while preserving desktop read compatibility |
 | Runtime | Isolated Python launcher, cleared Python environment, mode-0600 logs/config, mode-0700 state directories, systemd `UMask=0077`, `PrivateTmp`, and `LockPersonality` | Reduce environment injection and accidental local disclosure |
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
 | GitHub repositories | Credential-free GitHub-only URLs, validated branches/origins, noninteractive system Git credentials, fast-forward/rebase guards, conflict abort | Avoid token leakage, command injection and silent Git history overwrite |
@@ -88,7 +88,7 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.26.6 and the platform update check reports a valid signature, origin, filename, digest, size, architecture and expiry.
+2. Confirm the running version is 0.26.7 and the platform update check reports a valid signature, origin, filename, digest, size, architecture and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

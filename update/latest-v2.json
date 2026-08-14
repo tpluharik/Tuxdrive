@@ -1,8 +1,8 @@
 {
-  "version": "0.26.6",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.6_all.deb",
-  "sha256": "d2bb9a67da14f7ca0a0715d41636b5e52955ba240eb3828b887b5ea22e7626ff",
-  "notes": "Secure Android profile transfer and reliable credential-enabled TuxInDrive profile import",
-  "expires_at": "2026-11-12T16:59:24.713957+00:00",
-  "signature": "8LqymEV0O8X1/mTHsQYhEVfAJHKmluHPNXa1BUoZ06uZGEnPZ1I6mIwzWZ8Yw7u+KQBzkAc88sKNLoGyvqdHDA=="
+  "version": "0.26.7",
+  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.7_all.deb",
+  "sha256": "98babfa24233bb214b1e2b00032943b96f41128f309184b52df70d8d6c8f0954",
+  "notes": "Linux profile backup, restore, and mobile QR credential-store repair",
+  "expires_at": "2027-02-10T18:19:24.598149+00:00",
+  "signature": "Rf7bRpKJrJZtpkkj6uJW6TTaJFhn1aYhrDBj+lGef8+WE9CZvdCHTav6cdU0zYLK1tJohOl8Jhn2pLtgc13fCw=="
 }

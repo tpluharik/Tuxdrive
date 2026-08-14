@@ -7,7 +7,15 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.6
+## Current baseline: 0.26.7
+
+### Completed in 0.26.7
+
+Version 0.26.7 repairs Linux credential-enabled profile backup, restore, and
+mobile QR export by using the packaged GNOME Secret Service command directly.
+It retains current and legacy configuration-key entries, keeps secrets out of
+process arguments, and leaves Windows Credential Manager and macOS Keychain
+behavior unchanged.
 
 ### Completed in 0.26.6
 

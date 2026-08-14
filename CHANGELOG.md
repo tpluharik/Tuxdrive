@@ -4,6 +4,13 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+## 0.26.7 — Linux profile credential-store repair
+
+- Fixed credential-enabled profile backup, restore, and desktop-to-Android QR export on Linux packages by using the packaged GNOME Secret Service integration directly instead of an undeclared Python module.
+- Preserved current and pre-rebrand configuration-key entries while keeping Windows Credential Manager and macOS Keychain behavior unchanged.
+- Kept configuration keys out of process arguments by passing new Secret Service values only through standard input.
+- Added Linux backend, legacy compatibility, unavailable-service, secret-handling, and installed-package regression tests.
+
 ## 0.26.6 — secure Android profile transfer
 
 - Added encrypted desktop-to-Android configuration transfer through bounded multi-frame QR codes with sequence and SHA-256 integrity checks.
