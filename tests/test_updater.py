@@ -77,6 +77,18 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
         self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
 
+    def test_repository_platform_channels_are_signed_and_version_bound(self):
+        """Keep every published platform channel on the current release."""
+        from tuxindrive import __version__
+
+        for platform in ("windows", "macos", "android"):
+            manifest = Path(f"releases/{platform}/latest-v2.json")
+            self.assertTrue(manifest.is_file(), f"missing {platform} update channel")
+            release = UpdateManager.parse_manifest(manifest.read_bytes(), target_platform=platform)
+            self.assertEqual(release.version, __version__)
+            self.assertIn(f"/releases/download/v{__version__}/", release.url)
+            self.assertEqual(release_package_name(release, platform), release.url.rsplit("/", 1)[-1])
+
     def test_pre_rebrand_repository_bridge_is_accepted_but_version_mismatch_is_not(self):
         payload = json.loads(self.release_payload())
         payload["url"] = "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.5.1_all.deb"

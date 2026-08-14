@@ -1,0 +1,8 @@
+{
+  "version": "0.26.4",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.4/TuxInDrive-0.26.4-android.apk",
+  "sha256": "f7630d1718c3498796a6c715b71c52095607f1b3619ffb329da11dc6bdb4328a",
+  "notes": "Signed Android release and durable platform update channels",
+  "expires_at": "2027-02-10T09:40:06.534644+00:00",
+  "signature": "HbAPiFY+5UH1e3HuC4B4HKXwORgLH13UWZHKJULkj7NwujOS0rhuVdQnk614sk2B4kYJevnfk5OLmBeOy2GeBg=="
+}

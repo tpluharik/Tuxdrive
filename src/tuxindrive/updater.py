@@ -69,6 +69,7 @@ def release_package_name(release: UpdateRelease, target_platform: str = "linux")
             f"TuxInDrive-{release.version}-macos-x64.dmg",
             f"TuxInDrive-{release.version}-macos-arm64.dmg",
         },
+        "android": {f"TuxInDrive-{release.version}-android.apk"},
     }
     if target_platform not in allowed or name not in allowed[target_platform]:
         raise ValueError("The update filename does not match the signed release version")

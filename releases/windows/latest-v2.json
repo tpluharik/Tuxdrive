@@ -1,0 +1,8 @@
+{
+  "version": "0.26.4",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.4/TuxInDrive-0.26.4-windows-x64-setup.exe",
+  "sha256": "8f7bf1e4d0193d05933d34399b5f1dbd4276d8bf2fa52f53743bfd87ce80244b",
+  "notes": "Durable Windows release and platform update channels",
+  "expires_at": "2027-02-10T09:40:07.805789+00:00",
+  "signature": "CL8zUQYzFyIOtvoSxNK+RRf+Xk5tDJ3A92rclsebp4jYvUJBv4EP2hwfT0uDzv2HokYqXKuecrT8w/C8UVr+Bw=="
+}
