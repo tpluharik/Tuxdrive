@@ -71,6 +71,14 @@ class PackagingTests(unittest.TestCase):
         self.assertIn('find_spec("tuxindrive.github_sync")', build_script)
         self.assertIn('find_spec("tuxindrive.proton")', build_script)
 
+    def test_linux_profile_migration_uses_packaged_secret_service_backend(self):
+        control = Path("packaging/DEBIAN/control").read_text(encoding="utf-8")
+        helper = Path("src/tuxindrive/password_helper.py").read_text(encoding="utf-8")
+        self.assertIn("libsecret-tools", control)
+        self.assertIn('SECRET_TOOL = "/usr/bin/secret-tool"', helper)
+        self.assertIn('input=password', helper)
+        self.assertNotIn('python3-keyring', control)
+
     def test_all_provider_icons_are_packaged(self):
         build_script = Path("scripts/build-deb.sh").read_text(encoding="utf-8")
         for provider in ("dropbox", "box", "pcloud", "mega", "proton-drive", "nextcloud", "github"):
