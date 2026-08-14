@@ -1,6 +1,6 @@
 # Platform support and adaptive installation
 
-TuxInDrive 0.26.0 publishes native packages for Debian-family Linux, Windows x64, macOS and Android. Linux, Windows and macOS use the same GTK desktop UI; Android uses a Material mobile UI backed by rclone's in-process gomobile library. Credentials remain in GNOME Secret Service, Windows Credential Manager, macOS Keychain, or Android's private application sandbox. A missing optional integration disables only that feature.
+TuxInDrive 0.26.5 publishes packages for Debian-family Linux, Windows x64, macOS and Android. Linux, Windows and macOS use the same GTK desktop UI; Android uses a Material mobile UI backed by rclone's in-process gomobile library. Credentials remain in GNOME Secret Service, Windows Credential Manager, macOS Keychain, or Android's private application sandbox. A missing optional integration disables only that feature. Package locations and updater behavior are documented in [Release process](RELEASES.md).
 
 ## Compatibility matrix
 
@@ -33,8 +33,13 @@ The desktop baseline is Ubuntu 24.04/26.04, Debian 12/13, Windows 10/11 x64 and 
 
 - Windows CI produces a per-user Inno Setup executable and portable ZIP. Production releases need an Authenticode certificate.
 - macOS CI produces an ad-hoc signed application DMG. Public distribution needs an Apple Developer ID, hardened-runtime signing and notarization.
-- Android CI produces an installable debug-signed APK. Store or managed distribution needs a private Android upload/release keystore.
+- Android branch CI produces an installable debug APK; version tags require the encrypted release keystore and produce an upgrade-compatible signed APK. Store distribution may require a separate upload-key policy.
 - No private signing key is stored in the repository. A missing signing identity must never be silently replaced for a production release.
+
+The shared global bandwidth controller applies on every platform. Desktop
+rclone operations receive the effective directional rate, native Git/Proton
+work is admitted through the same controller, and Android passes the rate to
+its embedded rclone core while serializing browse/sync/update work.
 
 ## Checks performed
 
@@ -63,3 +68,6 @@ The `.deb` is adaptive, not a hermetic container: authentication needs a working
 ## Release VM gate
 
 Before marking a distribution as fully verified, install the `.deb` on a clean amd64 or arm64 image and test login autostart, Wayland and X11 startup where offered, Secret Service lock/unlock, Google/OneDrive OAuth, a two-way move/delete cycle, FUSE reconnect after logout and suspend, Nautilus badges/actions, tray visibility, notifications, PolicyKit update installation and uninstall/reinstall with preserved encrypted configuration. Record the exact distribution image, package versions and result in the release notes.
+
+Equivalent clean-device gates for Windows, macOS, and Android are listed in
+[Release validation](RELEASES.md#release-validation).

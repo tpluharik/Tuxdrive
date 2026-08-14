@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxindrive-logo.png" width="150" alt="TuxInDrive penguin head logo"></p>
 
-This guide covers TuxInDrive 0.26.0 on Linux, Windows, macOS and Android. Windows and macOS retain the Linux GTK desktop layout, while Android reorganizes accounts, synchronized folders, cloud files, activity and settings for touch displays. Platform-specific installation and signing details are in [Platform support](PLATFORM_SUPPORT.md).
+This guide covers TuxInDrive 0.26.5 on Linux, Windows, macOS and Android. Windows and macOS retain the Linux GTK desktop layout, while Android reorganizes accounts, synchronized folders, cloud files, activity and settings for touch displays. Platform-specific installation and signing details are in [Platform support](PLATFORM_SUPPORT.md). Administrators and developers can continue with the [documentation index](README.md), [operations guide](OPERATIONS.md), and [architecture reference](ARCHITECTURE.md).
 
 Credentials for rclone-backed providers are kept in rclone's authenticated encrypted configuration. TuxInDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Proton's official CLI separately stores its browser session in Secret Service under `ch.proton.drive/drive-sdk-cli`; TuxInDrive never reads or exports it. Do not delete either secret until the related accounts have been disconnected.
 
-Version 0.26.0 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.26.5 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 ### Upgrading from TuxDrive
 
@@ -19,25 +19,27 @@ The 0.25.0 upgrade changes all visible product names to TuxInDrive. Existing pri
 Download the package for your platform. On Ubuntu or Debian, install it with one command:
 
 ```bash
-sudo apt install ./tuxindrive_0.26.0_all.deb
+sudo apt install ./tuxindrive_0.26.5_all.deb
 ```
 
 Launch **TuxInDrive** from Ubuntu's application menu. TuxInDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
 
 ### Windows and macOS
 
-Run the Windows setup executable or drag TuxInDrive from the macOS DMG to Applications. Both packages open the same account sidebar, synchronized-folder cards, settings and dialogs as Linux. Windows stores secrets in Credential Manager and needs WinFsp for streaming drives; macOS uses Keychain and needs macFUSE. File-manager badges remain Linux/Nautilus-only in 0.26.0.
+Run the Windows setup executable or drag TuxInDrive from the macOS DMG to Applications. Both packages open the same account sidebar, synchronized-folder cards, settings and dialogs as Linux. Windows stores secrets in Credential Manager and needs WinFsp for streaming drives; macOS uses Keychain and needs macFUSE. File-manager badges remain Linux/Nautilus-only in 0.26.5.
 
 ### Android
 
 Install the APK, then:
 
-1. Open **Accounts** and import the encrypted rclone configuration exported from a trusted TuxInDrive desktop. Enter its configuration password only into the transient unlock field.
-2. Open **Sync**, select a cloud account and optional cloud subfolder, then choose the Android directory through the system folder picker.
-3. Select Wi-Fi/charging constraints and choose **Sync now**. Android schedules the transfer through WorkManager and displays a foreground notification for long transfers.
-4. Use **Files** to browse a connected cloud root without granting broad device storage access.
+1. Open **Accounts** and import a trusted encrypted TuxInDrive profile (`.tdx`) through Android's system file picker. Enter its passphrase only into the transient unlock field.
+2. Open **Sync**, select a cloud account and optional cloud subfolder, then choose the Android directory through the system folder picker. TuxInDrive retains only the URI permission explicitly granted by Android.
+3. Select Wi-Fi and charging constraints, automatic scheduling, and the global bandwidth ceiling, then choose **Sync now**. WorkManager owns deferred work and a foreground notification identifies long transfers.
+4. Use **Files** to browse a connected cloud root without granting broad device storage access. File transfer uses the selected synchronized tree. **Activity** shows current and previous results; **Settings** controls background constraints, bandwidth, traffic display, and signed updates.
 
-Android mirrors only the directory granted through the Storage Access Framework. It retains durable two-way baselines in private app data, keeps conflicting copies and blocks large deletion batches. Android does not expose a transparent FUSE drive because the operating system does not permit desktop-style unrestricted mounts.
+Android stages data in app-private storage, retains durable two-way baselines, keeps conflict copies, and blocks suspicious deletion batches before reconciling the selected Storage Access Framework tree. One process-wide network controller serializes browsing, synchronization, and update downloads; the native rclone core receives the configured byte rate. Android does not expose a transparent FUSE drive because the operating system does not permit desktop-style unrestricted mounts.
+
+Encrypted profile backups are stored visibly as `TuxInDrive/TuxInDrive-Profile.tdx`. To move one to a phone, create the backup with **Include credentials** enabled, then download that file or choose Google Drive (or another document provider) in Android's picker. Android imports the protected rclone configuration; a configuration-only backup is intentionally rejected. The old hidden `.tuxdrive-profile` object is recognized for desktop migration but should not be used for new phone transfers.
 
 ![Main window overview](assets/01-main-window.svg)
 
@@ -77,7 +79,7 @@ The black-and-white penguin identifies TuxInDrive itself. Each cloud service use
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxInDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxInDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.26.0 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual APT installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.26.5 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual package installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxInDrive
 
@@ -501,15 +503,28 @@ Never point a vault at a folder containing ordinary unencrypted files, never edi
 
 ![Tray controls, settings, and logs](assets/06-tray-logs.svg)
 
-### Network, battery and schedule policies
+### Global bandwidth, network, battery and schedule policies
 
-The default policy is **Maximum usage (no policy limits)**, matching earlier TuxInDrive releases. To constrain transfers, select **Apply network, battery and schedule policies** and configure any combination of:
+The environmental policy defaults to **Maximum usage**, so metered, battery,
+and schedule gates do not defer work. Independently, the default global
+bandwidth ceiling is `10M`. Set it empty for unlimited traffic, use one value
+such as `5M` for both directions, or use `UPLOAD:DOWNLOAD` such as `2M:10M`.
+The stricter global or per-folder value always wins.
+
+The controller covers scheduled/manual/incremental synchronization, streaming,
+metadata scans, verification and repair, update downloads, GitHub, Proton, and
+Android. It also limits simultaneous native network work and jitters metadata
+scans to avoid synchronized bursts. Changing the **Show network usage** feature
+flag only hides or shows device-wide current rates and daily totals; it does not
+turn transfer limiting on or off.
+
+To add environmental constraints, select **Apply network, battery and schedule policies** and configure any combination of:
 
 - disallowing NetworkManager connections marked metered;
 - a battery percentage below which transfers pause while AC power is disconnected (`0` disables it);
 - a daily `HH:MM` start/end window, including an overnight window such as `22:00`–`06:00`.
 
-The gate runs before manual, callback and scheduled jobs. Deferred jobs show the policy reason and are reconsidered by the regular scheduler. Metadata already displayed by a mounted streaming filesystem can remain visible, but opening non-cached content still requires network access.
+The gate runs before manual, callback and scheduled jobs. Deferred jobs show the policy reason and are reconsidered by the regular scheduler. Metadata already displayed by a mounted streaming filesystem can remain visible, but opening non-cached content still requires network access. See [Operations](OPERATIONS.md#network-policy) for congestion-safe settings.
 
 The tray menu contains:
 
@@ -523,7 +538,11 @@ Settings control:
 
 - automatic start after sign-in;
 - desktop notifications;
-- starting minimized.
+- starting minimized;
+- visual theme and language;
+- shared upload/download limit and device traffic panel;
+- streaming cache size, free-space reserve, and refresh mode;
+- encrypted profile backup/restore and signed update checks.
 
 Closing the main window hides it; synchronization continues in the tray. Use **Quit** to stop the application and unmount streaming drives.
 
@@ -582,7 +601,7 @@ cat ~/.local/state/tuxindrive/startup.log
 cat ~/.local/state/tuxindrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxindrive_0.26.0_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxindrive_0.26.5_all.deb`.
 
 ## 13. Data safety
 
@@ -592,12 +611,13 @@ Reinstall the current package with `sudo apt install ./tuxindrive_0.26.0_all.deb
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxInDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.26.0
+### Security upgrade checklist for 0.26.5
 
-1. Install `tuxindrive_0.26.0_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.26.0 and no signature or expiry error.
+1. Install `tuxindrive_0.26.5_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.26.5 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxInDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.
 6. Run **Verify** on important jobs, inspect the health dashboard, and test recovery using a non-critical file.
 7. Keep an independent backup. Update signing protects installer authenticity; it does not protect data from a compromised desktop account.
+8. Review the global directional bandwidth ceiling and keep it below the reliably available link capacity; confirm incremental, scan, verification, update, GitHub, Proton, and Android activity shares the expected controller.

@@ -1,0 +1,262 @@
+# TuxInDrive architecture
+
+This document describes how TuxInDrive 0.26.5 is implemented. It complements
+the task-oriented [user guide](USER_GUIDE.md), persisted-field
+[configuration reference](CONFIGURATION.md), and threat-focused
+[security guide](SECURITY_HARDENING.md).
+
+## System overview
+
+TuxInDrive is a local orchestration layer around provider APIs, rclone, Git,
+the official Proton Drive CLI, operating-system credential stores, and
+platform file APIs. The desktop application is Python with GTK 3. Android is a
+native Kotlin/Jetpack Compose application embedding rclone through gomobile.
+Cloud data does not pass through a TuxInDrive service.
+
+```text
+Desktop GTK / Android Compose UI
+              |
+       persisted models
+              |
+ policy + admission + safety controls
+              |
+  +-----------+-----------+----------------+
+  |                       |                |
+rclone processes / RC   native Git    Proton CLI
+  |                       |                |
+cloud, SFTP, crypt      github.com     Proton Drive
+```
+
+The desktop process owns configuration and job scheduling. Transfer tools own
+provider protocols. This separation keeps OAuth/provider compatibility in
+rclone while TuxInDrive implements user intent, safety previews, concurrency,
+recovery, audit, desktop integration, and release verification.
+
+## Desktop process
+
+`TuxInDriveApplication` in `src/tuxindrive/app.py` is the composition root. It:
+
+1. Loads `AppConfig` through `ConfigStore`.
+2. Creates the shared `GlobalBandwidthController`.
+3. Creates the signed `UpdateManager`, `RcloneClient`, `ProtonDriveClient`,
+   `SyncEngine`, peer manager, policy manager and UI controller.
+4. Registers command-line and single-instance application actions.
+5. Builds `MainWindow`, account dialogs, job dialogs, integrity/recovery views,
+   settings, help and status/tray integration.
+
+Long operations run outside the GTK main loop. Completion is returned to GTK
+through idle callbacks. UI refreshes are coalesced so logs and status updates
+do not force unnecessary full-window reconstruction.
+
+## Persisted model
+
+`src/tuxindrive/models.py` defines five persisted aggregates:
+
+- `Account`: provider identity and provider-specific metadata.
+- `SyncJob`: local/remote mapping, mode, safety controls and runtime status.
+- `FolderGroup`: display-only ordering and collapsed state.
+- `PeerShare`: server-side peer authorization, roles, drops and transport rules.
+- `AppSettings`: application, network, cache, profile and presentation settings.
+
+`ConfigStore` serializes the model as UTF-8 JSON. Writes use a private temporary
+file, `fsync`, and atomic replacement. An unchanged object is not rewritten.
+Invalid JSON is moved aside with an `.invalid` suffix instead of being silently
+overwritten. The complete field contract is in [Configuration](CONFIGURATION.md).
+
+## Provider abstraction
+
+`Provider` identifies Google Drive, OneDrive, Dropbox, Box, pCloud, MEGA,
+Proton Drive, Nextcloud, GitHub, peer SFTP, and encrypted vault accounts.
+`capabilities.py` records whether each provider supports browser OAuth,
+streaming, change polling, hashes, server moves, share links and versions.
+The UI consults this matrix before offering a synchronization mode or action.
+
+OAuth-capable rclone providers are configured through `RcloneClient`. MEGA and
+Nextcloud use explicit credential/app-password fields. Rclone configuration is
+encrypted and its password is retrieved through the platform credential store.
+GitHub and Proton use dedicated native adapters rather than pretending to be
+ordinary rclone remotes.
+
+## Synchronization engine
+
+`SyncEngine` in `engine.py` owns command construction, process tracking,
+callbacks, streaming mounts, queue admission and result normalization.
+
+### Full jobs
+
+- Two-way jobs use `rclone bisync`. The first run is an explicit resync/merge;
+  later runs reuse durable baseline files stored under application data.
+- Download mirrors use remote-to-local copy semantics.
+- Upload mirrors use local-to-remote copy semantics.
+- Streaming jobs use `rclone mount` with full VFS caching and a stable mount
+  policy for the mount lifetime.
+- GitHub jobs use fetch/rebase/commit/push operations implemented in
+  `github_sync.py`.
+- Official Proton jobs use `proton-drive` machine-readable list, upload and
+  download operations implemented in `proton.py`.
+
+Before destructive established jobs, the engine can run a dry preview and
+apply mass-change/ransomware limits. Result objects contain success, message,
+log path, incremental/dry-run state and special recovery conditions.
+
+### Incremental callbacks
+
+`callbacks.py` combines event-driven local monitoring with adaptive remote
+reconciliation. Local inotify events are normalized and transient editor files
+are excluded. Remote changes are detected with targeted or recursive `lsjson`
+queries. Provider failures increase backoff. Successful scan intervals include
+random jitter, preventing many jobs from issuing metadata requests at the same
+instant.
+
+Incremental work reserves the job ID under the engine lock **before** waiting
+for a global network slot. This prevents a full job and a callback job for the
+same mapping from starting concurrently. Multiple ordinary paths are batched
+through private `--files-from-raw` manifests; incoming content is staged and
+installed through confined filesystem operations.
+
+### Global bandwidth controller
+
+`bandwidth.py` supplies one application-wide control plane:
+
+- validates a global rate such as `10M` or directional `2M:10M`;
+- chooses the stricter global/per-job rate independently for upload/download;
+- adds rclone `--bwlimit` arguments to synchronization, mounts, scans,
+  verification, repair and delta work;
+- admits metadata, updates, native Git and Proton operations through a shared
+  semaphore; native operations that cannot accept a byte-rate flag run
+  exclusively while limiting is enabled;
+- rate-limits application-managed update downloads with a shared byte clock;
+- produces bounded scan jitter.
+
+The controller is a portable application-level safety mechanism, not an OS
+traffic shaper. A long-lived streaming mount is rate-capped by rclone but owns
+its own provider connection.
+
+## Streaming and offline availability
+
+`mount_command()` starts rclone VFS with full caching. Directory entries can be
+browsed without downloading file bodies. Reads hydrate chunks into the cache;
+writes are committed through rclone. `cache_manager.py` applies maximum-cache
+and minimum-free-space rules while protecting pinned, open, dirty and recently
+used content.
+
+Offline rules are stored per job. Exact files and explicitly selected folders
+are hydrated and verified. Online-only exceptions may override a parent pin.
+Changing a rule does not remount the drive. `nautilus_support.py` and the
+packaged extension expose the same operations in Linux file-manager menus.
+
+## Safety, recovery and integrity
+
+- `security.py` provides descriptor-based path confinement, no-follow checks,
+  atomic installation and signed peer transaction verification.
+- `recovery.py` archives replaced/deleted content, applies retention, detects
+  mass changes and runs bandwidth-controlled `rclone check` audits/repairs.
+- `delta.py` plans BLAKE2-identified blocks and final SHA-256 verification for
+  peer delta transfers.
+- Conflict policies are translated into rclone/native-provider behavior while
+  explicit conflict copies remain reviewable in the UI.
+- Vault accounts are rclone crypt layers over an existing provider remote.
+
+## Peer and collaboration implementation
+
+`peer.py` manages Ed25519/SSH identities, invitations, host-key pinning,
+per-device authorization, LAN discovery, edit leases and isolated SFTP
+listeners. Roles are enforced at both job direction and server authorization.
+One-time drops use dedicated roots and expire/consume independently.
+
+`tor.py` writes private Tor service/client configuration and enforces direct,
+Tor-only or automatic transport policy. Optional NAT traversal and SSH reverse
+relay setup never replace SSH host-key verification.
+
+`collaboration.py` implements local operation logs, a bounded text CRDT,
+presence/review metadata, checkpoints, and defensive ODT/ODS import/export.
+Archive entry count, expanded bytes, compression ratio, paths and XML entities
+are validated before structured document processing.
+
+## GitHub implementation
+
+`github_sync.py` accepts only credential-free `https://github.com/...` or
+`git@github.com:...` repository URLs and validated branch names. Credentials
+stay in the system Git helper or SSH agent. A download mirror fetches the
+configured branch. Two-way mode stages/commits local changes, fetches, rebases
+and pushes. Interactive prompts are disabled so background jobs fail clearly
+instead of hanging.
+
+## Proton Drive implementation
+
+`proton.py` discovers or installs Proton's official CLI from Proton's signed
+release metadata, verifies its SHA-512 digest, stores the executable privately,
+and starts browser authentication. TuxInDrive never accepts Proton passwords or
+2FA codes. The CLI owns its Secret Service session. The adapter confines
+provider paths, redacts errors, rejects symlinks and uses non-destructive
+deletion behavior. Streaming is unavailable because the CLI exposes no mount
+API.
+
+## Signed updater
+
+`updater.py` selects a platform-specific `latest-v2.json`, verifies its Ed25519
+signature and expiry, validates the URL origin and version-bound filename, then
+downloads at most 1 GiB and verifies SHA-256. Linux passes the package to a
+fixed PolicyKit helper. The helper copies into a root-only staging directory,
+rechecks digest and Debian identity, and invokes APT. Windows opens the verified
+installer; macOS opens the verified DMG. Android implements the same signature,
+origin, filename, size and digest checks in `AndroidUpdater.kt`.
+
+## Android implementation
+
+Android is a native Compose application rather than a GTK port:
+
+- `MainActivity.kt` renders Accounts, Sync, Files, Activity and Settings.
+- `RcloneCore.kt` wraps the embedded gomobile RPC API, private rclone config,
+  browsing, bisync and the runtime bandwidth limit.
+- `MobileSyncWorker.kt` uses WorkManager constraints and a foreground service.
+  It mirrors a Storage Access Framework tree into app-private storage, checks
+  deletion thresholds, runs bisync, then reconciles back to the selected tree.
+- `MobileNetworkController` serializes browsing, sync and update downloads.
+- `NetworkUsageMeter.kt` records current and daily device totals.
+- `ProfileImporter.kt` imports the encrypted desktop profile format without
+  exposing provider credentials outside app-private storage.
+
+Only persisted URI permissions grant Android folder access. Unique WorkManager
+names and a process mutex prevent duplicate scheduled/manual jobs.
+
+## Platform integration
+
+- Linux: Secret Service, systemd user service, AppIndicator, Nautilus 4,
+  PolicyKit and FUSE.
+- Windows: Credential Manager, installer/portable packages, WinFsp and portable
+  process groups.
+- macOS: Keychain, application DMG, macFUSE and native `open` integration.
+- Android: app sandbox, SAF, WorkManager, foreground notifications and package
+  installer intents.
+
+See [Platform support](PLATFORM_SUPPORT.md) for the supported matrix.
+
+## Module map
+
+| Module | Responsibility |
+|---|---|
+| `app.py` | GTK application, dialogs, settings, scheduling and UI composition. |
+| `models.py`, `config.py` | Persisted schema and atomic private configuration. |
+| `engine.py`, `callbacks.py` | Full/incremental sync, mounts, process state and reconciliation. |
+| `bandwidth.py`, `policies.py` | Global network admission/rates and environmental policy decisions. |
+| `rclone.py`, `bootstrap.py` | Provider configuration and transfer-runtime discovery/bootstrap. |
+| `github_sync.py`, `proton.py` | Native GitHub and Proton backends. |
+| `recovery.py`, `security.py`, `delta.py` | Recovery, destructive-change guards, confinement and verified deltas. |
+| `peer.py`, `tor.py`, `collaboration.py` | Peer transport, privacy policy, leases and collaborative documents. |
+| `cache_manager.py`, `nautilus_support.py` | Streaming-cache retention and Linux file-manager integration. |
+| `migration.py` | Encrypted profile backup and device restore. |
+| `updater.py`, `update_helper.py` | Signed platform updates and privileged Linux installation. |
+| `network_usage.py`, `audit.py`, `diagnostics.py` | Usage accounting, local audit timeline and support diagnostics. |
+| `capabilities.py`, `platform_support.py` | Provider/platform feature gating and integration discovery. |
+| `themes.py`, `i18n.py`, `help_content.py` | Presentation, localization and offline help. |
+
+## Extension points
+
+Adding a provider requires a `Provider` record, capabilities, connection UI,
+icons, redaction rules, command/backend routing, tests, and user/security docs.
+Adding a persisted field requires a backward-compatible default in the model,
+validation in `from_dict`, UI behavior, round-trip tests and an entry in
+[Configuration](CONFIGURATION.md). New network paths must use the global
+controller. New incoming filesystem paths must use confinement helpers and
+negative traversal/symlink tests.

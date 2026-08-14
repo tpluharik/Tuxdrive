@@ -7,7 +7,20 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.0
+## Current baseline: 0.26.5
+
+### Completed in 0.26.5
+
+Version 0.26.5 introduces one configurable global bandwidth controller across
+synchronization, streaming, metadata scans, verification, updates, GitHub,
+Proton, and Android. It applies the stricter global/job directional limit,
+serializes native network work when required, jitters scans, and atomically
+reserves incremental jobs before network waits. The device traffic panel
+remains available behind a Settings feature flag.
+
+Versions 0.26.1–0.26.4 established signed, durable Windows, macOS, and Android
+release channels; a visible encrypted profile path suitable for Android file
+selection; platform updater manifests; and a signed branded Android package.
 
 ### Completed in 0.26.0
 

@@ -4,15 +4,15 @@
 
 TuxInDrive is a native Linux, Windows, macOS and Android client for **Google Drive, Microsoft OneDrive, Dropbox, Box, pCloud, MEGA, Proton Drive, Nextcloud, and GitHub repositories**. Linux, Windows and macOS share the GTK desktop interface; Android uses a native mobile layout over the same rclone synchronization engine and platform-safe storage controls.
 
-📘 **[Complete illustrated user guide](docs/USER_GUIDE.md)**
+📚 **[Complete documentation index](docs/README.md)** · 📘 **[Illustrated user guide](docs/USER_GUIDE.md)** · 🏗️ **[Technical architecture](docs/ARCHITECTURE.md)**
 
-🧪 **[Testing and release verification](docs/TESTING.md)** · 🛡️ **[Security hardening and upgrade guide](docs/SECURITY_HARDENING.md)** · 💡 **[Feature status and roadmap](docs/ROADMAP.md)** · 📝 **[Release history](CHANGELOG.md)**
+⚙️ **[Configuration](docs/CONFIGURATION.md)** · 🩺 **[Operations](docs/OPERATIONS.md)** · 📦 **[Release process](docs/RELEASES.md)** · 🧪 **[Testing](docs/TESTING.md)** · 🛡️ **[Security](docs/SECURITY_HARDENING.md)** · 💡 **[Roadmap](docs/ROADMAP.md)** · 📝 **[History](CHANGELOG.md)**
 
 🔐 **[Security policy, trust boundaries, and vulnerability reporting](SECURITY.md)**
 
 ## TuxInDrive rebrand and upgrade compatibility
 
-Version 0.26.0 adds Windows, macOS and Android packages, native credential stores, portable process control and Android SAF/WorkManager synchronization. Version 0.25.3 recognizes GitHub's verified repository-rename redirects and safely updates matching saved job URLs to the checkout's canonical origin. Existing installations continue to read their private legacy configuration/state directories, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
+Version 0.26.5 adds one configurable application-wide bandwidth controller for synchronization, streaming, metadata scans, verification, updates, GitHub, Proton, and Android. Metadata reconciliation is jittered, and incremental jobs reserve their mapping before waiting for network admission so duplicate work cannot start. Versions 0.26.0–0.26.4 introduced Windows, macOS and signed Android packages, durable platform update channels, native credential stores, portable process control and Android SAF/WorkManager synchronization. Existing installations continue to read their private legacy configuration/state directories, encrypted profile format, peer invitations, and hidden synchronization metadata in place; no cloud or local content is renamed.
 
 The old `tuxdrive` executable and user-service names remain aliases for upgrade continuity. The Debian package identity and signed download alias intentionally remain legacy compatibility identifiers so the already released 0.24.x updater can authenticate and install 0.25.0 after the GitHub repository rename.
 
@@ -37,7 +37,7 @@ Version 0.24.1 makes the official Proton CLI usable on a clean installation. **C
 - CI blocks releases on high-severity Bandit findings or audited vulnerable Python dependencies and produces a CycloneDX SBOM with the Debian installer.
 - The complete control inventory, upgrade procedure, credential migration behavior, residual risks, and operator checklist are in the [security-hardening guide](docs/SECURITY_HARDENING.md).
 
-The following controls are enforced in 0.26.0:
+The following controls are enforced in 0.26.5:
 
 - Signed and expiring update manifests are verified in both the desktop process and a fixed privileged helper. The helper stages the package in a root-only directory and rechecks its digest and Debian identity before APT executes it.
 - Tor-only/no-public-IP shares bind SFTP to loopback, and protocol-v5 invitations carry an explicit transport allowlist so direct-only and no-relay policies cannot silently fall back.
@@ -49,6 +49,7 @@ The following controls are enforced in 0.26.0:
 - Each authorized peer key receives an isolated listener and authorization file. Read-only/receive-only restrictions are applied by the server, while send-only and one-time-drop devices are rooted in private inboxes rather than the shared workspace.
 - Collaborative operation logs and ODT/ODS imports have explicit count, byte, compression-ratio and schema limits; unsafe XML entities are rejected before document processing.
 - GitHub synchronization accepts only credential-free `github.com` HTTPS or SSH clone URLs, validates branch names, disables interactive credential prompts, and delegates secrets to the system SSH agent or Git credential helper.
+- One global controller applies the stricter application/job rate to every rclone path, serializes native network operations while limited, rate-limits updates, jitters scans, and reserves incremental jobs before network waits. These congestion controls do not bypass authentication, integrity, deletion, or path-confinement checks.
 
 ### 0.24.1 official Proton Drive browser authorization
 
@@ -149,7 +150,9 @@ TuxInDrive Profile links the application to an existing Google Drive, OneDrive, 
 - pause/resume, sync now, cancellation, and tray controls
 - native Nautilus 4 status/emblem integration and context actions for configured TuxInDrive paths
 - Nautilus integration can be disabled in Settings and is enabled by default
-- optional metered-network, battery-threshold and daily schedule policies; unrestricted maximum transfer usage remains the default
+- optional metered-network, battery-threshold and daily schedule policies; these environmental gates remain disabled by the default Maximum policy
+- one application-wide upload/download ceiling, including directional values such as `2M:10M`, shared by synchronization, streaming, scans, verification, updates, GitHub, Proton, and Android
+- optional current-rate and daily-total network panel, controlled independently by a Settings feature flag
 - live Nautilus state transitions and safe **Open online/cloud folder** navigation without public-link creation
 - launch at login, desktop notifications, daily diagnostic logs
 - clickable per-job exception rules with add/remove controls, deletion safety ceiling, bandwidth limits, and conflict policy
@@ -171,17 +174,17 @@ TuxInDrive Profile links the application to an existing Google Drive, OneDrive, 
 
 | Platform | Package | Notes |
 | --- | --- | --- |
-| Ubuntu/Debian | tuxindrive_0.26.0_all.deb | Signed in-app Debian updates remain supported. |
-| Windows 10/11 x64 | TuxInDrive-0.26.0-windows-x64-setup.exe | Same GTK desktop UI; install WinFsp for streaming drives. |
-| macOS 12+ | TuxInDrive-0.26.0-macos-*.dmg | Same GTK desktop UI; install macFUSE for streaming drives. |
-| Android 8+ | TuxInDrive-0.26.0-android.apk | Native phone/tablet UI, SAF folder access and OS-managed background sync. |
+| Ubuntu/Debian | `tuxindrive_0.26.5_all.deb` | Signed in-app Debian updates remain supported. |
+| Windows 10/11 x64 | `TuxInDrive-0.26.5-windows-x64-setup.exe` | Same GTK desktop UI; install WinFsp for streaming drives. |
+| macOS 12+ | `TuxInDrive-0.26.5-macos-*.dmg` | Same GTK desktop UI; install macFUSE for streaming drives. |
+| Android 8+ | `TuxInDrive-0.26.5-android.apk` | Native phone/tablet UI, SAF folder access and OS-managed background sync. |
 
 ### Ubuntu and Debian
 
 Download the `.deb`, then run:
 
 ```bash
-sudo apt install ./tuxindrive_0.26.0_all.deb
+sudo apt install ./tuxindrive_0.26.5_all.deb
 ```
 
 Open **TuxInDrive** from the application menu. Choose **Connect account**, select a provider, and complete its guided authorization. Then add a local synchronized folder or virtual drive. The same visual cloud tree and multi-folder selection are used for all eight cloud providers; GitHub uses a dedicated repository/branch/local-folder dialog.
@@ -199,7 +202,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 sh scripts/build-deb.sh
 ```
 
-The Debian installer is written to `dist/tuxindrive_0.26.0_all.deb`. Windows, macOS and Android artifacts are built by `.github/workflows/platform-packages.yml` on their native build hosts.
+The Debian installer is written to `dist/tuxindrive_0.26.5_all.deb`. Windows, macOS and Android artifacts are built by `.github/workflows/platform-packages.yml` on their native build hosts. Durable packages are attached to the matching GitHub Release; dedicated signed channel manifests and package-location pointers live under [`releases/`](releases/README.md).
 
 ### Local-first collaborative documents
 
@@ -213,7 +216,7 @@ Select the **?** button in the top bar to open the searchable offline documentat
 
 The flag selector switches **English**, **German**, **French**, **Spanish**, **Arabic**, or **Hebrew** immediately and stores the choice privately. Arabic and Hebrew labels and documentation use right-to-left text flow without moving the interface controls. Provider and rclone diagnostics may remain in their source language so technical evidence is not mistranslated.
 
-The current suite contains 178 automated tests, including visual-theme registration, palette distinction, dark preference, persistence/fallback and UI integration; exact Nautilus 4.1 menu construction; bounded FUSE hydration; drag/drop groups; GitHub guards; update trust; peer isolation; hostile ODF/CRDT input; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
+The current suite contains 284 automated tests, including global bandwidth admission and directional limits; network usage persistence; visual themes; exact Nautilus 4.1 integration; bounded FUSE hydration; drag/drop groups; GitHub and Proton guards; signed update channels; peer isolation; hostile ODF/CRDT input; Android/release packaging; and six-language help parity. See [Testing and release verification](docs/TESTING.md) for details.
 
 ## Suggestions and roadmap
 
@@ -223,7 +226,7 @@ The [feature status and top-40 roadmap](docs/ROADMAP.md) records shipped safety 
 
 Open **Settings → Check for updates**. TuxInDrive verifies the signed manifest and download before asking for authorization. A fixed root-side helper then obtains the signed manifest independently, copies the untrusted package into a root-only staging directory through a no-follow descriptor, and rechecks its digest and Debian identity before APT runs. No user-supplied digest or cloud credential is trusted by the helper. Restart TuxInDrive after a successful update.
 
-**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.26.0 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
+**0.18.1 → 0.19.1 → current trust-root transition:** 0.18.1 verifies an original-key-signed legacy manifest and first installs the fixed 0.19.1 bridge. Version 0.19.1 switches to the separately signed v2 channel and can then install 0.26.5 and later releases. On 0.18.1, run the in-app update check a second time after restarting 0.19.1. Never bypass a signature error; a continuing failure means the manifest is stale, intercepted, or the installed package predates this bridge.
 
 ## Crash and startup diagnostics
 

@@ -18,3 +18,6 @@ A push to `main` builds verification artifacts only. A version tag such as
 `v0.26.5` publishes the durable installers at:
 
 `https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.5`
+
+Maintainer signing, validation, publication, and rollback rules are documented
+in [`docs/RELEASES.md`](../docs/RELEASES.md).

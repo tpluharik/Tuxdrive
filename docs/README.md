@@ -1,0 +1,42 @@
+# TuxInDrive documentation
+
+This index separates end-user instructions, operator guidance, implementation
+details, security controls, and release procedures. Documentation describes
+TuxInDrive 0.26.5 unless a section is explicitly historical.
+
+## Start here
+
+| Audience | Document | Contents |
+|---|---|---|
+| Everyone | [Repository overview](../README.md) | Product scope, feature summary, installation, supported platforms and project links. |
+| Users | [User guide](USER_GUIDE.md) | Accounts, folders, synchronization, streaming, peer sharing, recovery, mobile use and troubleshooting. |
+| Administrators | [Operations guide](OPERATIONS.md) | State locations, bandwidth policy, health checks, logs, backup, recovery and incident handling. |
+| Developers | [Architecture](ARCHITECTURE.md) | Components, threads, data flows, synchronization engine, Android implementation and module map. |
+| Developers and administrators | [Configuration reference](CONFIGURATION.md) | Configuration file, every persisted setting/job field, environment integration and compatibility rules. |
+| Maintainers | [Testing](TESTING.md) | Automated suite, safety invariants, manual test matrix and coverage limits. |
+| Maintainers | [Release process](RELEASES.md) | Versioning, native builds, signed update channels, artifacts, validation and rollback. |
+| Security reviewers | [Security hardening](SECURITY_HARDENING.md) | Trust boundaries, credential storage, update verification and residual risk. |
+| Platform users | [Platform support](PLATFORM_SUPPORT.md) | Linux, Windows, macOS and Android differences and requirements. |
+| Contributors | [Contributing](../CONTRIBUTING.md) | Development workflow and pull-request expectations. |
+
+## Feature and history references
+
+- [Roadmap](ROADMAP.md) — implemented and planned work.
+- [Changelog](../CHANGELOG.md) — release-by-release history.
+- [Security policy](../SECURITY.md) — supported releases and private vulnerability reporting.
+- [Release channel layout](../releases/README.md) — durable package and manifest locations.
+
+## Documentation conventions
+
+- **Local** means the device running TuxInDrive.
+- **Remote** means an rclone-backed cloud, a Git repository, Proton Drive, or
+  an authenticated TuxInDrive peer, depending on the job.
+- **Streaming drive** means an rclone VFS mount whose directory metadata is
+  visible before file content is downloaded.
+- **Incremental synchronization** means callback-triggered changed-path work;
+  **reconciliation** means a safety scan that re-establishes complete state.
+- Commands assume the repository root unless stated otherwise.
+
+Documentation changes are release work. A feature is not complete until its
+user behavior, configuration, security implications, tests, and operational
+failure modes are reflected in the appropriate documents above.

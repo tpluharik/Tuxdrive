@@ -1,0 +1,179 @@
+# TuxInDrive configuration reference
+
+This reference describes the persisted desktop configuration in TuxInDrive
+0.26.5. Normal changes should be made in **Settings**, **Connect account**, or
+**Add/Edit folder**. Stop TuxInDrive and make a backup before manually editing
+JSON; a syntactically valid but inconsistent mapping can still synchronize the
+wrong location.
+
+## State locations
+
+TuxInDrive uses platform-native roots and a `tuxindrive` subdirectory. An
+existing `tuxdrive` directory is deliberately reused after an upgrade so that
+credentials, peer identities, history, and cached files are not lost.
+
+| State | Linux | Windows | macOS |
+|---|---|---|---|
+| Configuration | `$XDG_CONFIG_HOME/tuxindrive/config.json` or `~/.config/tuxindrive/config.json` | `%APPDATA%\tuxindrive\config.json` | `~/Library/Application Support/tuxindrive/config.json` |
+| Application data | `$XDG_DATA_HOME/tuxindrive` or `~/.local/share/tuxindrive` | `%LOCALAPPDATA%\tuxindrive` | `~/Library/Application Support/tuxindrive` |
+| Cache | `$XDG_CACHE_HOME/tuxindrive` or `~/.cache/tuxindrive` | `%LOCALAPPDATA%\Cache\tuxindrive` | `~/Library/Caches/tuxindrive` |
+| Logs | `$XDG_STATE_HOME/tuxindrive` or `~/.local/state/tuxindrive` | `%LOCALAPPDATA%\Logs\tuxindrive` | `~/Library/Logs/tuxindrive` |
+
+The configuration directory is mode `0700` and `config.json` is mode `0600`
+on systems that support POSIX permissions. Saves use a private temporary file,
+flush it to disk, and atomically replace the previous file. Identical state is
+not rewritten. Invalid JSON is moved to `config.json.invalid` and startup
+reports the error rather than silently replacing user state.
+
+Provider credentials are not stored in `config.json`. Rclone secrets are in
+its encrypted private configuration and the encryption password is in Secret
+Service, Credential Manager, or Keychain. GitHub credentials remain in the Git
+credential helper/SSH agent; Proton sessions remain in Secret Service.
+
+## Top-level document
+
+```json
+{
+  "accounts": [],
+  "jobs": [],
+  "folder_groups": [],
+  "peer_shares": [],
+  "settings": {}
+}
+```
+
+Unknown fields are ignored when loading. Missing fields receive the defaults
+defined by the current model, which provides forward-compatible upgrades.
+Enumerated values are strict; malformed configuration is rejected. Runtime
+job state (`initialized`, last run/status/error) is persisted with the job.
+
+## Application settings
+
+| Field | Default | Meaning |
+|---|---:|---|
+| `launch_at_login` | `true` | Start through the platform login integration. |
+| `notifications` | `true` | Show completion, warning, and error notifications. |
+| `start_minimized` | `false` | Open in background/status area when possible. |
+| `rclone_path` | `rclone` | Selected rclone executable or command name. |
+| `proton_drive_path` | `proton-drive` | Official Proton Drive CLI executable. |
+| `nautilus_integration` | `true` | Enable supported Linux file-manager actions. |
+| `language` | `en` | Interface language code. |
+| `visual_theme` | `nordic_glass` | Validated visual theme identifier. |
+| `network_policy` | `maximum` | Transfer policy selected in Settings. |
+| `global_bandwidth_limit` | `10M` | Shared upload/download ceiling; empty means unlimited. |
+| `allow_metered_networks` | `true` | Permit scheduled work on metered connections. |
+| `pause_below_battery_percent` | `0` | Pause threshold; zero disables battery pausing. |
+| `schedule_start`, `schedule_end` | empty | Optional daily transfer window. |
+| `profile_remote` | empty | Account chosen for encrypted profile backups. |
+| `profile_last_backup` | empty | Timestamp of the last successful profile backup. |
+| `streaming_cache_max_gib` | `20` | Maximum streaming cache target, clamped to 1–1024 GiB. |
+| `streaming_cache_min_free_gib` | `5` | Free-space reserve, clamped to 1–1024 GiB. |
+| `streaming_refresh_mode` | `realtime` | `realtime`, `balanced`, or `low_traffic`. |
+| `show_network_usage` | `true` | Feature flag for the current/daily traffic panel. |
+| `config_version` | `1` | Persisted schema generation. |
+
+### Bandwidth syntax and scope
+
+Rates use rclone-style suffixes such as `512K`, `10M`, or `1G`. One value
+limits both directions. `UPLOAD:DOWNLOAD`, for example `2M:10M`, sets separate
+ceilings. A job-specific `bandwidth_limit` can only make the effective limit
+stricter. The global controller covers synchronization, streaming mounts,
+metadata scans, verification/repair, updates, native GitHub operations, Proton
+operations, and Android network work. Native operations without a byte-rate
+option are serialized while the global limit is active.
+
+The network usage panel is a device-interface meter, not per-job accounting.
+Its current rates and local-day totals can include traffic from other
+applications. Turning the panel off stops presenting it; it does not disable
+the bandwidth controller.
+
+## Accounts
+
+Every account has `remote`, `provider`, `display_name`, `created_at`, and
+`backend`. Provider values are `google_drive`, `onedrive`, `dropbox`, `box`,
+`pcloud`, `mega`, `proton_drive`, `nextcloud`, `github`, `peer`, and `vault`.
+
+Specialized fields are used only by their backend:
+
+| Backend | Fields |
+|---|---|
+| Peer | `peer_host`, `peer_port`, pinned `peer_host_key` |
+| Vault | `vault_base_remote`, `vault_base_path` |
+| GitHub | `repository_url`, `repository_branch`, `git_author_name`, `git_author_email` |
+| Proton | `backend` is `proton_cli`; unsupported combinations normalize to `rclone` |
+
+Account names are internal identifiers referenced by jobs. Do not rename them
+directly without updating every `account_remote` reference.
+
+## Synchronization jobs
+
+| Group | Fields and behavior |
+|---|---|
+| Identity | `id`, `name`, `account_remote`, `enabled`, optional `group_id` |
+| Mapping | `local_path`, `remote_path`, `remote_scope`, `cloud_location_name` |
+| Mode | `two_way`, `download_only`, `upload_only`, or `virtual_drive` |
+| Scheduling | `interval_minutes`, `realtime_sync` |
+| Selection | `exclude_patterns`, `offline_paths`, `online_only_paths` |
+| Conflicts | `keep_both`, `newer_wins`, `local_wins`, or `cloud_wins` |
+| Transfer | `bandwidth_limit`, `block_delta_transfer`, `peer_delta` |
+| Deletion safety | `max_delete`, `ransomware_protection`, `mass_change_limit`, `mass_change_percent` |
+| Recovery | `version_history`, `version_retention_days` |
+| Provider consent | `acknowledge_google_abuse` |
+| Peer policy | `peer_leases`, `peer_lease_minutes`, `peer_role`, `one_time_drop_id` |
+| GitHub | `repository_url`, `repository_branch`, `git_author_name`, `git_author_email` |
+| Runtime | `initialized`, `last_run`, `last_status`, `last_error` |
+
+Defaults are a five-minute, real-time, two-way job; conflict copies; version
+history retained 30 days; a 100-delete cap; and ransomware thresholds of 200
+changes or 25 percent. Default excludes are `.Trash-*/**`, `*.part`, and
+temporary Office lock files (`~$*`).
+
+`remote_scope` is a provider-selected root (for example a Shared Drive), while
+`remote_path` is relative to it. The engine will not run overlapping local
+roots except for the explicitly safe layout of a synchronized folder above a
+separate streaming mount. Initial two-way synchronization establishes a
+baseline; clearing `initialized` is a recovery action and can require a merge.
+
+## Folder groups
+
+`FolderGroup` contains `id`, `name`, `created_at`, and `collapsed`. Groups only
+organize the interface; they do not alter scheduling, paths, or security.
+
+## Peer shares
+
+A peer share stores its `id`, `name`, confined `local_path`, advertised host,
+listener `port`, enable/status state, discovery and transport preferences.
+Authorization is an array of named public keys with an enabled flag and role
+(`read_write`, `read_only`, `send_only`, or `receive_only`). One-time drops add
+an inbox, public key, expiry, consumed flag, and isolated server port.
+
+Connectivity fields cover LAN discovery, optional NAT traversal, SSH relay
+host/user/ports, and direct/Tor/automatic policy. Privacy controls can disable
+relays and public-IP discovery, require no provider cloud, enable a persistent
+onion service and client authorization, and store bridge/transport lines.
+Private keys are separate private files, never fields in this document.
+
+## Encrypted profile backup
+
+The current searchable cloud object is
+`TuxInDrive/TuxInDrive-Profile.tdx`; the old hidden location
+`.tuxdrive-profile/tuxdrive-profile.tdx` is still detected and migrated.
+Profiles use AES-GCM with a scrypt-derived key, a minimum 14-character
+passphrase, authenticated metadata, and a 128 MiB input limit. Credentials are
+optional. Restore first preserves `config.json.before-migration`.
+
+Android imports the same `.tdx` file through the system file picker. For a
+phone transfer, create it with credentials included, then download the visible
+object or choose it from a Drive provider exposed by Android's picker; do not
+rename it to `.json`. Android rejects a configuration-only profile because it
+does not contain the encrypted rclone configuration required to connect.
+
+## Environment and command-line integration
+
+Linux honors `XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, `XDG_DATA_HOME`, and
+`XDG_STATE_HOME`. The desktop also reads normal platform variables for display,
+session, notification, credential-store, and desktop integration behavior.
+Build-time secrets and signing keys are intentionally not application
+configuration; see [Release process](RELEASES.md).
+
+For operational changes, backup and recovery, see [Operations](OPERATIONS.md).
