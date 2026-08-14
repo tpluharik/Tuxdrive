@@ -4,6 +4,12 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+## 0.26.8 — circular penguin visual identity
+
+- Replaced the product logo and application icon with the circular black-and-white penguin identity, retaining red only for the bow tie.
+- Propagated the new identity through Linux, Windows, macOS and Android application surfaces, installers, status icons and repository documentation.
+- Preserved application behavior, configuration compatibility, security controls and update trust roots.
+
 ## 0.26.7 — Linux profile credential-store repair
 
 - Fixed credential-enabled profile backup, restore, and desktop-to-Android QR export on Linux packages by using the packaged GNOME Secret Service integration directly instead of an undeclared Python module.

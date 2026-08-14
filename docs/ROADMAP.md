@@ -7,7 +7,14 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.7
+## Current baseline: 0.26.8
+
+### Completed in 0.26.8
+
+Version 0.26.8 propagates the circular black-and-white penguin identity across
+Linux, Windows, macOS and Android, with red reserved for the bow tie. The
+visual-only change leaves configuration compatibility, application behavior,
+security controls and update trust roots unchanged.
 
 ### Completed in 0.26.7
 

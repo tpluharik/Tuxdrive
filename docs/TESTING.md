@@ -98,9 +98,9 @@ Android JVM coverage is kept beside the mobile source: `MobileValidationTest` co
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.26.7_all.deb
-dpkg-deb --contents dist/tuxindrive_0.26.7_all.deb
-sha256sum dist/tuxindrive_0.26.7_all.deb
+dpkg-deb --info dist/tuxindrive_0.26.8_all.deb
+dpkg-deb --contents dist/tuxindrive_0.26.8_all.deb
+sha256sum dist/tuxindrive_0.26.8_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -115,8 +115,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.26.7 \
-  --package dist/tuxindrive_0.26.7_all.deb \
+python3 scripts/sign-update.py --version 0.26.8 \
+  --package dist/tuxindrive_0.26.8_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```
