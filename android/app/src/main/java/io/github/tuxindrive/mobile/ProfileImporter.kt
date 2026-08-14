@@ -41,7 +41,7 @@ class ProfileImporter(private val context: Context) {
         require(password.length >= minimumPasswordLength) {
             "Enter the profile backup password (at least $minimumPasswordLength characters)"
         }
-        require(n == if (version == 1) 32768 else 131072 && r == 8 && p == 1) {
+        require(n == (if (version == 1) 32768 else 131072) && r == 8 && p == 1) {
             "Unsupported profile key-derivation settings"
         }
         val aad = "{" + listOf(
