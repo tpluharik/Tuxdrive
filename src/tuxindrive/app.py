@@ -80,6 +80,7 @@ from .nautilus_support import (
 )
 from .themes import THEMES, css_for_theme, normalize_theme, theme_by_key
 from .network_usage import NetworkUsageMeter, format_bytes
+from .bandwidth import GlobalBandwidthController, normalize_bandwidth_limit
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -1270,7 +1271,9 @@ class IntegrityDialog(Gtk.Dialog):
         self.connect("response", self._response)
         self.show_all()
         account = next((item for item in controller.config.accounts if item.remote == job.account_remote), None)
-        auditor = IntegrityAuditor(controller.engine.rclone_path, controller.engine.recovery)
+        auditor = IntegrityAuditor(
+            controller.engine.rclone_path, controller.engine.recovery, controller.bandwidth
+        )
         _run_thread(auditor.audit, self._loaded, job, bool(account and account.provider is Provider.VAULT))
 
     def _loaded(self, issues: list[AuditIssue] | None, error: Exception | None) -> bool:
@@ -1298,7 +1301,11 @@ class IntegrityDialog(Gtk.Dialog):
         confirm.destroy()
         if not accepted:
             return
-        auditor = IntegrityAuditor(self.controller.engine.rclone_path, self.controller.engine.recovery)
+        auditor = IntegrityAuditor(
+            self.controller.engine.rclone_path,
+            self.controller.engine.recovery,
+            self.controller.bandwidth,
+        )
         _run_thread(auditor.repair, self._repaired, self.job, issues, winner)
 
     def _repaired(self, count: int | None, error: Exception | None) -> bool:
@@ -2444,7 +2451,14 @@ class ProfileDialog(Gtk.Dialog):
         if action == "restore":
             self.controller.config = result[2]
             self.controller.rclone = RcloneClient(self.controller.config.settings.rclone_path)
-            self.controller.engine = SyncEngine(self.controller.config.settings.rclone_path)
+            self.controller.bandwidth.configure(
+                self.controller.config.settings.global_bandwidth_limit
+            )
+            self.controller.engine = SyncEngine(
+                self.controller.config.settings.rclone_path,
+                proton=self.controller.proton,
+                bandwidth=self.controller.bandwidth,
+            )
             self.controller.engine.configure_streaming_refresh(
                 self.controller.config.settings.streaming_refresh_mode
             )
@@ -3723,6 +3737,11 @@ class MainWindow(Gtk.ApplicationWindow):
         policy.set_active_id(self.controller.config.settings.network_policy)
         metered = Gtk.CheckButton(label="Allow synchronization on metered networks")
         metered.set_active(self.controller.config.settings.allow_metered_networks)
+        global_bandwidth = Gtk.Entry()
+        global_bandwidth.set_placeholder_text("Global bandwidth, e.g. 10M or 2M:10M")
+        global_bandwidth.set_text(
+            self.controller.config.settings.global_bandwidth_limit
+        )
         battery = Gtk.SpinButton.new_with_range(0, 100, 5)
         battery.set_value(self.controller.config.settings.pause_below_battery_percent)
         battery.set_tooltip_text("0 disables battery pausing")
@@ -3750,7 +3769,7 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, global_bandwidth, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
@@ -3772,6 +3791,14 @@ class MainWindow(Gtk.ApplicationWindow):
                     Gtk.MessageType.ERROR,
                 )
                 return
+            try:
+                bandwidth_value = normalize_bandwidth_limit(
+                    global_bandwidth.get_text()
+                )
+            except ValueError as exc:
+                dialog.destroy()
+                self.message(str(exc), Gtk.MessageType.ERROR)
+                return
             self.controller.config.settings.launch_at_login = launch.get_active()
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
@@ -3782,6 +3809,8 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.visual_theme = selected_theme
             self.controller.config.settings.network_policy = policy.get_active_id() or "maximum"
             self.controller.config.settings.allow_metered_networks = metered.get_active()
+            self.controller.config.settings.global_bandwidth_limit = bandwidth_value
+            self.controller.bandwidth.configure(bandwidth_value)
             self.controller.config.settings.pause_below_battery_percent = battery.get_value_as_int()
             self.controller.config.settings.streaming_cache_max_gib = cache_max.get_value_as_int()
             self.controller.config.settings.streaming_cache_min_free_gib = cache_free.get_value_as_int()
@@ -4102,20 +4131,27 @@ class TuxInDriveApplication(Gtk.Application):
             ("online-only-path", "Release a streaming item's cached content"),
         ):
             self.add_main_option(name, 0, GLib.OptionFlags.NONE, GLib.OptionArg.STRING, description, "PATH")
-        self.updater = UpdateManager(__version__)
         self.background = background
         self.store = ConfigStore()
         try:
             self.config = self.store.load()
         except RuntimeError:
             self.config = AppConfig()
+        self.bandwidth = GlobalBandwidthController(
+            self.config.settings.global_bandwidth_limit
+        )
+        self.updater = UpdateManager(__version__, bandwidth=self.bandwidth)
         set_language(self.config.settings.language)
         self.rclone = RcloneClient(self.config.settings.rclone_path)
         self.proton = ProtonDriveClient(self.config.settings.proton_drive_path)
         self.cloud_browser = CloudBrowserClient(
             self.rclone, self.proton, lambda: self.config.accounts
         )
-        self.engine = SyncEngine(self.config.settings.rclone_path, proton=self.proton)
+        self.engine = SyncEngine(
+            self.config.settings.rclone_path,
+            proton=self.proton,
+            bandwidth=self.bandwidth,
+        )
         self.engine.configure_streaming_refresh(
             self.config.settings.streaming_refresh_mode
         )

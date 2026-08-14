@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+from tuxindrive.bandwidth import GlobalBandwidthController
 from tuxindrive.engine import JobResult, SyncEngine
 from tuxindrive.callbacks import FileChange, FileState, changes_between, is_transient_path, normalize_remote_modtime
 from tuxindrive.models import (
@@ -254,6 +255,46 @@ class SyncEngineCommandTests(unittest.TestCase):
         streaming = self.engine.mount_command(job)
         for command in (full, incremental, streaming):
             self.assertEqual(command[command.index("--bwlimit") + 1], "5M")
+
+    def test_global_bandwidth_limit_caps_every_rclone_mode(self):
+        engine = SyncEngine(
+            "/usr/bin/rclone", bandwidth=GlobalBandwidthController("3M")
+        )
+        job = SyncJob("google", "/data/Drive", bandwidth_limit="5M")
+        commands = [
+            engine.command_for_job(job),
+            engine._incremental_command(job, FileChange("report.pdf", "local")),
+        ]
+        job.mode = SyncMode.VIRTUAL_DRIVE
+        commands.append(engine.mount_command(job))
+        for command in commands:
+            self.assertEqual(command[command.index("--bwlimit") + 1], "3M")
+
+    def test_incremental_job_is_reserved_before_waiting_for_network_slot(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            engine = SyncEngine(
+                "/usr/bin/rclone",
+                bandwidth=GlobalBandwidthController("1M", max_active=1),
+            )
+            job = SyncJob("google", temporary)
+            result: list[bool] = []
+            with patch.object(engine, "_apply_incremental_unlocked", return_value=True):
+                with engine.bandwidth.guard():
+                    worker = threading.Thread(
+                        target=lambda: result.append(
+                            engine._apply_incremental(job, [], MagicMock())
+                        )
+                    )
+                    worker.start()
+                    for _attempt in range(100):
+                        if job.id in engine.running_jobs:
+                            break
+                        time.sleep(0.001)
+                    self.assertIn(job.id, engine.running_jobs)
+                    self.assertFalse(engine.run_async(job, MagicMock()))
+                worker.join(timeout=1)
+            self.assertEqual(result, [True])
+            self.assertNotIn(job.id, engine.running_jobs)
 
     def test_full_jobs_use_conservative_connection_fanout(self):
         command = self.engine.command_for_job(

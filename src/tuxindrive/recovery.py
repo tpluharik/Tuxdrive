@@ -14,6 +14,7 @@ from .callbacks import FileChange
 from .config import data_root
 from .models import SyncJob
 from .security import confined_path, install_confined, unlink_confined, copy_from_confined
+from .bandwidth import GlobalBandwidthController
 
 
 class SafetyError(RuntimeError):
@@ -216,18 +217,26 @@ class MassChangeGuard:
 
 
 class IntegrityAuditor:
-    def __init__(self, rclone_path: str, recovery: RecoveryManager) -> None:
+    def __init__(
+        self,
+        rclone_path: str,
+        recovery: RecoveryManager,
+        bandwidth: GlobalBandwidthController | None = None,
+    ) -> None:
         self.rclone_path = rclone_path
         self.recovery = recovery
+        self.bandwidth = bandwidth or GlobalBandwidthController()
 
     def audit(self, job: SyncJob, download: bool = False) -> list[AuditIssue]:
         command = [
             self.rclone_path, "check", str(job.local), job.remote_spec,
-            "--combined", "-", "--checkers", "8",
+            "--combined", "-", "--checkers", "4",
+            *self.bandwidth.rclone_args(job.bandwidth_limit),
         ]
         if download:
             command.append("--download")
-        result = subprocess.run(command, capture_output=True, text=True, timeout=3600, check=False)
+        with self.bandwidth.guard():
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3600, check=False)
         if result.returncode not in (0, 1):
             raise SafetyError((result.stderr or result.stdout or "Integrity audit failed").strip()[-800:])
         issues = []
@@ -257,22 +266,22 @@ class IntegrityAuditor:
                     self.recovery.archive_local(job, relative, "replaced by integrity repair")
                     with tempfile.TemporaryDirectory(prefix="tuxindrive-repair-") as temporary:
                         staged = Path(temporary) / "incoming"
-                        self._run([self.rclone_path, "copyto", remote, str(staged)])
+                        self._run([self.rclone_path, "copyto", remote, str(staged), *self.bandwidth.rclone_args(job.bandwidth_limit)])
                         install_confined(staged, job.local, relative)
             else:
                 if issue.symbol == "-":
                     # Retain a local recovery copy before removing the remote-only file.
                     backup = self.recovery.root / job.id / "remote-repair" / relative
                     backup.parent.mkdir(parents=True, exist_ok=True)
-                    self._run([self.rclone_path, "copyto", remote, str(backup)])
-                    self._run([self.rclone_path, "deletefile", remote])
+                    self._run([self.rclone_path, "copyto", remote, str(backup), *self.bandwidth.rclone_args(job.bandwidth_limit)])
+                    self._run([self.rclone_path, "deletefile", remote, *self.bandwidth.rclone_args(job.bandwidth_limit)])
                 else:
-                    self._run([self.rclone_path, "copyto", str(local), remote])
+                    self._run([self.rclone_path, "copyto", str(local), remote, *self.bandwidth.rclone_args(job.bandwidth_limit)])
             repaired += 1
         return repaired
 
-    @staticmethod
-    def _run(command: list[str]) -> None:
-        result = subprocess.run(command, capture_output=True, text=True, timeout=3600, check=False)
+    def _run(self, command: list[str]) -> None:
+        with self.bandwidth.guard():
+            result = subprocess.run(command, capture_output=True, text=True, timeout=3600, check=False)
         if result.returncode:
             raise SafetyError((result.stderr or result.stdout or "Repair failed").strip()[-800:])

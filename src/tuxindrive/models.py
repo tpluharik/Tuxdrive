@@ -420,6 +420,7 @@ class AppSettings:
     language: str = "en"
     visual_theme: str = "nordic_glass"
     network_policy: str = "maximum"
+    global_bandwidth_limit: str = "10M"
     allow_metered_networks: bool = True
     pause_below_battery_percent: int = 0
     schedule_start: str = ""
@@ -434,11 +435,18 @@ class AppSettings:
 
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "AppSettings":
+        from .bandwidth import normalize_bandwidth_limit
         from .themes import normalize_theme
 
         allowed = set(cls.__dataclass_fields__)
         data = {key: item for key, item in value.items() if key in allowed}
         data["visual_theme"] = normalize_theme(data.get("visual_theme"))
+        try:
+            data["global_bandwidth_limit"] = normalize_bandwidth_limit(
+                data.get("global_bandwidth_limit", "10M")
+            )
+        except ValueError:
+            data["global_bandwidth_limit"] = "10M"
         for key, default in (
             ("streaming_cache_max_gib", 20),
             ("streaming_cache_min_free_gib", 5),

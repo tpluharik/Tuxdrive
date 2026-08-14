@@ -375,6 +375,7 @@ private fun SettingsScreen(
 ) {
     var wifiOnly by remember { mutableStateOf(repository.wifiOnly()) }
     var chargingOnly by remember { mutableStateOf(repository.chargingOnly()) }
+    var bandwidthLimit by remember { mutableStateOf(repository.bandwidthLimit()) }
     var engine by remember { mutableStateOf("Checking…") }
     var updateStatus by remember { mutableStateOf("TuxInDrive ${BuildConfig.VERSION_NAME}") }
     var updateBusy by remember { mutableStateOf(false) }
@@ -389,6 +390,17 @@ private fun SettingsScreen(
         SectionTitle("Mobile settings", "rclone $engine")
         SettingSwitch("Wi-Fi only", "Pause automatic transfers on metered mobile data", wifiOnly) { wifiOnly = it }
         SettingSwitch("Only while charging", "Defer background work until power is connected", chargingOnly) { chargingOnly = it }
+        OutlinedTextField(
+            value = bandwidthLimit,
+            onValueChange = { value ->
+                bandwidthLimit = value
+                repository.setBandwidthLimit(value)
+            },
+            label = { Text("Global bandwidth limit") },
+            supportingText = { Text("Combined safety target, for example 10M or 2M:10M") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
         SettingSwitch(
             "Show network usage",
             "Display current speed and daily device totals",

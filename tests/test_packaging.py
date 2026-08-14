@@ -289,6 +289,12 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("NetworkMeter(networkUsage)", android_ui)
         self.assertIn("downloadedToday", android_ui)
         self.assertIn("Show network usage", android_ui)
+        self.assertIn("Global bandwidth limit", android_ui)
+        android_core = Path(
+            "android/app/src/main/java/io/github/tuxindrive/mobile/RcloneCore.kt"
+        ).read_text(encoding="utf-8")
+        self.assertIn('rpc("core/bwlimit"', android_core)
+        self.assertIn("MobileNetworkController.exclusive", android_core)
         android_worker = Path(
             "android/app/src/main/java/io/github/tuxindrive/mobile/MobileSyncWorker.kt"
         ).read_text(encoding="utf-8")

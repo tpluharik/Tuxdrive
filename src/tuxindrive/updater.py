@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from .bandwidth import GlobalBandwidthController
 
 
 # 0.19.1 and later use a dedicated manifest so the legacy 0.18.1 channel can
@@ -84,12 +85,14 @@ class UpdateManager:
         public_key: str = UPDATE_PUBLIC_KEY,
         target_platform: str | None = None,
         manifest_url: str | None = None,
+        bandwidth: GlobalBandwidthController | None = None,
     ) -> None:
         self.current_version = current_version
         self.cache_dir = cache_dir or Path.home() / ".cache" / "tuxindrive" / "updates"
         self.public_key = public_key
         self.target_platform = target_platform or current_platform()
         self.manifest_url = manifest_url or MANIFEST_URLS[self.target_platform]
+        self.bandwidth = bandwidth or GlobalBandwidthController()
 
     @staticmethod
     def parse_manifest(
@@ -128,8 +131,11 @@ class UpdateManager:
 
     def check(self) -> UpdateRelease | None:
         request = urllib.request.Request(self.manifest_url, headers={"User-Agent": "TuxInDrive-Updater"})
-        with urllib.request.urlopen(request, timeout=20) as response:
-            release = self.parse_manifest(response.read(128 * 1024), self.public_key, self.target_platform)
+        with self.bandwidth.guard():
+            with urllib.request.urlopen(request, timeout=20) as response:
+                payload = response.read(128 * 1024)
+                self.bandwidth.throttle_download(len(payload))
+                release = self.parse_manifest(payload, self.public_key, self.target_platform)
         return release if version_key(release.version) > version_key(self.current_version) else None
 
     def download(
@@ -142,18 +148,20 @@ class UpdateManager:
         temporary = target.with_name(f"{target.name}.part")
         request = urllib.request.Request(release.url, headers={"User-Agent": "TuxInDrive-Updater"})
         digest = hashlib.sha256()
-        with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
-            total = int(response.headers.get("Content-Length", 0)) if hasattr(response, "headers") else 0
-            received = 0
-            while chunk := response.read(1024 * 1024):
-                digest.update(chunk)
-                output.write(chunk)
-                received += len(chunk)
-                if received > MAX_UPDATE_SIZE:
-                    temporary.unlink(missing_ok=True)
-                    raise ValueError("The update package exceeded its 1 GiB safety limit")
-                if progress:
-                    progress(received, total)
+        with self.bandwidth.guard(exclusive=True):
+            with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
+                total = int(response.headers.get("Content-Length", 0)) if hasattr(response, "headers") else 0
+                received = 0
+                while chunk := response.read(1024 * 1024):
+                    self.bandwidth.throttle_download(len(chunk))
+                    digest.update(chunk)
+                    output.write(chunk)
+                    received += len(chunk)
+                    if received > MAX_UPDATE_SIZE:
+                        temporary.unlink(missing_ok=True)
+                        raise ValueError("The update package exceeded its 1 GiB safety limit")
+                    if progress:
+                        progress(received, total)
         if digest.hexdigest() != release.sha256:
             temporary.unlink(missing_ok=True)
             raise ValueError("Downloaded package failed SHA-256 verification")

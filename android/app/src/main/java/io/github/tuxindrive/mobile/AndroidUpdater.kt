@@ -16,6 +16,8 @@ import java.util.Base64
 data class AndroidUpdate(val version: String, val url: String, val sha256: String, val notes: String)
 
 class AndroidUpdater(private val context: Context) {
+    private val preferences = context.getSharedPreferences("mobile-state", Context.MODE_PRIVATE)
+    private var nextDownloadNanos = 0L
     private val manifestUrl =
         "https://raw.githubusercontent.com/tpluharik/TuxInDrive/main/releases/android/latest-v2.json"
     private val publicKey = Base64.getDecoder().decode("3c0BtMjwCmlZR0nw2jdqsAQQm7nYyd68r8BtnK2XzyY=")
@@ -72,6 +74,7 @@ class AndroidUpdater(private val context: Context) {
                     while (true) {
                         val count = input.read(buffer)
                         if (count < 0) break
+                        throttle(count)
                         received += count
                         require(received <= maxPackageSize) { "The Android update exceeded the 1 GiB limit" }
                         digest.update(buffer, 0, count)
@@ -91,6 +94,40 @@ class AndroidUpdater(private val context: Context) {
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun throttle(byteCount: Int) {
+        val rate = downloadRateBytes(preferences.getString("global-bandwidth-limit", "10M").orEmpty())
+        if (rate <= 0.0 || byteCount <= 0) return
+        val now = System.nanoTime()
+        val scheduled = synchronized(this) {
+            val start = maxOf(now, nextDownloadNanos)
+            nextDownloadNanos = start + ((byteCount / rate) * 1_000_000_000L).toLong()
+            start
+        }
+        val delay = scheduled - now
+        if (delay > 0) {
+            val millis = delay / 1_000_000L
+            val nanos = (delay % 1_000_000L).toInt()
+            Thread.sleep(millis, nanos)
+        }
+    }
+
+    private fun downloadRateBytes(value: String): Double {
+        val part = value.trim().split(':').let { if (it.size == 2) it[1] else it[0] }
+        if (part.isBlank() || part.equals("off", ignoreCase = true)) return 0.0
+        val match = Regex("(\\d+(?:\\.\\d+)?)([BKMGTP]?)", RegexOption.IGNORE_CASE)
+            .matchEntire(part) ?: return 0.0
+        val scale = when (match.groupValues[2].uppercase()) {
+            "B" -> 1.0
+            "K" -> 1024.0
+            "M" -> 1024.0 * 1024.0
+            "G" -> 1024.0 * 1024.0 * 1024.0
+            "T" -> 1024.0 * 1024.0 * 1024.0 * 1024.0
+            "P" -> 1024.0 * 1024.0 * 1024.0 * 1024.0 * 1024.0
+            else -> 1024.0
+        }
+        return match.groupValues[1].toDouble() * scale
     }
 
     fun openInstaller(packageFile: File) {

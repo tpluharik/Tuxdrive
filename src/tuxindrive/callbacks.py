@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ctypes
+import contextlib
 import errno
 import fnmatch
 import json
@@ -16,7 +17,7 @@ import time
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Callable, ContextManager
 
 from .models import SyncJob, SyncMode
 
@@ -242,6 +243,9 @@ class ChangeMonitor:
         initial_remote_snapshot: dict[str, FileState] | None = None,
         event_factory: Callable[[Path, Callable[[str], bool]], InotifyTreeMonitor] = InotifyTreeMonitor,
         network_activity: Callable[[], None] | None = None,
+        network_guard: Callable[[], ContextManager] | None = None,
+        rclone_args: Callable[[], list[str]] | None = None,
+        scan_jitter: Callable[[float], float] | None = None,
     ) -> None:
         self.job = job
         self.rclone_path = rclone_path
@@ -254,6 +258,9 @@ class ChangeMonitor:
         self.initial_remote_snapshot = initial_remote_snapshot
         self.event_factory = event_factory
         self.network_activity = network_activity or (lambda: None)
+        self.network_guard = network_guard or contextlib.nullcontext
+        self.rclone_args = rclone_args or (lambda: [])
+        self.scan_jitter = scan_jitter or (lambda _base: 0.0)
         self.stop_event = threading.Event()
         self.last_remote_success = 0.0
         self.thread = threading.Thread(
@@ -318,11 +325,12 @@ class ChangeMonitor:
 
     def remote_snapshot(self) -> dict[str, FileState]:
         self.network_activity()
-        process = subprocess.run(
-            [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
-             "--files-only", "--no-mimetype"],
-            check=False, capture_output=True, text=True, timeout=120,
-        )
+        with self.network_guard():
+            process = subprocess.run(
+                [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
+                 "--files-only", "--no-mimetype", *self.rclone_args()],
+                check=False, capture_output=True, text=True, timeout=120,
+            )
         if process.returncode:
             raise RuntimeError(process.stderr.strip() or "Cloud change scan failed")
         values = json.loads(process.stdout or "[]")
@@ -349,10 +357,12 @@ class ChangeMonitor:
             raise ValueError("Unsafe targeted cloud path")
         remote = f"{self.job.remote_spec.rstrip('/')}/{safe}"
         self.network_activity()
-        process = subprocess.run(
-            [self.rclone_path(), "lsjson", remote, "--stat", "--no-mimetype"],
-            check=False, capture_output=True, text=True, timeout=30,
-        )
+        with self.network_guard():
+            process = subprocess.run(
+                [self.rclone_path(), "lsjson", remote, "--stat", "--no-mimetype",
+                 *self.rclone_args()],
+                check=False, capture_output=True, text=True, timeout=30,
+            )
         if process.returncode:
             raise RuntimeError(process.stderr.strip() or "Targeted cloud check failed")
         value = json.loads(process.stdout or "{}")
@@ -378,11 +388,13 @@ class ChangeMonitor:
                 for item in safe:
                     manifest.write(item + "\n")
             self.network_activity()
-            process = subprocess.run(
-                [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
-                 "--files-only", "--no-mimetype", "--files-from-raw", manifest_name],
-                check=False, capture_output=True, text=True, timeout=60,
-            )
+            with self.network_guard():
+                process = subprocess.run(
+                    [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
+                     "--files-only", "--no-mimetype", "--files-from-raw", manifest_name,
+                     *self.rclone_args()],
+                    check=False, capture_output=True, text=True, timeout=60,
+                )
             if process.returncode:
                 raise RuntimeError(process.stderr.strip() or "Targeted cloud check failed")
             values = json.loads(process.stdout or "[]")
@@ -418,6 +430,12 @@ class ChangeMonitor:
             self.initial_remote_snapshot = None
         else:
             try:
+                initial_delay = (
+                    self.remote_backoff[0]
+                    if self.remote_backoff else self.remote_poll_seconds
+                )
+                if self.stop_event.wait(self.scan_jitter(initial_delay)):
+                    return
                 remote = self.remote_snapshot()
                 remote_known = True
                 self.last_remote_success = time.monotonic()
@@ -435,7 +453,8 @@ class ChangeMonitor:
         last_local_scan = time.monotonic()
         last_remote_scan = time.monotonic()
         backoff_index = 0
-        remote_delay = self.remote_backoff[0] if self.remote_backoff else self.remote_poll_seconds
+        base_delay = self.remote_backoff[0] if self.remote_backoff else self.remote_poll_seconds
+        remote_delay = base_delay + self.scan_jitter(base_delay)
         recovery_due: float | None = None
         try:
             while not self.stop_event.is_set():
@@ -537,7 +556,8 @@ class ChangeMonitor:
                 baseline_uncertain = not remote_known
                 if not remote_known:
                     remote, remote_known = new_remote, True
-                    remote_delay = self.remote_backoff[0] if self.remote_backoff else self.remote_poll_seconds
+                    base_delay = self.remote_backoff[0] if self.remote_backoff else self.remote_poll_seconds
+                    remote_delay = base_delay + self.scan_jitter(base_delay)
                 remote_changes = [] if baseline_uncertain else changes_between(remote, new_remote, "remote")
                 if deferred_remote:
                     merged_remote = dict(deferred_remote)
@@ -611,7 +631,8 @@ class ChangeMonitor:
                 else:
                     backoff_index = min(backoff_index + 1, len(self.remote_backoff) - 1)
                 if self.remote_backoff:
-                    remote_delay = self.remote_backoff[backoff_index]
+                    base_delay = self.remote_backoff[backoff_index]
+                    remote_delay = base_delay + self.scan_jitter(base_delay)
                 recovery_due = None if recovery_due is not None and time.monotonic() >= recovery_due else recovery_due
         finally:
             if events is not None:

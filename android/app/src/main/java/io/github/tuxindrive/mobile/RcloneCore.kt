@@ -6,6 +6,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import org.rclone.gomobile.Gomobile
 import java.io.File
+import java.util.concurrent.Semaphore
 
 data class CloudItem(
     val name: String,
@@ -15,6 +16,19 @@ data class CloudItem(
 )
 
 class RcloneException(message: String) : RuntimeException(message)
+
+object MobileNetworkController {
+    private val gate = Semaphore(1, true)
+
+    fun <T> exclusive(operation: () -> T): T {
+        gate.acquire()
+        return try {
+            operation()
+        } finally {
+            gate.release()
+        }
+    }
+}
 
 class RcloneCore(private val context: Context) {
     private val configuration = File(context.noBackupFilesDir, "rclone.conf")
@@ -37,6 +51,10 @@ class RcloneCore(private val context: Context) {
     }
 
     fun version(): String = rpc("core/version").optString("version", "rclone")
+
+    fun setBandwidthLimit(rate: String) {
+        rpc("core/bwlimit", JSONObject().put("rate", rate.ifBlank { "off" }))
+    }
 
     fun importConfiguration(uri: Uri) {
         replaceConfiguration(readConfiguration(uri, 2 * 1024 * 1024))
@@ -103,6 +121,10 @@ class RcloneCore(private val context: Context) {
     }
 
     fun bisync(local: File, remote: String, remotePath: String, workDirectory: File, firstRun: Boolean) {
+        setBandwidthLimit(
+            context.getSharedPreferences("mobile-state", Context.MODE_PRIVATE)
+                .getString("global-bandwidth-limit", "10M").orEmpty(),
+        )
         local.mkdirs()
         workDirectory.mkdirs()
         val destination = "${remote.removeSuffix(":")}:$remotePath"
@@ -143,16 +165,21 @@ class MobileRepository(context: Context) {
     private val preferences = appContext.getSharedPreferences("mobile-state", Context.MODE_PRIVATE)
     private val updater = AndroidUpdater(appContext)
 
-    fun initialize() = core.initialize()
+    fun initialize() {
+        core.initialize()
+        core.setBandwidthLimit(bandwidthLimit())
+    }
     fun engineVersion() = core.version()
-    fun checkUpdate() = updater.check()
-    fun downloadUpdate(update: AndroidUpdate) = updater.download(update)
+    fun checkUpdate() = MobileNetworkController.exclusive { updater.check() }
+    fun downloadUpdate(update: AndroidUpdate) =
+        MobileNetworkController.exclusive { updater.download(update) }
     fun installUpdate(packageFile: File) = updater.openInstaller(packageFile)
     fun importConfiguration(uri: Uri) = core.importConfiguration(uri)
     fun importProfile(uri: Uri, password: String) = core.importProfile(uri, password)
     fun unlock(password: String) = core.unlock(password)
     fun remotes() = core.listRemotes()
-    fun files(remote: String, path: String = "") = core.list(remote, path)
+    fun files(remote: String, path: String = "") =
+        MobileNetworkController.exclusive { core.list(remote, path) }
     fun selectedTree(): String = preferences.getString("selected-tree", "").orEmpty()
 
     fun selectTree(uri: Uri) {
@@ -178,6 +205,21 @@ class MobileRepository(context: Context) {
     fun chargingOnly(): Boolean = preferences.getBoolean("charging-only", false)
     fun automaticSync(): Boolean = preferences.getBoolean("automatic-sync", false)
     fun showNetworkUsage(): Boolean = preferences.getBoolean("show-network-usage", true)
+    fun bandwidthLimit(): String = preferences.getString("global-bandwidth-limit", "10M").orEmpty()
+
+    fun setBandwidthLimit(value: String): Boolean {
+        val normalized = value.trim()
+        val valid = normalized.isBlank() || normalized.split(':').let { parts ->
+            parts.size <= 2 && parts.all { part ->
+                part.equals("off", ignoreCase = true) ||
+                    Regex("\\d+(?:\\.\\d+)?[BKMGTP]?", RegexOption.IGNORE_CASE).matches(part)
+            }
+        }
+        if (!valid) return false
+        preferences.edit().putString("global-bandwidth-limit", normalized).apply()
+        runCatching { core.setBandwidthLimit(normalized) }
+        return true
+    }
 
     fun setShowNetworkUsage(enabled: Boolean) {
         preferences.edit().putBoolean("show-network-usage", enabled).apply()
@@ -206,5 +248,7 @@ class MobileRepository(context: Context) {
         remotePath: String,
         workDirectory: File,
         firstRun: Boolean,
-    ) = core.bisync(local, remote, remotePath, workDirectory, firstRun)
+    ) = MobileNetworkController.exclusive {
+        core.bisync(local, remote, remotePath, workDirectory, firstRun)
+    }
 }

@@ -126,6 +126,13 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(config.settings.show_network_usage)
         self.assertFalse(config.to_dict()["settings"]["show_network_usage"])
 
+    def test_global_bandwidth_limit_defaults_safely_and_is_validated(self):
+        self.assertEqual(AppConfig.from_dict({}).settings.global_bandwidth_limit, "10M")
+        configured = AppConfig.from_dict({"settings": {"global_bandwidth_limit": "2M:8M"}})
+        self.assertEqual(configured.settings.global_bandwidth_limit, "2M:8M")
+        invalid = AppConfig.from_dict({"settings": {"global_bandwidth_limit": "fast"}})
+        self.assertEqual(invalid.settings.global_bandwidth_limit, "10M")
+
     def test_streaming_refresh_mode_is_validated(self):
         self.assertEqual(AppConfig.from_dict({}).settings.streaming_refresh_mode, "realtime")
         config = AppConfig.from_dict({"settings": {"streaming_refresh_mode": "balanced"}})

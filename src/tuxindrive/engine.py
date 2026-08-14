@@ -36,6 +36,7 @@ from .cache_manager import CacheCleanupResult, StreamingCacheManager
 from .proton import ProtonDriveClient, ProtonDriveError
 from .process_control import new_process_group, terminate_process
 from .file_permissions import private_descriptor
+from .bandwidth import GlobalBandwidthController
 
 
 @dataclass(slots=True)
@@ -68,13 +69,17 @@ class SyncEngine:
         self,
         rclone_path: str = "rclone",
         proton: ProtonDriveClient | None = None,
+        bandwidth: GlobalBandwidthController | None = None,
     ) -> None:
         self.rclone_path = rclone_path
         self._processes: dict[str, subprocess.Popen[str]] = {}
         self._active_jobs: set[str] = set()
         self._waiting_jobs: set[str] = set()
+        self._incremental_jobs: set[str] = set()
         self._cancelled_queued_jobs: set[str] = set()
-        self._transfer_slots = threading.BoundedSemaphore(self._MAX_ACTIVE_TRANSFERS)
+        self.bandwidth = bandwidth or GlobalBandwidthController(
+            max_active=self._MAX_ACTIVE_TRANSFERS
+        )
         self._mounts: dict[str, subprocess.Popen[str]] = {}
         self._mount_paths: dict[str, Path] = {}
         self._monitors: dict[str, ChangeMonitor] = {}
@@ -94,6 +99,9 @@ class SyncEngine:
         self._cache_watchers: dict[str, InotifyTreeMonitor] = {}
         self._cache_cleanup_state: dict[str, tuple[int, int, bool, int]] = {}
         self.proton = proton or ProtonDriveClient()
+
+    def configure_global_bandwidth(self, limit: str) -> None:
+        self.bandwidth.configure(limit)
 
     def configure_streaming_refresh(self, mode: str) -> None:
         self._streaming_refresh_mode = (
@@ -135,7 +143,7 @@ class SyncEngine:
     @property
     def running_jobs(self) -> set[str]:
         with self._lock:
-            return set(self._active_jobs) | set(self._processes)
+            return set(self._active_jobs) | set(self._incremental_jobs) | set(self._processes)
 
     @property
     def mounted_jobs(self) -> set[str]:
@@ -308,8 +316,7 @@ class SyncEngine:
         ]):
             if pattern.strip():
                 common.extend(["--exclude", pattern.strip()])
-        if job.bandwidth_limit.strip():
-            common.extend(["--bwlimit", job.bandwidth_limit.strip()])
+        common.extend(self.bandwidth.rclone_args(job.bandwidth_limit))
         if dry_run:
             common.append("--dry-run")
 
@@ -415,7 +422,8 @@ class SyncEngine:
             self._record_network(job.id)
             process = subprocess.run(
                 [self.rclone_path, "lsjson", job.remote_spec, "--recursive",
-                 "--files-only", "--no-mimetype"],
+                 "--files-only", "--no-mimetype",
+                 *self.bandwidth.rclone_args(job.bandwidth_limit)],
                 check=False, capture_output=True, text=True, timeout=180,
             )
             if process.returncode:
@@ -479,8 +487,7 @@ class SyncEngine:
             "022",
             "--vfs-fast-fingerprint",
         ]
-        if job.bandwidth_limit.strip():
-            command.extend(["--bwlimit", job.bandwidth_limit.strip()])
+        command.extend(self.bandwidth.rclone_args(job.bandwidth_limit))
         # Keep one stable VFS policy for the lifetime of the mount. Switching
         # policy on the first/last pin required a FUSE remount; Nautilus then
         # held a directory view from the detached mount, lost its TuxInDrive
@@ -959,10 +966,7 @@ class SyncEngine:
             except (OSError, ValueError):
                 return False
             instruction.update({"signer": signer, "signature": signature})
-            traffic_args = (
-                ["--bwlimit", job.bandwidth_limit.strip()]
-                if job.bandwidth_limit.strip() else []
-            )
+            traffic_args = self.bandwidth.rclone_args(job.bandwidth_limit)
             if changed:
                 first = subprocess.run(
                     [self.rclone_path, "copy", str(blocks), f"{remote_root}/blocks", *traffic_args],
@@ -1014,7 +1018,11 @@ class SyncEngine:
             return result.success
         job.local.mkdir(parents=True, exist_ok=True)
         with self._lock:
-            if job.id in self._active_jobs or job.id in self._processes:
+            if (
+                job.id in self._active_jobs
+                or job.id in self._incremental_jobs
+                or job.id in self._processes
+            ):
                 return False
             self._active_jobs.add(job.id)
             self._waiting_jobs.add(job.id)
@@ -1038,7 +1046,10 @@ class SyncEngine:
     ) -> None:
         """Run at most a small number of provider transfers concurrently."""
         try:
-            with self._transfer_slots:
+            exclusive = self.bandwidth.enabled and (
+                job.is_git or self._job_backends.get(job.id) == "proton_cli"
+            )
+            with self.bandwidth.guard(exclusive=exclusive):
                 with self._lock:
                     self._waiting_jobs.discard(job.id)
                     cancelled = job.id in self._cancelled_queued_jobs
@@ -1361,6 +1372,9 @@ class SyncEngine:
             ),
             initial_remote_snapshot=self._callback_baselines.pop(job.id, None),
             network_activity=lambda: self._record_network(job.id),
+            network_guard=self.bandwidth.guard,
+            rclone_args=lambda: self.bandwidth.rclone_args(job.bandwidth_limit),
+            scan_jitter=self.bandwidth.scan_jitter,
         )
         self._monitors[job.id] = monitor
         monitor.start()
@@ -1389,14 +1403,12 @@ class SyncEngine:
                 command = [self.rclone_path, "deletefile", remote]
             else:
                 command = [self.rclone_path, "copyto", local, remote]
-            if job.bandwidth_limit.strip():
-                command.extend(["--bwlimit", job.bandwidth_limit.strip()])
+            command.extend(self.bandwidth.rclone_args(job.bandwidth_limit))
             return command
         if change.deleted:
             return None
         command = [self.rclone_path, "copyto", remote, local]
-        if job.bandwidth_limit.strip():
-            command.extend(["--bwlimit", job.bandwidth_limit.strip()])
+        command.extend(self.bandwidth.rclone_args(job.bandwidth_limit))
         return command
 
     def _apply_incremental(
@@ -1406,10 +1418,19 @@ class SyncEngine:
         callback: Callable[[JobResult], None],
     ) -> bool:
         with self._lock:
-            if job.id in self._processes or job.id in self._active_jobs:
+            if (
+                job.id in self._processes
+                or job.id in self._active_jobs
+                or job.id in self._incremental_jobs
+            ):
                 return False
-        with self._transfer_slots:
-            return self._apply_incremental_unlocked(job, changes, callback)
+            self._incremental_jobs.add(job.id)
+        try:
+            with self.bandwidth.guard():
+                return self._apply_incremental_unlocked(job, changes, callback)
+        finally:
+            with self._lock:
+                self._incremental_jobs.discard(job.id)
 
     def _apply_incremental_unlocked(
         self,
@@ -1590,8 +1611,7 @@ class SyncEngine:
                         process = subprocess.Popen(
                             command + ["--files-from-raw", manifest_name, "--no-traverse",
                                        "--stats", "1s", "--stats-one-line"]
-                            + (["--bwlimit", job.bandwidth_limit.strip()]
-                               if job.bandwidth_limit.strip() else []),
+                            + self.bandwidth.rclone_args(job.bandwidth_limit),
                             stdout=log, stderr=subprocess.STDOUT, text=True,
                             **new_process_group(),
                         )
