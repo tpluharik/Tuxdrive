@@ -2445,6 +2445,9 @@ class ProfileDialog(Gtk.Dialog):
             self.controller.config = result[2]
             self.controller.rclone = RcloneClient(self.controller.config.settings.rclone_path)
             self.controller.engine = SyncEngine(self.controller.config.settings.rclone_path)
+            self.controller.engine.configure_streaming_refresh(
+                self.controller.config.settings.streaming_refresh_mode
+            )
             self.controller.profiles = ProfileManager(self.controller.store, self.controller.rclone)
             self.controller.save()
             if self.controller.window:
@@ -3729,6 +3732,13 @@ class MainWindow(Gtk.ApplicationWindow):
         cache_free = Gtk.SpinButton.new_with_range(1, 1024, 1)
         cache_free.set_value(self.controller.config.settings.streaming_cache_min_free_gib)
         cache_free.set_tooltip_text("Minimum free disk space retained by cache cleanup (GiB)")
+        streaming_refresh = Gtk.ComboBoxText()
+        streaming_refresh.append("realtime", "Streaming refresh: Realtime (30 seconds)")
+        streaming_refresh.append("balanced", "Streaming refresh: Balanced (2 minutes)")
+        streaming_refresh.append("low_traffic", "Streaming refresh: Low traffic (5 minutes)")
+        streaming_refresh.set_active_id(
+            self.controller.config.settings.streaming_refresh_mode
+        )
         cache_row = Gtk.Grid(column_spacing=12, row_spacing=6)
         cache_row.attach(Gtk.Label(label="Streaming cache maximum (GiB)", xalign=0), 0, 0, 1, 1)
         cache_row.attach(cache_max, 1, 0, 1, 1)
@@ -3740,7 +3750,7 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, battery, cache_row, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
@@ -3775,6 +3785,12 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.pause_below_battery_percent = battery.get_value_as_int()
             self.controller.config.settings.streaming_cache_max_gib = cache_max.get_value_as_int()
             self.controller.config.settings.streaming_cache_min_free_gib = cache_free.get_value_as_int()
+            self.controller.config.settings.streaming_refresh_mode = (
+                streaming_refresh.get_active_id() or "realtime"
+            )
+            self.controller.engine.configure_streaming_refresh(
+                self.controller.config.settings.streaming_refresh_mode
+            )
             self.controller.config.settings.schedule_start = start_value
             self.controller.config.settings.schedule_end = end_value
             self.controller.save()
@@ -4100,6 +4116,9 @@ class TuxInDriveApplication(Gtk.Application):
             self.rclone, self.proton, lambda: self.config.accounts
         )
         self.engine = SyncEngine(self.config.settings.rclone_path, proton=self.proton)
+        self.engine.configure_streaming_refresh(
+            self.config.settings.streaming_refresh_mode
+        )
         self.audit = AuditTimeline()
         self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
         self.profiles = ProfileManager(self.store, self.rclone)
@@ -4114,6 +4133,7 @@ class TuxInDriveApplication(Gtk.Application):
         self._offline_verified_paths: dict[str, set[str]] = {}
         self._nautilus_active_jobs: set[str] = set()
         self._last_started: dict[str, datetime] = {}
+        self._last_full_completed: dict[str, datetime] = {}
         self._mount_failures: dict[str, list[datetime]] = {}
         self._css_provider: Gtk.CssProvider | None = None
         self._last_nautilus_state: bytes | None = None
@@ -4698,6 +4718,8 @@ class TuxInDriveApplication(Gtk.Application):
             job.last_error = job.last_status
         if result.success and job.mode is not SyncMode.VIRTUAL_DRIVE:
             job.initialized = True
+        if result.success and not result.incremental and job.mode is not SyncMode.VIRTUAL_DRIVE:
+            self._last_full_completed[job.id] = now
         if job.mode is SyncMode.VIRTUAL_DRIVE and (result.success or result.mount_lost):
             # Every new mount must prove its persistent cache again.  A lost
             # mount must never leave stale green per-item badges behind.
@@ -4705,6 +4727,9 @@ class TuxInDriveApplication(Gtk.Application):
         self._set_tray_state("ready" if result.success else "error", result.message)
         LOGGER.info("Job %s finished: success=%s message=%s", job.id, result.success, result.message)
         account = next((item for item in self.config.accounts if item.remote == job.account_remote), None)
+        result.network_sessions, result.payload_bytes = self.engine.finalize_traffic(
+            job.id, result.log_path
+        )
         self.audit.record(
             "peer" if job.peer_delta else "sync",
             "incremental transfer" if result.incremental else "synchronization",
@@ -4712,7 +4737,10 @@ class TuxInDriveApplication(Gtk.Application):
             job_id=job.id,
             peer=account.display_name if account and account.provider is Provider.PEER else "",
             path=job.remote_path,
-            detail=result.message,
+            detail=(
+                f"{result.message}; provider sessions since start="
+                f"{result.network_sessions}; recorded payload={result.payload_bytes} bytes"
+            ),
         )
         if result.success and job.one_time_drop_id:
             job.enabled = False
@@ -4814,13 +4842,14 @@ class TuxInDriveApplication(Gtk.Application):
         for job in self.config.jobs:
             if not job.enabled or job.mode is SyncMode.VIRTUAL_DRIVE or job.id in self.engine.running_jobs:
                 continue
-            baseline = self._last_started.get(job.id)
-            if baseline is None and job.last_run:
-                try:
-                    baseline = datetime.fromisoformat(job.last_run)
-                except ValueError:
-                    baseline = None
-            if baseline is None or (now - baseline).total_seconds() >= job.interval_minutes * 60:
+            baseline = self._last_full_completed.get(job.id) or self._last_started.get(job.id)
+            due = baseline is None or (now - baseline).total_seconds() >= job.interval_minutes * 60
+            # A healthy callback already preserves the configured remote scan
+            # latency. Keep full bisync as an hourly safety checkpoint instead
+            # of duplicating the same recursive provider traversal every tick.
+            if due and self.engine.callback_healthy(job.id) and baseline is not None:
+                due = (now - baseline).total_seconds() >= 3600
+            if due:
                 if policy_decision is None:
                     policy_decision = TransferPolicy(self.config.settings).evaluate()
                 self.run_job(job, quiet=True, decision=policy_decision)

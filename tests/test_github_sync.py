@@ -84,6 +84,7 @@ class GitHubSyncTests(unittest.TestCase):
             with patch("tuxindrive.engine.shutil.which", return_value="/usr/bin/git"), \
                  patch.object(engine, "_git_output", side_effect=[
                      "https://github.com/owner/new-name.git", "main",
+                     "bbbb refs/heads/main", "aaaa",
                  ]), \
                  patch("tuxindrive.engine.repositories_match", return_value=True), \
                  patch.object(engine, "_git_dirty", return_value=False), \

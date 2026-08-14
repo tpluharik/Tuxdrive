@@ -123,6 +123,7 @@ class ProtonDriveClient:
         self._login_process: subprocess.Popen[str] | None = None
         self._cancelled_jobs: set[str] = set()
         self._install_cancel = threading.Event()
+        self._tree_cache: dict[str, dict[str, ProtonNode]] = {}
 
     @staticmethod
     def managed_path() -> Path:
@@ -369,15 +370,22 @@ class ProtonDriveClient:
         nodes = self._list(proton_path(remote_path))
         return sorted(item.name for item in nodes if item.is_dir)
 
-    def remote_snapshot(self, remote_path: str = "", *, job_id: str = "") -> dict[str, str]:
+    def remote_snapshot(
+        self, remote_path: str = "", *, job_id: str = "", force: bool = False
+    ) -> dict[str, str]:
         return {
             relative: node.fingerprint
-            for relative, node in self.remote_tree(remote_path, job_id=job_id).items()
+            for relative, node in self.remote_tree(
+                remote_path, job_id=job_id, force=force
+            ).items()
         }
 
-    def remote_tree(self, remote_path: str = "", *, job_id: str = "") -> dict[str, ProtonNode]:
+    def remote_tree(
+        self, remote_path: str = "", *, job_id: str = "", force: bool = False
+    ) -> dict[str, ProtonNode]:
         root = proton_path(remote_path)
         tree: dict[str, ProtonNode] = {}
+        cached = self._tree_cache.get(job_id, {}) if job_id and not force else {}
         pending: list[tuple[str, str]] = [(root, "")]
         while pending:
             parent, relative_parent = pending.pop()
@@ -385,7 +393,17 @@ class ProtonDriveClient:
                 relative = f"{relative_parent}/{node.name}".strip("/")
                 tree[relative] = node
                 if node.is_dir:
-                    pending.append((node.path, relative))
+                    prior = cached.get(relative)
+                    if prior is not None and prior.fingerprint == node.fingerprint:
+                        prefix = relative + "/"
+                        tree.update({
+                            path: item for path, item in cached.items()
+                            if path.startswith(prefix)
+                        })
+                    else:
+                        pending.append((node.path, relative))
+        if job_id:
+            self._tree_cache[job_id] = dict(tree)
         return tree
 
     def sync(
@@ -437,7 +455,7 @@ class ProtonDriveClient:
         after_remote = (
             before_remote
             if not upload_plan and not download_plan
-            else self.remote_snapshot(job.remote_path, job_id=job.id)
+            else self.remote_snapshot(job.remote_path, job_id=job.id, force=True)
         )
         self._save_state(job.id, {"local": after_local, "remote": after_remote})
         return ProtonSyncResult(uploaded, downloaded, len(after_remote), len(after_local))

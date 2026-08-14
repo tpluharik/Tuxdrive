@@ -428,6 +428,7 @@ class AppSettings:
     profile_last_backup: str = ""
     streaming_cache_max_gib: int = 20
     streaming_cache_min_free_gib: int = 5
+    streaming_refresh_mode: str = "realtime"
     show_network_usage: bool = True
     config_version: int = 1
 
@@ -446,6 +447,8 @@ class AppSettings:
                 data[key] = min(1024, max(1, int(data.get(key, default))))
             except (TypeError, ValueError):
                 data[key] = default
+        if data.get("streaming_refresh_mode") not in {"realtime", "balanced", "low_traffic"}:
+            data["streaming_refresh_mode"] = "realtime"
         return cls(**data)
 
 

@@ -260,6 +260,15 @@ class ProtonClientTests(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual(remote_tree.call_count, 1)
 
+    def test_remote_tree_reuses_unchanged_directory_subtree(self):
+        folder = ProtonNode("folder", "/my-files/folder", True, "d:0:rev:1")
+        child = ProtonNode("file.txt", "/my-files/folder/file.txt", False, "f:1:rev:2")
+        with patch.object(self.client, "_list", side_effect=[[folder], [child], [folder]]) as listing:
+            first = self.client.remote_tree(job_id="job")
+            second = self.client.remote_tree(job_id="job")
+        self.assertEqual(first, second)
+        self.assertEqual(listing.call_count, 3)
+
     def test_nested_exclusions_are_not_uploaded(self):
         with tempfile.TemporaryDirectory() as temporary:
             local = Path(temporary) / "local"

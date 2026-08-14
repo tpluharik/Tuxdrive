@@ -23,7 +23,7 @@ from typing import Callable
 
 from . import __version__
 from .bootstrap import install_rclone, resolve_rclone
-from .callbacks import ChangeMonitor, FileChange, FileState, InotifyTreeMonitor, TRANSIENT_PATTERNS, is_transient_path, normalize_remote_modtime
+from .callbacks import ChangeMonitor, FileChange, FileState, InotifyTreeMonitor, TRANSIENT_PATTERNS, is_transient_path, normalize_remote_modtime, normalize_remote_path
 from .config import cache_root, config_root, data_root
 from .models import Account, ConflictPolicy, PeerRole, Provider, SyncJob, SyncMode
 from .recovery import MassChangeGuard, RecoveryManager
@@ -51,6 +51,8 @@ class JobResult:
     mount_lost: bool = False
     mass_change_blocked: bool = False
     lease_blocked: bool = False
+    network_sessions: int = 0
+    payload_bytes: int = 0
 
 
 class SyncEngine:
@@ -82,9 +84,48 @@ class SyncEngine:
         self._remote_backoffs: dict[str, tuple[float, ...]] = {}
         self._job_backends: dict[str, str] = {}
         self._callback_baselines: dict[str, dict[str, FileState]] = {}
+        self._traffic_totals: dict[str, tuple[int, int]] = {}
+        self._streaming_refresh_mode = "realtime"
         self._cache_watchers: dict[str, InotifyTreeMonitor] = {}
         self._cache_cleanup_state: dict[str, tuple[int, int, bool, int]] = {}
         self.proton = proton or ProtonDriveClient()
+
+    def configure_streaming_refresh(self, mode: str) -> None:
+        self._streaming_refresh_mode = (
+            mode if mode in {"realtime", "balanced", "low_traffic"} else "realtime"
+        )
+
+    def _record_network(self, job_id: str, sessions: int = 1, payload_bytes: int = 0) -> None:
+        with self._lock:
+            previous_sessions, previous_bytes = self._traffic_totals.get(job_id, (0, 0))
+            self._traffic_totals[job_id] = (
+                previous_sessions + max(0, sessions),
+                previous_bytes + max(0, payload_bytes),
+            )
+
+    def traffic_totals(self, job_id: str) -> tuple[int, int]:
+        with self._lock:
+            return self._traffic_totals.get(job_id, (0, 0))
+
+    def finalize_traffic(self, job_id: str, log_path: Path) -> tuple[int, int]:
+        """Accumulate rclone's final payload counter without logging secrets."""
+        try:
+            text = log_path.read_text(encoding="utf-8", errors="replace")
+            markers = [text.rfind("] Starting TuxInDrive"), text.rfind("] Incremental callback")]
+            chunk = text[max(markers):] if max(markers) >= 0 else ""
+            matches = re.findall(
+                r"(?m)^\d{4}/.*?\s(?:INFO|NOTICE)\s+:\s+"
+                r"([0-9]+(?:\.[0-9]+)?)\s+(B|KiB|MiB|GiB|TiB)\s+/",
+                chunk,
+            )
+            if matches:
+                amount, unit = matches[-1]
+                scale = {"B": 1, "KiB": 1024, "MiB": 1024 ** 2,
+                         "GiB": 1024 ** 3, "TiB": 1024 ** 4}[unit]
+                self._record_network(job_id, sessions=0, payload_bytes=int(float(amount) * scale))
+        except OSError:
+            pass
+        return self.traffic_totals(job_id)
 
     @property
     def running_jobs(self) -> set[str]:
@@ -102,6 +143,11 @@ class SyncEngine:
     def callback_jobs(self) -> set[str]:
         with self._lock:
             return set(self._monitors)
+
+    def callback_healthy(self, job_id: str) -> bool:
+        with self._lock:
+            monitor = self._monitors.get(job_id)
+        return bool(monitor and monitor.healthy)
 
     def configure_jobs(self, jobs: list[SyncJob], accounts: list[Account] | None = None) -> None:
         provider_by_remote = {
@@ -343,7 +389,7 @@ class SyncEngine:
                 fields = shlex.split(line)
                 if len(fields) < 6 or fields[0] != "-":
                     continue
-                relative = fields[5].strip("/")
+                relative = normalize_remote_path(fields[5])
                 if not relative or ".." in Path(relative).parts:
                     return None
                 snapshot[relative] = FileState(
@@ -353,8 +399,43 @@ class SyncEngine:
         except (OSError, ValueError):
             return None
 
+    def _verified_remote_snapshot(self, job: SyncJob) -> dict[str, FileState] | None:
+        """Read the provider in the same representation used by callbacks.
+
+        Bisync state files can encode Unicode and timestamp precision
+        differently from ``lsjson``. Seeding from this post-sync view prevents
+        an idle callback from interpreting representation changes as files.
+        """
+        try:
+            self._record_network(job.id)
+            process = subprocess.run(
+                [self.rclone_path, "lsjson", job.remote_spec, "--recursive",
+                 "--files-only", "--no-mimetype"],
+                check=False, capture_output=True, text=True, timeout=180,
+            )
+            if process.returncode:
+                return None
+            values = json.loads(process.stdout or "[]")
+            if not isinstance(values, list):
+                return None
+            return {
+                normalize_remote_path(str(item["Path"])): FileState(
+                    int(item.get("Size", -1)),
+                    normalize_remote_modtime(str(item.get("ModTime", ""))),
+                )
+                for item in values
+                if isinstance(item, dict) and item.get("Path")
+            }
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            return None
+
     def mount_command(self, job: SyncJob) -> list[str]:
         cache = cache_root() / "vfs" / job.id
+        poll_interval, dir_cache = {
+            "realtime": ("30s", "5m"),
+            "balanced": ("2m", "10m"),
+            "low_traffic": ("5m", "15m"),
+        }[self._streaming_refresh_mode]
         command = [
             self.rclone_path,
             "mount",
@@ -381,9 +462,9 @@ class SyncEngine:
             "--cache-dir",
             str(cache),
             "--dir-cache-time",
-            "5m",
+            dir_cache,
             "--poll-interval",
-            "30s",
+            poll_interval,
             "--log-level",
             "INFO",
             "--stats",
@@ -1041,6 +1122,7 @@ class SyncEngine:
                 text=True,
                 **new_process_group(),
             )
+            self._record_network(job.id)
         except OSError as exc:
             log_handle.close()
             return JobResult(job.id, False, str(exc), log_path)
@@ -1237,6 +1319,7 @@ class SyncEngine:
                 job.id, (30.0, 60.0, 120.0, 300.0)
             ),
             initial_remote_snapshot=self._callback_baselines.pop(job.id, None),
+            network_activity=lambda: self._record_network(job.id),
         )
         self._monitors[job.id] = monitor
         monitor.start()
@@ -1291,6 +1374,14 @@ class SyncEngine:
                 ))
                 return False
             self.recovery.archive_incoming_changes(job, changes)
+            if len(changes) > 1 and not job.peer_leases and not job.peer_delta:
+                completed = self._apply_incremental_batch(job, changes, log_path)
+                callback(JobResult(
+                    job.id, True,
+                    f"Incremental sync complete: {completed} changed path(s)",
+                    log_path, incremental=True,
+                ))
+                return True
             prepare_private_file(log_path)
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"\n[{datetime.now(timezone.utc).isoformat()}] Incremental callback: {len(changes)} path(s)\n")
@@ -1349,6 +1440,7 @@ class SyncEngine:
                         )
                         with self._lock:
                             self._processes[job.id] = process
+                        self._record_network(job.id)
                         code = process.wait()
                     finally:
                         if lease:
@@ -1376,6 +1468,92 @@ class SyncEngine:
             with self._lock:
                 self._processes.pop(job.id, None)
 
+    def _apply_incremental_batch(
+        self, job: SyncJob, changes: list[FileChange], log_path: Path
+    ) -> int:
+        """Apply ordinary rclone changes with one process per direction.
+
+        Downloads still land in a private staging tree and are installed with
+        the same descriptor-confined operation as the single-file path.
+        """
+        upload: list[str] = []
+        remote_delete: list[str] = []
+        download: list[str] = []
+        local_delete: list[str] = []
+        for change in changes:
+            # Preserve the filesystem's exact Unicode spelling for transfer;
+            # normalization is only for comparing provider metadata keys.
+            relative = change.path.replace("\\", "/").strip("/")
+            if not relative or ".." in Path(relative).parts:
+                raise RuntimeError(f"unsafe incremental path: {change.path}")
+            command = self._incremental_command(job, change)
+            if command is None and not (change.side == "remote" and change.deleted):
+                continue
+            local_path = confined_path(
+                job.local, relative, create_parents=change.side == "remote"
+            )
+            if change.side == "local":
+                if change.deleted:
+                    remote_delete.append(relative)
+                elif local_path.exists():
+                    upload.append(relative)
+            elif change.deleted:
+                local_delete.append(relative)
+            else:
+                download.append(relative)
+
+        completed = 0
+        staging = ensure_private_directory(cache_root() / "incoming" / job.id / uuid.uuid4().hex)
+        prepare_private_file(log_path)
+        try:
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(
+                    f"\n[{datetime.now(timezone.utc).isoformat()}] "
+                    f"Incremental callback: {len(changes)} path(s), batched\n"
+                )
+                for relative in local_delete:
+                    unlink_confined(job.local, relative)
+                    completed += 1
+                groups = (
+                    (upload, [self.rclone_path, "copy", str(job.local), job.remote_spec]),
+                    (remote_delete, [self.rclone_path, "delete", job.remote_spec]),
+                    (download, [self.rclone_path, "copy", job.remote_spec, str(staging)]),
+                )
+                for paths, command in groups:
+                    if not paths:
+                        continue
+                    descriptor, manifest_name = tempfile.mkstemp(
+                        prefix="paths-", suffix=".txt", dir=staging
+                    )
+                    private_descriptor(descriptor)
+                    try:
+                        with os.fdopen(descriptor, "w", encoding="utf-8") as manifest:
+                            for relative in paths:
+                                manifest.write(relative + "\n")
+                        process = subprocess.Popen(
+                            command + ["--files-from-raw", manifest_name, "--no-traverse",
+                                       "--stats", "1s", "--stats-one-line"],
+                            stdout=log, stderr=subprocess.STDOUT, text=True,
+                            **new_process_group(),
+                        )
+                        with self._lock:
+                            self._processes[job.id] = process
+                        self._record_network(job.id)
+                        code = process.wait()
+                        if code:
+                            raise RuntimeError(
+                                f"batched incremental transfer failed (rclone exit {code})"
+                            )
+                    finally:
+                        Path(manifest_name).unlink(missing_ok=True)
+                    completed += len(paths)
+                for relative in download:
+                    staged = confined_path(staging, relative)
+                    install_confined(staged, job.local, relative)
+            return completed
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
     def _run_worker(
         self,
         job: SyncJob,
@@ -1395,6 +1573,7 @@ class SyncEngine:
                         f"\n[{datetime.now(timezone.utc).isoformat()}] Starting TuxInDrive "
                         f"{__version__} sync through official Proton Drive CLI\n"
                     )
+                    self._record_network(job.id)
                     if dry_run:
                         self.proton.validate_session()
                         local_items = len(self.proton.local_snapshot(job))
@@ -1461,6 +1640,7 @@ class SyncEngine:
                         preview_command, stdout=preview, stderr=subprocess.STDOUT,
                         text=True, timeout=3600, check=False,
                     )
+                self._record_network(job.id)
                 if preview_process.returncode != 0:
                     if self._missing_bisync_state(preview_path):
                         auto_reinitialize = True
@@ -1501,12 +1681,16 @@ class SyncEngine:
                 )
                 with self._lock:
                     self._processes[job.id] = process
+                self._record_network(job.id)
                 return_code = process.wait()
                 cancelled = return_code in (-signal.SIGTERM, 143)
                 log.write(f"[{datetime.now(timezone.utc).isoformat()}] Exit {return_code}\n")
             if return_code == 0:
                 if job.mode is SyncMode.TWO_WAY and not dry_run:
-                    baseline = self._bisync_remote_snapshot(job)
+                    baseline = (
+                        (None if auto_reinitialize else self._verified_remote_snapshot(job))
+                        or self._bisync_remote_snapshot(job)
+                    )
                     if baseline is not None:
                         with self._lock:
                             self._callback_baselines[job.id] = baseline
@@ -1624,6 +1808,21 @@ class SyncEngine:
                         raise GitHubSyncError(
                             "Download-only synchronization stopped because the local repository has uncommitted changes"
                         )
+                    self._record_network(job.id)
+                    remote_line = self._git_output(
+                        [git, "-C", str(job.local), "ls-remote", "--heads", "origin",
+                         f"refs/heads/{branch}"], environment
+                    )
+                    remote_oid = remote_line.split()[0] if remote_line.split() else ""
+                    local_oid = self._git_output(
+                        [git, "-C", str(job.local), "rev-parse", "HEAD"], environment
+                    )
+                    if not remote_oid:
+                        raise GitHubSyncError(f"Remote branch '{branch}' was not found")
+                    if remote_oid == local_oid:
+                        log.write("Remote branch is unchanged; skipped fetch and merge.\n")
+                        return JobResult(job.id, True, "GitHub already up to date", log_path)
+                    self._record_network(job.id)
                     if self._run_git_process(
                         job, [git, "-C", str(job.local), "fetch", "origin", branch],
                         job.local, log, environment,
@@ -1680,6 +1879,7 @@ class SyncEngine:
                         return self._git_failure(
                             job, log_path, code, "commit (check Git author name and email)"
                         )
+                self._record_network(job.id)
                 if self._run_git_process(
                     job, [git, "-C", str(job.local), "fetch", "origin", branch],
                     job.local, log, environment,
@@ -1722,6 +1922,7 @@ class SyncEngine:
                 if ahead == "0":
                     log.write("Remote branch is already current; skipped push.\n")
                     return JobResult(job.id, True, "GitHub synchronization complete", log_path)
+                self._record_network(job.id)
                 code = self._run_git_process(
                     job, [git, "-C", str(job.local), "push", "origin", f"HEAD:{branch}"],
                     job.local, log, environment,

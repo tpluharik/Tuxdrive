@@ -71,6 +71,10 @@ class SyncEngineCommandTests(unittest.TestCase):
             normalize_remote_modtime("2026-08-13T10:20:30Z"),
         )
 
+    def test_remote_unicode_paths_compare_in_one_canonical_form(self):
+        from tuxindrive.callbacks import normalize_remote_path
+        self.assertEqual(normalize_remote_path("Cafe\u0301/report.txt"), "Caf\u00e9/report.txt")
+
     def test_legacy_bisync_state_is_migrated_out_of_cache(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(
             os.environ,
@@ -235,6 +239,53 @@ class SyncEngineCommandTests(unittest.TestCase):
             self.assertIn("--vfs-fast-fingerprint", command)
             self.assertIn("--log-level", command)
             self.assertIn("--stats", command)
+
+    def test_streaming_refresh_modes_change_only_polling_policy(self):
+        job = SyncJob("google", "/data/stream", mode=SyncMode.VIRTUAL_DRIVE)
+        self.engine.configure_streaming_refresh("balanced")
+        balanced = self.engine.mount_command(job)
+        self.assertEqual(balanced[balanced.index("--poll-interval") + 1], "2m")
+        self.engine.configure_streaming_refresh("low_traffic")
+        low = self.engine.mount_command(job)
+        self.assertEqual(low[low.index("--poll-interval") + 1], "5m")
+
+    def test_multiple_incremental_uploads_use_one_private_batch(self):
+        with tempfile.TemporaryDirectory() as temporary, patch.dict(
+            os.environ, {"XDG_CACHE_HOME": temporary}
+        ):
+            root = Path(temporary) / "local"
+            root.mkdir()
+            (root / "one.txt").write_text("1", encoding="utf-8")
+            (root / "two.txt").write_text("2", encoding="utf-8")
+            job = SyncJob("google", str(root), ransomware_protection=False)
+            process = MagicMock()
+            process.wait.return_value = 0
+            callback = MagicMock()
+            with patch("tuxindrive.engine.subprocess.Popen", return_value=process) as popen, \
+                 patch.object(self.engine.recovery, "archive_incoming_changes"):
+                result = self.engine._apply_incremental(
+                    job,
+                    [FileChange("one.txt", "local"), FileChange("two.txt", "local")],
+                    callback,
+                )
+            self.assertTrue(result)
+            self.assertEqual(popen.call_count, 1)
+            command = popen.call_args.args[0]
+            self.assertEqual(command[1], "copy")
+            self.assertIn("--files-from-raw", command)
+
+    def test_per_job_traffic_accumulates_sessions_and_payload(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "job.log"
+            log.write_text(
+                "[2026-08-14T10:00:00+00:00] Starting TuxInDrive 0.0 sync\n"
+                "2026/08/14 12:00:01 INFO  : 1.5 MiB / 1.5 MiB, 100%, 1 MiB/s\n",
+                encoding="utf-8",
+            )
+            self.engine._record_network("job", sessions=2)
+            sessions, payload = self.engine.finalize_traffic("job", log)
+        self.assertEqual(sessions, 2)
+        self.assertEqual(payload, int(1.5 * 1024 ** 2))
 
     def test_pin_state_never_changes_live_mount_policy(self):
         with tempfile.TemporaryDirectory() as temporary, patch.dict(

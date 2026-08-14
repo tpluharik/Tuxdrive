@@ -10,8 +10,10 @@ import re
 import selectors
 import struct
 import subprocess
+import tempfile
 import threading
 import time
+import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
@@ -47,6 +49,11 @@ def normalize_remote_modtime(value: str) -> str:
     elif len(zone) == 5:
         zone = f"{zone[:3]}:{zone[3:]}"
     return base + (f".{fraction}" if fraction else "") + zone
+
+
+def normalize_remote_path(value: str) -> str:
+    """Use one Unicode spelling for rclone listings and provider JSON paths."""
+    return unicodedata.normalize("NFC", value.replace("\\", "/").strip("/"))
 
 
 @dataclass(frozen=True, slots=True)
@@ -234,6 +241,7 @@ class ChangeMonitor:
         remote_backoff: tuple[float, ...] = (30.0, 60.0, 120.0, 300.0),
         initial_remote_snapshot: dict[str, FileState] | None = None,
         event_factory: Callable[[Path, Callable[[str], bool]], InotifyTreeMonitor] = InotifyTreeMonitor,
+        network_activity: Callable[[], None] | None = None,
     ) -> None:
         self.job = job
         self.rclone_path = rclone_path
@@ -245,7 +253,9 @@ class ChangeMonitor:
         self.remote_backoff = tuple(max(1.0, value) for value in remote_backoff)
         self.initial_remote_snapshot = initial_remote_snapshot
         self.event_factory = event_factory
+        self.network_activity = network_activity or (lambda: None)
         self.stop_event = threading.Event()
+        self.last_remote_success = 0.0
         self.thread = threading.Thread(
             target=self._run, name=f"tuxindrive-callback-{job.id[:8]}", daemon=True
         )
@@ -255,6 +265,13 @@ class ChangeMonitor:
 
     def stop(self) -> None:
         self.stop_event.set()
+
+    @property
+    def healthy(self) -> bool:
+        if not self.thread.is_alive() or not self.last_remote_success:
+            return False
+        maximum = max(self.remote_backoff or (self.remote_poll_seconds,))
+        return time.monotonic() - self.last_remote_success <= max(120.0, maximum * 2)
 
     def _excluded(self, relative: str) -> bool:
         candidate = relative.replace(os.sep, "/")
@@ -300,6 +317,7 @@ class ChangeMonitor:
         return result
 
     def remote_snapshot(self) -> dict[str, FileState]:
+        self.network_activity()
         process = subprocess.run(
             [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
              "--files-only", "--no-mimetype"],
@@ -311,7 +329,7 @@ class ChangeMonitor:
         if not isinstance(values, list):
             raise ValueError("Cloud change scan returned an invalid object")
         return {
-            item["Path"]: FileState(
+            normalize_remote_path(str(item["Path"])): FileState(
                 int(item.get("Size", -1)),
                 normalize_remote_modtime(str(item.get("ModTime", ""))),
             )
@@ -330,6 +348,7 @@ class ChangeMonitor:
         if not safe or ".." in Path(safe).parts or self._excluded(safe):
             raise ValueError("Unsafe targeted cloud path")
         remote = f"{self.job.remote_spec.rstrip('/')}/{safe}"
+        self.network_activity()
         process = subprocess.run(
             [self.rclone_path(), "lsjson", remote, "--stat", "--no-mimetype"],
             check=False, capture_output=True, text=True, timeout=30,
@@ -344,6 +363,44 @@ class ChangeMonitor:
             normalize_remote_modtime(str(value.get("ModTime", ""))),
         )
 
+    def remote_paths_state(self, relatives: list[str]) -> dict[str, FileState]:
+        """Read several verified provider states through one rclone session."""
+        safe = [normalize_remote_path(item) for item in relatives]
+        if not safe or any(not item or ".." in Path(item).parts for item in safe):
+            raise ValueError("Unsafe targeted cloud paths")
+        manifest_name = ""
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", prefix="tuxindrive-paths-",
+                suffix=".txt", delete=False,
+            ) as manifest:
+                manifest_name = manifest.name
+                for item in safe:
+                    manifest.write(item + "\n")
+            self.network_activity()
+            process = subprocess.run(
+                [self.rclone_path(), "lsjson", self.job.remote_spec, "--recursive",
+                 "--files-only", "--no-mimetype", "--files-from-raw", manifest_name],
+                check=False, capture_output=True, text=True, timeout=60,
+            )
+            if process.returncode:
+                raise RuntimeError(process.stderr.strip() or "Targeted cloud check failed")
+            values = json.loads(process.stdout or "[]")
+            result = {
+                normalize_remote_path(str(item["Path"])): FileState(
+                    int(item.get("Size", -1)),
+                    normalize_remote_modtime(str(item.get("ModTime", ""))),
+                )
+                for item in values
+                if isinstance(item, dict) and item.get("Path")
+            }
+            if set(result) != set(safe):
+                raise ValueError("One or more uploaded paths are unavailable")
+            return result
+        finally:
+            if manifest_name:
+                Path(manifest_name).unlink(missing_ok=True)
+
     def _run(self) -> None:
         local = self.local_snapshot()
         try:
@@ -352,15 +409,18 @@ class ChangeMonitor:
             events = None
         if self.initial_remote_snapshot is not None:
             remote = {
-                path: state for path, state in self.initial_remote_snapshot.items()
+                normalize_remote_path(path): state
+                for path, state in self.initial_remote_snapshot.items()
                 if not self._excluded(path)
             }
             remote_known = True
+            self.last_remote_success = time.monotonic()
             self.initial_remote_snapshot = None
         else:
             try:
                 remote = self.remote_snapshot()
                 remote_known = True
+                self.last_remote_success = time.monotonic()
             except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                 remote, remote_known = {}, False
         # Close the startup race between the initial snapshot and watch
@@ -473,6 +533,7 @@ class ChangeMonitor:
                         continue
                 if not targeted:
                     last_remote_scan = time.monotonic()
+                    self.last_remote_success = last_remote_scan
                 baseline_uncertain = not remote_known
                 if not remote_known:
                     remote, remote_known = new_remote, True
@@ -492,8 +553,8 @@ class ChangeMonitor:
                     deferred_remote.clear()
                     recovery_due = time.monotonic() + 10.0
                     continue
-                local_paths = {change.path for change in local_changes}
-                remote_paths = {change.path for change in remote_changes}
+                local_paths = {normalize_remote_path(change.path) for change in local_changes}
+                remote_paths = {normalize_remote_path(change.path) for change in remote_changes}
                 if local_paths & remote_paths and self.job.mode is SyncMode.TWO_WAY:
                     self.reconcile(self.job)
                     deferred_local.clear()
@@ -513,14 +574,20 @@ class ChangeMonitor:
                         # never mirror one side's FileState into the other side.
                         # Refresh only the changed paths after transfer.
                         try:
+                            existing = [item.path for item in local_applied if not item.deleted]
+                            refreshed = (
+                                self.remote_paths_state(existing) if len(existing) > 1 else {}
+                            )
                             for item in local_applied:
                                 if item.deleted:
                                     new_remote.pop(item.path, None)
                                 else:
-                                    state = self.remote_path_state(item.path)
+                                    state = refreshed.get(normalize_remote_path(item.path))
+                                    if state is None:
+                                        state = self.remote_path_state(item.path)
                                     if state is None:
                                         raise ValueError("Uploaded path is unavailable")
-                                    new_remote[item.path] = state
+                                    new_remote[normalize_remote_path(item.path)] = state
                         except (OSError, RuntimeError, ValueError, subprocess.TimeoutExpired):
                             remote_known = False
                         for item in remote_applied:

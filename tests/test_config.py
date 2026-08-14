@@ -126,6 +126,13 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(config.settings.show_network_usage)
         self.assertFalse(config.to_dict()["settings"]["show_network_usage"])
 
+    def test_streaming_refresh_mode_is_validated(self):
+        self.assertEqual(AppConfig.from_dict({}).settings.streaming_refresh_mode, "realtime")
+        config = AppConfig.from_dict({"settings": {"streaming_refresh_mode": "balanced"}})
+        self.assertEqual(config.settings.streaming_refresh_mode, "balanced")
+        invalid = AppConfig.from_dict({"settings": {"streaming_refresh_mode": "unsafe"}})
+        self.assertEqual(invalid.settings.streaming_refresh_mode, "realtime")
+
 
 if __name__ == "__main__":
     unittest.main()
