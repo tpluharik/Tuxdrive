@@ -1,8 +1,8 @@
 {
-  "version": "0.26.8",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.8/TuxInDrive-0.26.8-macos-arm64.dmg",
-  "sha256": "a0dc3e4a0839a86b92f5c0c8cafa07b0051dc5179fc9e0276bc7b0f1415adf1a",
-  "notes": "Circular penguin identity and responsive update checks",
-  "expires_at": "2027-02-10T21:01:40.527246+00:00",
-  "signature": "S/inGjXIZvL1q4kT5sWieoElmBoyxmBaRdvETLZyEep0y2pGfERMbzzKNcwQhLY+2ouy7m2mVyO+Ck8fwrkLBg=="
+  "version": "0.26.9",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.9/TuxInDrive-0.26.9-macos-arm64.dmg",
+  "sha256": "15902e0d0c867499a5cd5e472ff1f764d6abeb4dae55be1aee7e036a36c4cdbe",
+  "notes": "Approval-based local collaboration and safer network sharing",
+  "expires_at": "2027-02-11T10:38:39.463490+00:00",
+  "signature": "jn/F+7Z7cyKUA8h9PjarBOz7vzwwHolMjc/LcuHGtj1MKU1Gbclc+xUR8/QEbp722OfZpckLCowgaU9RpAd9Cw=="
 }

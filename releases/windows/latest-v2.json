@@ -1,8 +1,8 @@
 {
-  "version": "0.26.8",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.8/TuxInDrive-0.26.8-windows-x64-setup.exe",
-  "sha256": "0f363c9de717b619cb70618dfc0806214e131a5bd5623d979b4b3aac4bf7d7bc",
-  "notes": "Circular penguin identity and responsive update checks",
-  "expires_at": "2027-02-10T21:01:40.441192+00:00",
-  "signature": "TtXyZeBGIg4oLwT78EyFMIsA/aSDjK2e6y+Zop62gq3Qq+rZyoGYChqJ7pCf7tv5DkQOsp0oYCa88ViBBZ7ZAA=="
+  "version": "0.26.9",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.9/TuxInDrive-0.26.9-windows-x64-setup.exe",
+  "sha256": "8bde7b482a0cce1124fa2f64baf3a8a2a2ece7cab6d6601d908be0d990e2a421",
+  "notes": "Approval-based local collaboration and safer network sharing",
+  "expires_at": "2027-02-11T10:38:39.463490+00:00",
+  "signature": "NAFGsX8TJSTgpkOr1I/C6ComAIMwEWdh7wEU/wMlHX0RXmCAxxslhcVwTzW/G1HHJxt1qzZXBY/DdPTLuprXAA=="
 }

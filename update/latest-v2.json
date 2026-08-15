@@ -1,8 +1,8 @@
 {
-  "version": "0.26.8",
-  "url": "https://raw.githubusercontent.com/tpluharik/Tuxdrive/main/dist/tuxdrive_0.26.8_all.deb",
-  "sha256": "8bd323941416664ebb87e4a8b2e9e5b2c162e335900a187bb596643b4181a433",
-  "notes": "Circular penguin identity and responsive update checks",
-  "expires_at": "2027-02-10T21:01:40.357708+00:00",
-  "signature": "Bo2lQM1p/NMC3E1/ZrcxMp8xbGZG56GHhdeYloGTQit5Si0hUjLJz1hGyBQF8QgKop0YwJgKABYp1dO+XM6/AQ=="
+  "version": "0.26.9",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.9/tuxindrive_0.26.9_all.deb",
+  "sha256": "28f558aeec6cd25864081183ba30bf1fa2e0098c60abc4c990f4b94fb70e3bec",
+  "notes": "Approval-based local collaboration and safer network sharing",
+  "expires_at": "2027-02-11T10:44:26.507975+00:00",
+  "signature": "7Hok3ANvuTQ+09JRSoA8PRa7BldfrBlobHS1agvXPWe3sBXi9t+B4MSRgMll0nHTZHKd0Bru6Bnridm1e7/BAw=="
 }
