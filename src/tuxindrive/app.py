@@ -65,7 +65,7 @@ from .models import (
 )
 from .github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
 from .folder_layout import job_drag_payload, job_id_from_drag_payload, move_job
-from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, normalize_public_key, validate_host, validate_port
+from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, local_network_address, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
 from .proton import ProtonDriveClient, ProtonDriveError
@@ -1685,20 +1685,23 @@ class PeerSharingDialog(Gtk.Dialog):
         identity.add(identity_box)
         area.pack_start(identity, False, False, 0)
 
-        notebook = Gtk.Notebook()
-        notebook.append_page(self._host_page(), Gtk.Label(label="Share a folder"))
-        notebook.append_page(self._client_page(), Gtk.Label(label="Connect to a peer"))
-        notebook.append_page(self._lan_page(), Gtk.Label(label="Find on LAN"))
-        notebook.append_page(self._collaboration_page(), Gtk.Label(label="Collaborate"))
-        area.pack_start(notebook, True, True, 0)
+        self.notebook = Gtk.Notebook()
+        self.notebook.append_page(self._host_page(), Gtk.Label(label="Share a folder"))
+        self.notebook.append_page(self._client_page(), Gtk.Label(label="Connect to a peer"))
+        self.notebook.append_page(self._lan_page(), Gtk.Label(label="Find on LAN"))
+        self.notebook.append_page(self._collaboration_page(), Gtk.Label(label="Collaborate"))
+        area.pack_start(self.notebook, True, True, 0)
         self.status = Gtk.Label(xalign=0)
         self.status.set_line_wrap(True)
         area.pack_start(self.status, False, False, 0)
         self.add_button("Close", Gtk.ResponseType.CLOSE)
         self.connect("response", lambda dialog, _response: dialog.destroy())
         self.show_all()
+        self._pending_snapshot: tuple[tuple[str, ...], ...] = ()
         self._reload_share_choices()
         self._reload_connection_choices()
+        self._pending_timer = GLib.timeout_add_seconds(2, self._refresh_pending)
+        self.connect("destroy", self._stop_pending_refresh)
 
     @staticmethod
     def _folder_button(title: str) -> Gtk.FileChooserButton:
@@ -1758,12 +1761,33 @@ class PeerSharingDialog(Gtk.Dialog):
         peer_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         peer_box.pack_start(peer_scroll, True, True, 0)
         peer_box.pack_start(peer_editor, False, False, 0)
+        self.pending_store = Gtk.ListStore(str, str, str, object)
+        self.pending_view = Gtk.TreeView(model=self.pending_store)
+        for index, title in enumerate(("Pending device", "Fingerprint", "Address")):
+            self.pending_view.append_column(Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=index))
+        pending_scroll = Gtk.ScrolledWindow()
+        pending_scroll.set_min_content_height(90)
+        pending_scroll.add(self.pending_view)
+        pending_actions = Gtk.Box(spacing=6)
+        approve = Gtk.Button(label="Approve selected request")
+        approve.connect("clicked", self._approve_pending_peer)
+        reject = Gtk.Button(label="Reject")
+        reject.connect("clicked", self._reject_pending_peer)
+        refresh = Gtk.Button(label="Refresh requests")
+        refresh.connect("clicked", lambda _button: self._refresh_pending(force=True))
+        for button in (approve, reject, refresh):
+            pending_actions.pack_start(button, False, False, 0)
+        pending_label = Gtk.Label(label="People waiting for your approval", xalign=0)
+        pending_label.set_tooltip_text("Compare the fingerprint with the person before approving access")
+        peer_box.pack_start(pending_label, False, False, 4)
+        peer_box.pack_start(pending_scroll, True, True, 0)
+        peer_box.pack_start(pending_actions, False, False, 0)
         self.share_discovery = Gtk.CheckButton(label="Advertise this share on the local network")
         self.share_discovery.set_active(True)
         self.share_lease_minutes = Gtk.SpinButton.new_with_range(1, 1440, 1)
         self.share_lease_minutes.set_value(10)
         self.share_nat = Gtk.CheckButton(label="Automatically request UPnP/NAT-PMP port mapping")
-        self.share_nat.set_active(True)
+        self.share_nat.set_active(False)
         self.transport_policy = Gtk.ComboBoxText()
         self.transport_policy.append(PeerTransportPolicy.AUTO.value, "Automatic (direct, then configured alternatives)")
         self.transport_policy.append(PeerTransportPolicy.DIRECT_ONLY.value, "Direct only")
@@ -1793,39 +1817,44 @@ class PeerSharingDialog(Gtk.Dialog):
         self.drop_expiry.set_value(24)
         grid = Gtk.Grid(column_spacing=12, row_spacing=9)
         self._row(grid, 0, "Saved share", self.share_choice)
-        self._row(grid, 1, "Display name", self.share_name)
-        self._row(grid, 2, "Local folder", self.share_folder)
-        self._row(grid, 3, "Address peers use", self.share_host)
-        self._row(grid, 4, "TCP port", self.share_port)
-        self._row(grid, 5, "Authorized peer devices", peer_box)
-        self._row(grid, 6, "LAN discovery", self.share_discovery)
-        self._row(grid, 7, "Edit lease duration (minutes)", self.share_lease_minutes)
-        self._row(grid, 8, "NAT traversal", self.share_nat)
-        self._row(grid, 9, "No-storage relay host", self.relay_host)
-        self._row(grid, 10, "Relay SSH user", self.relay_user)
-        self._row(grid, 11, "Relay SSH port", self.relay_ssh_port)
-        self._row(grid, 12, "Relay public forwarding port", self.relay_public_port)
-        self._row(grid, 13, "Transport policy", self.transport_policy)
-        self._row(grid, 14, "Tor v3 service", self.onion_enabled)
-        self._row(grid, 15, "Onion identity", self.onion_persistent)
-        self._row(grid, 16, "Onion authorization", self.onion_client_auth)
-        self._row(grid, 17, "Fail-closed restrictions", self.no_relay)
-        self._row(grid, 18, "IP privacy", self.no_public_ip)
-        self._row(grid, 19, "Cloud isolation", self.never_cloud)
-        self._row(grid, 20, "Tor bridge profile", self.tor_bridges)
-        self._row(grid, 21, "Pluggable transport", self.tor_transport_plugin)
+        self._row(grid, 1, "Folder name", self.share_name)
+        self._row(grid, 2, "Folder to share", self.share_folder)
+        self._row(grid, 3, "People and approval requests", peer_box)
+        self._row(grid, 4, "Visible on this local network", self.share_discovery)
         page.pack_start(grid, False, False, 0)
+
+        advanced_grid = Gtk.Grid(column_spacing=12, row_spacing=9)
+        self._row(advanced_grid, 0, "Address peers use", self.share_host)
+        self._row(advanced_grid, 1, "TCP port", self.share_port)
+        self._row(advanced_grid, 2, "Edit lease duration (minutes)", self.share_lease_minutes)
+        self._row(advanced_grid, 3, "NAT traversal", self.share_nat)
+        self._row(advanced_grid, 4, "No-storage relay host", self.relay_host)
+        self._row(advanced_grid, 5, "Relay SSH user", self.relay_user)
+        self._row(advanced_grid, 6, "Relay SSH port", self.relay_ssh_port)
+        self._row(advanced_grid, 7, "Relay public forwarding port", self.relay_public_port)
+        self._row(advanced_grid, 8, "Transport policy", self.transport_policy)
+        self._row(advanced_grid, 9, "Tor v3 service", self.onion_enabled)
+        self._row(advanced_grid, 10, "Onion identity", self.onion_persistent)
+        self._row(advanced_grid, 11, "Onion authorization", self.onion_client_auth)
+        self._row(advanced_grid, 12, "Fail-closed restrictions", self.no_relay)
+        self._row(advanced_grid, 13, "IP privacy", self.no_public_ip)
+        self._row(advanced_grid, 14, "Cloud isolation", self.never_cloud)
+        self._row(advanced_grid, 15, "Tor bridge profile", self.tor_bridges)
+        self._row(advanced_grid, 16, "Pluggable transport", self.tor_transport_plugin)
+        advanced = Gtk.Expander(label="Advanced network and privacy settings")
+        advanced.add(advanced_grid)
+        page.pack_start(advanced, False, False, 0)
         note = Gtk.Label(
             label=(
-                "Exchange identity keys through a trusted channel. If this address is behind a router, "
-                "forward the selected TCP port to this computer and permit it in the firewall."
+                "For local collaboration, select a folder and click Share this folder. TuxInDrive advertises only its name and host fingerprint; "
+                "files remain inaccessible until you approve a device. Use the advanced settings only for remote or Tor connections."
             ),
             xalign=0,
         )
         note.set_line_wrap(True)
         page.pack_start(note, False, False, 0)
         buttons = Gtk.Box(spacing=8)
-        save = Gtk.Button(label="Save and start")
+        save = Gtk.Button(label="Share this folder")
         save.connect("clicked", self._save_share)
         stop = Gtk.Button(label="Stop")
         stop.connect("clicked", self._stop_share)
@@ -1893,7 +1922,10 @@ class PeerSharingDialog(Gtk.Dialog):
     def _lan_page(self) -> Gtk.Widget:
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
         page.set_border_width(12)
-        label = Gtk.Label(label="Discovery is local-network only. Verify the displayed host-key fingerprint with the sharing user before connecting.", xalign=0)
+        label = Gtk.Label(label=(
+            "Choose a nearby folder and request access. The owner sees this device's fingerprint and must approve it before any files are exposed. "
+            "After approval, scan again and connect."
+        ), xalign=0)
         label.set_line_wrap(True)
         page.pack_start(label, False, False, 0)
         self.discovery_store = Gtk.ListStore(str, str, str, object)
@@ -1906,7 +1938,7 @@ class PeerSharingDialog(Gtk.Dialog):
         buttons = Gtk.Box(spacing=8)
         find = Gtk.Button(label="Scan local network")
         find.connect("clicked", self._discover_lan)
-        use = Gtk.Button(label="Use selected peer")
+        use = Gtk.Button(label="Request access / connect")
         use.connect("clicked", self._use_discovered)
         buttons.pack_start(find, False, False, 0)
         buttons.pack_start(use, False, False, 0)
@@ -1937,7 +1969,12 @@ class PeerSharingDialog(Gtk.Dialog):
         self.share_choice.remove_all()
         self.share_choice.append("new", "New shared folder")
         for share in self.controller.config.peer_shares:
-            state = "running" if share.id in self.controller.peers.running_shares else "stopped"
+            if share.id in self.controller.peers.running_shares:
+                state = "running"
+            elif share.id in self.controller.peers.shared_ids:
+                state = "waiting for approval"
+            else:
+                state = "stopped"
             self.share_choice.append(share.id, f"{share.name} · {state}")
         self.share_choice.set_active_id(selected)
 
@@ -1975,6 +2012,76 @@ class PeerSharingDialog(Gtk.Dialog):
         self.tor_transport_plugin.set_text(share.tor_pluggable_transports[0] if share and share.tor_pluggable_transports else "")
         if share and Path(share.local_path).is_dir():
             self.share_folder.set_filename(str(Path(share.local_path).expanduser()))
+        self._refresh_pending(force=True)
+
+    def _stop_pending_refresh(self, _dialog: Gtk.Dialog) -> None:
+        timer = getattr(self, "_pending_timer", 0)
+        if timer:
+            GLib.source_remove(timer)
+            self._pending_timer = 0
+
+    def _refresh_pending(self, force: bool = False) -> bool:
+        share = self._selected_share()
+        requests = self.controller.peers.pending_requests(share.id if share else "") if share else []
+        snapshot = tuple((item.id, item.device_name, item.fingerprint, item.source_host) for item in requests)
+        if force or snapshot != self._pending_snapshot:
+            self.pending_store.clear()
+            for request in requests:
+                self.pending_store.append([request.device_name, request.fingerprint, request.source_host, request])
+            self._pending_snapshot = snapshot
+        return bool(self.get_visible())
+
+    def _selected_pending_request(self):
+        model, selected = self.pending_view.get_selection().get_selected()
+        return model[selected][3] if selected else None
+
+    def _approve_pending_peer(self, _button: Gtk.Button) -> None:
+        request = self._selected_pending_request()
+        if request is None:
+            self._set_status("Select a pending device first.", True)
+            return
+        share = next((item for item in self.controller.config.peer_shares if item.id == request.share_id), None)
+        if share is None:
+            self.controller.peers.dismiss_request(request.id)
+            self._refresh_pending(force=True)
+            self._set_status("That shared folder no longer exists.", True)
+            return
+        try:
+            added_peer = None
+            if not any(item.public_key == request.public_key for item in share.authorized_peers):
+                role = PeerRole(self.peer_role.get_active_id() or PeerRole.READ_WRITE.value)
+                added_peer = AuthorizedPeer(request.device_name, request.public_key, role=role)
+                share.authorized_peers.append(added_peer)
+            self.controller.peers.stop(share.id)
+            try:
+                self.controller.peers.start(share)
+            except Exception:
+                if added_peer is not None:
+                    share.authorized_peers.remove(added_peer)
+                try:
+                    self.controller.peers.start(share)
+                except Exception:
+                    pass
+                raise
+            self.controller.peers.dismiss_request(request.id)
+            share.last_status = f"Shared with {len([item for item in share.authorized_peers if item.enabled])} approved device(s)"
+            self.controller.save()
+            self._load_share(self.share_choice)
+            self._set_status(
+                f"Approved {request.device_name} ({request.fingerprint}). They can rescan and connect now.",
+                False,
+            )
+        except Exception as exc:
+            self._set_status(str(exc), True)
+
+    def _reject_pending_peer(self, _button: Gtk.Button) -> None:
+        request = self._selected_pending_request()
+        if request is None:
+            self._set_status("Select a pending device first.", True)
+            return
+        self.controller.peers.dismiss_request(request.id)
+        self._refresh_pending(force=True)
+        self._set_status(f"Rejected the request from {request.device_name}.", False)
 
     def _save_share(self, _button: Gtk.Button) -> None:
         try:
@@ -1986,13 +2093,11 @@ class PeerSharingDialog(Gtk.Dialog):
             policy = PeerTransportPolicy(self.transport_policy.get_active_id() or PeerTransportPolicy.AUTO.value)
             advertised_host = self.share_host.get_text().strip()
             if not self.no_public_ip.get_active() and policy is not PeerTransportPolicy.TOR_ONLY:
-                advertised_host = validate_host(advertised_host)
+                advertised_host = validate_host(advertised_host or local_network_address())
             port = validate_port(self.share_port.get_value_as_int())
             roles = {role.label: role for role in PeerRole}
             previous_auth = {item.public_key: item.onion_client_public_key for item in (share.authorized_peers if share else [])}
             authorized_peers = [AuthorizedPeer(row[1], normalize_public_key(row[2]), row[0], role=roles.get(row[3], PeerRole.READ_WRITE), onion_client_public_key=previous_auth.get(row[2], "")) for row in self.peer_store]
-            if not any(item.enabled for item in authorized_peers):
-                raise PeerError("Authorize at least one enabled peer device")
             if share is None:
                 share = PeerShare("", folder, "")
                 self.controller.config.peer_shares.append(share)
@@ -2024,10 +2129,18 @@ class PeerSharingDialog(Gtk.Dialog):
             share.tor_pluggable_transports = [plugin] if plugin else []
             share.enabled = True
             self.controller.peers.start(share)
-            share.last_status = f"Listening at {share.onion_address}" if share.onion_enabled else f"Listening on TCP {share.port}"
+            if not any(item.enabled for item in authorized_peers):
+                share.last_status = "Advertised on LAN; waiting for approval requests"
+            else:
+                share.last_status = f"Listening at {share.onion_address}" if share.onion_enabled else f"Listening on TCP {share.port}"
             self.controller.save()
             self._reload_share_choices(share.id)
-            self._set_status("Direct encrypted share is running.", False)
+            self._set_status(
+                "Folder is visible on the local network. Approve a person when their request appears below."
+                if not any(item.enabled for item in authorized_peers)
+                else "Direct encrypted share is running.",
+                False,
+            )
         except Exception as exc:
             self._set_status(str(exc), True)
 
@@ -2230,7 +2343,8 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status(f"LAN discovery failed: {error}", True)
             return False
         for peer in peers or []:
-            self.discovery_store.append([peer.name, f"{peer.host}:{peer.port}", peer.fingerprint, peer])
+            state = "approval needed" if peer.approval_required else "approved"
+            self.discovery_store.append([f"{peer.name} · {state}", f"{peer.host}:{peer.port}", peer.fingerprint, peer])
         self._set_status(f"Found {len(peers or [])} local TuxInDrive share(s). Verify the fingerprint before use.", False)
         return False
 
@@ -2240,8 +2354,19 @@ class PeerSharingDialog(Gtk.Dialog):
             self._set_status("Select a discovered share first.", True)
             return
         peer = model[selected][3]
+        if peer.approval_required:
+            try:
+                self.controller.peers.request_access(peer)
+                self._set_status(
+                    f"Access requested from {peer.name}. Ask its owner to compare your identity fingerprint, approve you, then scan again.",
+                    False,
+                )
+            except Exception as exc:
+                self._set_status(str(exc), True)
+            return
         self._apply_invitation(peer.invitation())
-        self._set_status(f"Loaded {peer.name}. Confirm fingerprint {peer.fingerprint}, select a local folder, then connect.", False)
+        self.notebook.set_current_page(1)
+        self._set_status(f"Approved access loaded for {peer.name}. Select a local folder and click Save and connect.", False)
 
     def _save_connection(self, _button: Gtk.Button) -> None:
         try:

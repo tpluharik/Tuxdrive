@@ -61,12 +61,14 @@ class PeerInvitation:
     onion_address: str = ""
     onion_client_auth: str = ""
     allowed_transports: tuple[str, ...] = ()
+    approval_required: bool = False
+    recipient_token: str = ""
 
     def encode(self) -> str:
         allowed_transports = self.allowed_transports or (self.transport,)
         return json.dumps(
             {
-                "tuxindrive_peer": 5,
+                "tuxindrive_peer": 6,
                 "name": self.name,
                 "host": self.host,
                 "port": self.port,
@@ -83,6 +85,8 @@ class PeerInvitation:
                 "onion_address": self.onion_address,
                 "onion_client_auth": self.onion_client_auth,
                 "allowed_transports": list(allowed_transports),
+                "approval_required": self.approval_required,
+                "recipient_token": self.recipient_token,
             },
             indent=2,
         )
@@ -91,8 +95,10 @@ class PeerInvitation:
     def decode(cls, value: str) -> "PeerInvitation":
         try:
             data = json.loads(value)
+            if not isinstance(data, dict):
+                raise ValueError
             schema = data.get("tuxindrive_peer", data.get("tuxdrive_peer"))
-            if schema not in (1, 2, 3, 4, 5):
+            if schema not in (1, 2, 3, 4, 5, 6):
                 raise ValueError
             invitation = cls(
                 name=str(data.get("name") or "Peer folder"),
@@ -111,12 +117,16 @@ class PeerInvitation:
                 onion_address=str(data.get("onion_address") or "").lower(),
                 onion_client_auth=str(data.get("onion_client_auth") or ""),
                 allowed_transports=tuple(data.get("allowed_transports") or (str(data.get("transport") or "direct"),)),
+                approval_required=data.get("approval_required") is True,
+                recipient_token=str(data.get("recipient_token") or ""),
             )
             if invitation.transport not in {"direct", "relay", "tor"}:
                 raise ValueError
             if not invitation.allowed_transports or any(item not in {"direct", "relay", "tor"} for item in invitation.allowed_transports):
                 raise ValueError
             if invitation.transport not in invitation.allowed_transports:
+                raise ValueError
+            if invitation.recipient_token and not re.fullmatch(r"[a-f0-9]{32}", invitation.recipient_token):
                 raise ValueError
             if invitation.transport == "tor" and not ONION_V3.fullmatch(invitation.onion_address):
                 raise ValueError
@@ -171,13 +181,57 @@ class DiscoveredPeer:
     host_key: str
     share_id: str
     lease_minutes: int = 10
+    approval_required: bool = False
+    recipient_token: str = ""
+    role: PeerRole = PeerRole.READ_WRITE
 
     @property
     def fingerprint(self) -> str:
         return key_fingerprint(self.host_key)
 
     def invitation(self) -> PeerInvitation:
-        return PeerInvitation(self.name, self.host, self.port, self.host_key, self.share_id, self.lease_minutes)
+        if self.approval_required:
+            raise PeerError("Request access and wait for the sharing user to approve this device")
+        return PeerInvitation(
+            self.name, self.host, self.port, self.host_key, self.share_id,
+            self.lease_minutes, role=self.role,
+            recipient_token=self.recipient_token,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class PendingPeerRequest:
+    id: str
+    share_id: str
+    device_name: str
+    public_key: str
+    source_host: str
+    requested_at: str
+
+    @property
+    def fingerprint(self) -> str:
+        return key_fingerprint(self.public_key)
+
+
+def _recipient_token(share_id: str, public_key: str) -> str:
+    value = f"{share_id}\0{normalize_public_key(public_key)}".encode("utf-8")
+    return hashlib.sha256(value).hexdigest()[:32]
+
+
+def local_network_address() -> str:
+    """Return the interface address selected by the OS without sending data."""
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        sock.connect(("192.0.2.1", 9))
+        address = sock.getsockname()[0]
+        return validate_host(address)
+    except OSError:
+        try:
+            return validate_host(socket.gethostbyname(socket.gethostname()))
+        except (OSError, PeerError):
+            return "127.0.0.1"
+    finally:
+        sock.close()
 
 
 class LanDiscovery:
@@ -187,8 +241,9 @@ class LanDiscovery:
     PORT = 47777
     HEARTBEAT_SECONDS = 60.0
 
-    def __init__(self, invitation_provider) -> None:
+    def __init__(self, invitation_provider, request_handler=None) -> None:
         self.invitation_provider = invitation_provider
+        self.request_handler = request_handler
         self._stopped = threading.Event()
         self._thread: threading.Thread | None = None
 
@@ -225,9 +280,12 @@ class LanDiscovery:
                 if query_driven:
                     try:
                         payload, _address = sock.recvfrom(2048)
-                        announce = announce or json.loads(payload.decode("utf-8")).get(
-                            "tuxindrive_lan_query"
-                        ) == 1
+                        data = json.loads(payload.decode("utf-8"))
+                        if not isinstance(data, dict):
+                            continue
+                        announce = announce or data.get("tuxindrive_lan_query") == 1
+                        if data.get("tuxindrive_lan_request") == 1 and self.request_handler:
+                            self.request_handler(data, _address[0])
                     except socket.timeout:
                         pass
                     except (OSError, UnicodeError, json.JSONDecodeError):
@@ -248,14 +306,14 @@ class LanDiscovery:
             sock.close()
 
     @classmethod
-    def discover(cls, timeout: float = 3.5) -> list[DiscoveredPeer]:
+    def discover(cls, timeout: float = 3.5, identity_public_key: str = "") -> list[DiscoveredPeer]:
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         sock.bind(("", cls.PORT))
         sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, struct.pack("4sL", socket.inet_aton(cls.GROUP), socket.INADDR_ANY))
         sock.settimeout(0.25)
         deadline = time.monotonic() + max(0.2, timeout)
-        found: dict[tuple[str, int, str], DiscoveredPeer] = {}
+        found: dict[tuple[str, str], DiscoveredPeer] = {}
         try:
             try:
                 query = json.dumps({"tuxindrive_lan_query": 1}).encode("utf-8")
@@ -266,16 +324,52 @@ class LanDiscovery:
                 try:
                     payload, address = sock.recvfrom(65535)
                     data = json.loads(payload.decode("utf-8"))
+                    if not isinstance(data, dict):
+                        continue
                     if data.get("tuxindrive_lan", data.get("tuxdrive_lan")) != 1:
                         continue
                     invitation = PeerInvitation.decode(json.dumps(data))
-                    peer = DiscoveredPeer(invitation.name, address[0], invitation.port, invitation.host_key, invitation.share_id, invitation.lease_minutes)
-                    found[(peer.host, peer.port, peer.share_id)] = peer
+                    if invitation.recipient_token:
+                        if not identity_public_key or invitation.recipient_token != _recipient_token(invitation.share_id, identity_public_key):
+                            continue
+                    peer = DiscoveredPeer(
+                        invitation.name, address[0], invitation.port, invitation.host_key,
+                        invitation.share_id, invitation.lease_minutes,
+                        invitation.approval_required, invitation.recipient_token,
+                        invitation.role,
+                    )
+                    key = (peer.host, peer.share_id)
+                    if key not in found or not peer.approval_required:
+                        found[key] = peer
                 except (OSError, UnicodeError, json.JSONDecodeError, PeerError):
                     continue
         finally:
             sock.close()
         return sorted(found.values(), key=lambda item: (item.name.lower(), item.host, item.port))
+
+    @classmethod
+    def request_access(cls, peer: DiscoveredPeer, device_name: str, public_key: str) -> str:
+        if not peer.approval_required or not peer.share_id:
+            raise PeerError("This share does not accept LAN access requests")
+        name = " ".join("".join(character for character in device_name if character.isprintable()).strip().split())[:80]
+        if not name:
+            raise PeerError("Enter a name for this device")
+        request_id = uuid4().hex
+        payload = json.dumps({
+            "tuxindrive_lan_request": 1,
+            "request_id": request_id,
+            "share_id": peer.share_id,
+            "device_name": name,
+            "public_key": normalize_public_key(public_key),
+        }).encode("utf-8")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+        try:
+            sock.sendto(payload, (peer.host, cls.PORT))
+            sock.sendto(payload, (cls.GROUP, cls.PORT))
+        finally:
+            sock.close()
+        return request_id
 
 
 @dataclass(frozen=True, slots=True)
@@ -402,9 +496,12 @@ class PeerManager:
         self._logs: dict[str, object] = {}
         self._tunnels: dict[str, subprocess.Popen[str]] = {}
         self._nat_ports: dict[str, list[int]] = {}
+        self._advertised_shares: dict[str, PeerShare] = {}
+        self._pending_requests: dict[str, PendingPeerRequest] = {}
+        self._request_sources: dict[str, list[float]] = {}
         self._lock = threading.RLock()
         self.audit = audit or AuditTimeline()
-        self.discovery = LanDiscovery(self._discovery_invitations)
+        self.discovery = LanDiscovery(self._discovery_invitations, self._receive_access_request)
         self.tor = TorServiceManager(self.root / "tor")
 
     @property
@@ -414,6 +511,11 @@ class PeerManager:
                 share_id.split(":", 1)[0] for share_id, process in self._servers.items()
                 if process.poll() is None
             }
+
+    @property
+    def shared_ids(self) -> set[str]:
+        with self._lock:
+            return set(self._advertised_shares)
 
     @staticmethod
     def _assign_endpoint_ports(share: PeerShare) -> None:
@@ -515,7 +617,12 @@ class PeerManager:
             active_peers = [AuthorizedPeer("Legacy peer", share.allowed_peer_key)]
         active_drops = [item for item in share.one_time_drops if item.active and not (consumed / item.id).exists()]
         if not active_peers and not active_drops:
-            raise PeerError("Authorize at least one peer device before starting the share")
+            with self._lock:
+                self._advertised_shares[share.id] = share
+            if share.lan_discovery:
+                self.start_discovery()
+            self.audit.record("peer", "LAN share advertised", "pending", peer=share.name, path=str(folder), detail="waiting for approval requests")
+            return
         self._assign_endpoint_ports(share)
         if not share.no_public_ip_discovery and share.transport_policy is not PeerTransportPolicy.TOR_ONLY:
             validate_host(share.advertised_host)
@@ -597,8 +704,14 @@ class PeerManager:
                 # configured relay could not be established.
                 self.stop(share.id)
                 raise
+        with self._lock:
+            self._advertised_shares[share.id] = share
+        if share.lan_discovery:
+            self.start_discovery()
 
     def stop(self, share_id: str) -> bool:
+        with self._lock:
+            advertised = self._advertised_shares.pop(share_id, None) is not None
         self.tor.stop(share_id)
         mapped_ports = self._nat_ports.pop(share_id, [])
         for mapped_port in mapped_ports:
@@ -611,7 +724,7 @@ class PeerManager:
                 pass
         with self._lock:
             endpoints = [(key, process) for key, process in self._servers.items() if key == share_id or key.startswith(f"{share_id}:")]
-        stopped = False
+        stopped = advertised
         for endpoint_id, process in endpoints:
             if process.poll() is None:
                 stopped = True
@@ -683,7 +796,7 @@ class PeerManager:
 
     def shutdown(self) -> None:
         self.discovery.stop()
-        for share_id in list(self.running_shares):
+        for share_id in list(self.shared_ids | self.running_shares):
             self.stop(share_id)
         self.tor.shutdown()
 
@@ -691,16 +804,98 @@ class PeerManager:
         self.discovery.start()
 
     def discover(self, timeout: float = 3.5) -> list[DiscoveredPeer]:
-        return LanDiscovery.discover(timeout)
+        return LanDiscovery.discover(timeout, self.identity_public_key())
+
+    def request_access(self, peer: DiscoveredPeer, device_name: str = "") -> str:
+        return LanDiscovery.request_access(
+            peer,
+            device_name or socket.gethostname() or "TuxInDrive device",
+            self.identity_public_key(),
+        )
+
+    def pending_requests(self, share_id: str = "") -> list[PendingPeerRequest]:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
+        with self._lock:
+            expired = [
+                request_id for request_id, request in self._pending_requests.items()
+                if datetime.fromisoformat(request.requested_at) <= cutoff
+            ]
+            for request_id in expired:
+                self._pending_requests.pop(request_id, None)
+            requests = list(self._pending_requests.values())
+        if share_id:
+            requests = [item for item in requests if item.share_id == share_id]
+        return sorted(requests, key=lambda item: item.requested_at)
+
+    def dismiss_request(self, request_id: str) -> PendingPeerRequest | None:
+        with self._lock:
+            return self._pending_requests.pop(request_id, None)
+
+    def _receive_access_request(self, data: dict, source_host: str) -> None:
+        try:
+            request_id = str(data.get("request_id") or "")
+            share_id = str(data.get("share_id") or "")
+            raw_name = str(data.get("device_name") or "")
+            device_name = " ".join("".join(character for character in raw_name if character.isprintable()).strip().split())[:80]
+            public_key = normalize_public_key(str(data.get("public_key") or ""))
+            if not re.fullmatch(r"[a-f0-9]{32}", request_id) or not device_name:
+                return
+        except PeerError:
+            return
+        now = time.monotonic()
+        with self._lock:
+            share = self._advertised_shares.get(share_id)
+            if not share or not share.enabled or not share.lan_discovery:
+                return
+            self._request_sources = {
+                host: [stamp for stamp in stamps if now - stamp < 60]
+                for host, stamps in self._request_sources.items()
+                if any(now - stamp < 60 for stamp in stamps)
+            }
+            if source_host not in self._request_sources and len(self._request_sources) >= 256:
+                return
+            recent = self._request_sources.get(source_host, [])
+            if len(recent) >= 6 or len(self._pending_requests) >= 64:
+                return
+            recent.append(now)
+            self._request_sources[source_host] = recent
+            duplicate = next((item for item in self._pending_requests.values() if item.share_id == share_id and item.public_key == public_key), None)
+            if duplicate:
+                return
+            if any(item.public_key == public_key for item in share.authorized_peers):
+                return
+            request = PendingPeerRequest(
+                request_id, share_id, device_name, public_key,
+                source_host, datetime.now(timezone.utc).isoformat(),
+            )
+            self._pending_requests[request_id] = request
+        self.audit.record("peer", "LAN access requested", "pending", peer=device_name, detail=request.fingerprint)
 
     def _discovery_invitations(self) -> list[PeerInvitation]:
         with self._lock:
-            shares = list({share.id: share for share in self._shares.values() if share.id in self.running_shares and share.lan_discovery}.values())
+            shares = [share for share in self._advertised_shares.values() if share.enabled and share.lan_discovery]
         invitations = []
         for share in shares:
+            if share.transport_policy is PeerTransportPolicy.TOR_ONLY or share.no_public_ip_discovery:
+                continue
+            try:
+                invitations.append(PeerInvitation(
+                    share.name,
+                    share.advertised_host or local_network_address(),
+                    validate_port(share.port),
+                    self.host_public_key(share),
+                    share.id,
+                    share.lease_minutes,
+                    role=PeerRole.READ_WRITE,
+                    approval_required=True,
+                ))
+            except PeerError:
+                pass
             for peer in (item for item in share.authorized_peers if item.enabled):
                 try:
-                    invitations.append(PeerInvitation.decode(self.invitation(share, peer.role, peer.name)))
+                    invitation = PeerInvitation.decode(self.invitation(share, peer.role, peer.name))
+                    invitation.recipient_token = _recipient_token(share.id, peer.public_key)
+                    invitations.append(invitation)
                 except PeerError:
                     continue
         return invitations

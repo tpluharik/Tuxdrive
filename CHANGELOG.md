@@ -4,6 +4,15 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+## 0.26.9 — approval-based local collaboration
+
+- Replaced the circular manual-key LAN pairing flow with discoverable folder advertisements and explicit owner approval requests.
+- Let a host select and advertise a folder before any collaborator is authorized; no file service starts until a device is approved.
+- Scope approved LAN invitations to the requesting device while retaining SSH public-key authentication and pinned server fingerprints.
+- Added bounded, deduplicated, expiring access requests with per-source rate limiting so LAN packets cannot silently grant access or grow memory without limit.
+- Simplified the desktop workflow around **Share this folder**, **Request access**, and **Approve selected request**, while retaining invitations, QR exchange, roles, relay, and Tor settings as advanced paths.
+- Disabled automatic router port mapping for new shares unless the owner explicitly enables it.
+
 ## 0.26.8 — circular penguin visual identity
 
 - Replaced the product logo and application icon with the circular black-and-white penguin identity, retaining red only for the bow tie.

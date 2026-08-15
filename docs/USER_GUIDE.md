@@ -2,11 +2,11 @@
 
 <p align="center"><img src="../branding/tuxindrive-logo.png" width="150" alt="TuxInDrive circular black-and-white penguin logo with a red bow tie"></p>
 
-This guide covers TuxInDrive 0.26.8 on Linux, Windows, macOS and Android. Windows and macOS retain the Linux GTK desktop layout, while Android reorganizes accounts, synchronized folders, cloud files, activity and settings for touch displays. Platform-specific installation and signing details are in [Platform support](PLATFORM_SUPPORT.md). Administrators and developers can continue with the [documentation index](README.md), [operations guide](OPERATIONS.md), and [architecture reference](ARCHITECTURE.md).
+This guide covers TuxInDrive 0.26.9 on Linux, Windows, macOS and Android. Windows and macOS retain the Linux GTK desktop layout, while Android reorganizes accounts, synchronized folders, cloud files, activity and settings for touch displays. Platform-specific installation and signing details are in [Platform support](PLATFORM_SUPPORT.md). Administrators and developers can continue with the [documentation index](README.md), [operations guide](OPERATIONS.md), and [architecture reference](ARCHITECTURE.md).
 
 Credentials for rclone-backed providers are kept in rclone's authenticated encrypted configuration. TuxInDrive generates its configuration key locally and stores it in GNOME Secret Service; existing rclone configurations already encrypted by an advanced user are left under that user's password-command setup. Proton's official CLI separately stores its browser session in Secret Service under `ch.proton.drive/drive-sdk-cli`; TuxInDrive never reads or exports it. Do not delete either secret until the related accounts have been disconnected.
 
-Version 0.26.8 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
+Version 0.26.9 is the supported security baseline. Upgrade older installations before reconnecting cloud or peer accounts. See [Security hardening and secure operation](SECURITY_HARDENING.md) for the complete control inventory and post-upgrade checklist.
 
 ### Upgrading from TuxDrive
 
@@ -19,14 +19,14 @@ The 0.25.0 upgrade changes all visible product names to TuxInDrive. Existing pri
 Download the package for your platform. On Ubuntu or Debian, install it with one command:
 
 ```bash
-sudo apt install ./tuxindrive_0.26.8_all.deb
+sudo apt install ./tuxindrive_0.26.9_all.deb
 ```
 
 Launch **TuxInDrive** from Ubuntu's application menu. TuxInDrive remains active in the system tray when its window is closed. On first start it verifies or installs its private cloud transfer engine.
 
 ### Windows and macOS
 
-Run the Windows setup executable or drag TuxInDrive from the macOS DMG to Applications. Both packages open the same account sidebar, synchronized-folder cards, settings and dialogs as Linux. Windows stores secrets in Credential Manager and needs WinFsp for streaming drives; macOS uses Keychain and needs macFUSE. File-manager badges remain Linux/Nautilus-only in 0.26.8.
+Run the Windows setup executable or drag TuxInDrive from the macOS DMG to Applications. Both packages open the same account sidebar, synchronized-folder cards, settings and dialogs as Linux. Windows stores secrets in Credential Manager and needs WinFsp for streaming drives; macOS uses Keychain and needs macFUSE. File-manager badges remain Linux/Nautilus-only in 0.26.9.
 
 ### Android
 
@@ -79,7 +79,7 @@ The black-and-white penguin inside a white circle, with its red bow tie, identif
 
 Open **Settings** and select **Check for updates**. A progress window shows repository checking, the available-version result, download percentage, package verification, system installation, and the final success or failure. If a newer version is available, choose **Download and install**. After the desktop check, Ubuntu authorizes a fixed TuxInDrive helper—not arbitrary APT arguments. The helper independently retrieves the signed manifest, copies the package into root-only staging and rechecks the digest and Debian identity before installation. When installation completes, restart TuxInDrive. A failure leaves the existing installation unchanged.
 
-When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.26.8 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual package installation remains the recovery path when a proxy or cache serves stale metadata.
+When moving from 0.18.1, the legacy channel signed by its already trusted key first installs the fixed 0.19.1 bridge. Restart TuxInDrive, then use **Settings → Check for updates** again: 0.19.1 reads the separately signed v2 channel and installs the current 0.26.9 release. Never bypass a signature warning. If the error persists, close and reopen the update dialog to refetch the manifest; manual package installation remains the recovery path when a proxy or cache serves stale metadata.
 
 ### Rename an item in TuxInDrive
 
@@ -205,25 +205,24 @@ An incompatible transport produces a **blocked** event in the audit timeline. It
 
 ![Multi-peer authorization, leases, and LAN pairing](assets/08-multi-peer-pairing.svg)
 
-### Authorize multiple devices
+### Approve collaborators
 
-Each installation creates a private Ed25519 identity. On every connecting computer select **This computer's public identity key → Copy public key** and exchange only the public line through a trusted channel. On the host enter a readable device name, paste the key, and select **Authorize device**. Repeat for every collaborator. A device can be disabled temporarily or revoked by selecting it, choosing **Revoke selected**, then **Save and start**.
+Each installation creates a private Ed25519 identity. For local collaboration, the joining device sends only its public identity and display name as an access request; the owner must compare its fingerprint and explicitly approve it. Manual public-key exchange remains available for offline invitations and advanced remote setups. A device can be disabled temporarily or revoked by selecting it, choosing **Revoke selected**, then sharing the folder again.
 
 ### On the computer sharing the folder
 
-1. Open **Share a folder** and select the local folder.
-2. Enter the current LAN/public IP address or DNS name that the other computer will use.
-3. Choose an unprivileged TCP port, such as `22022`.
-4. Add one or more named peer public keys under **Authorized peer devices**.
-5. Choose whether the share is advertised on the LAN and set the edit-lease duration.
-6. Select **Save and start**, then **Copy invitation** or **Show invitation QR**.
-7. Send the invitation to authorized users through a trusted channel.
+1. Open **Share a folder**, choose a local folder, and click **Share this folder**. No collaborator key or network address is required for the local workflow.
+2. TuxInDrive advertises the folder name and pinned host fingerprint on the local network. It does not start a file endpoint while nobody is approved.
+3. On the joining computer, open **Find on LAN**, scan, select the folder, and choose **Request access**.
+4. On the sharing computer, select the waiting device under **People and approval requests**, compare its `SHA256:` identity fingerprint with the person, choose the intended role, and click **Approve selected request**.
+5. The joining computer scans again, selects the now-approved result, chooses a local synchronized folder, and connects. The invitation is scoped to that approved identity and the SFTP listener accepts only its SSH key.
+6. Revoke or disable a device and share again to restart the listeners and terminate its active session. Manual key entry, invitations, QR pairing, Tor, relay, address, port, and lease controls remain available.
 
 The IP/DNS address, port, folder, authorized devices, discovery state, lease duration, NAT behavior and optional relay remain editable. Saving restarts the endpoint with the new settings. Stopping or deleting a share never deletes files.
 
 ### NAT traversal and optional no-storage relay
 
-**Automatically request UPnP/NAT-PMP port mapping** is enabled for new shares. TuxInDrive first asks the router to expose the selected peer port using UPnP, then tries NAT-PMP when available. This is best-effort: router policy, carrier-grade NAT and firewalls can still prevent direct access.
+**Automatically request UPnP/NAT-PMP port mapping** is disabled for new shares. Enable it explicitly under advanced settings only when the folder must be reachable beyond the LAN. TuxInDrive first asks the router to expose the selected peer port using UPnP, then tries NAT-PMP when available. This is best-effort: router policy, carrier-grade NAT and firewalls can still prevent direct access.
 
 For those cases, enter an SSH relay hostname, SSH user, SSH port and unused public forwarding port. TuxInDrive creates a reverse SSH tunnel from the sharing computer. A connecting peer still uses TuxInDrive's pinned, encrypted SFTP session inside that tunnel; the relay forwards ciphertext, receives no TuxInDrive private key and stores no file body. The relay operator must enable remote TCP forwarding/GatewayPorts for the selected account. Leaving relay fields blank preserves direct-only operation.
 
@@ -233,9 +232,9 @@ For those cases, enter an SSH relay hostname, SSH user, SSH port and unused publ
 
 ### LAN discovery and QR pairing
 
-If **Advertise this share on the local network** is enabled, open **Find on LAN → Scan local network** on another computer. Discovery uses local-scope UDP multicast and advertises only the share name, address, port, public host key, share ID, and lease duration. It does not authenticate a person and does not normally cross routers.
+If **Visible on this local network** is enabled, open **Find on LAN → Scan local network** on another computer. Discovery uses local-scope UDP multicast and initially advertises only the share name, address, port, public host key, share ID, and lease duration. It does not expose file contents or authenticate a person and does not normally cross routers.
 
-Select a result and compare its complete `SHA256:` host-key fingerprint with the host through a second trusted channel. Only then choose **Use selected peer**. Alternatively, show the invitation QR on the host and choose **Import QR image** on the client. QR encoding and decoding occur locally using tools installed by the Debian package; no online QR service sees the invitation.
+Select a result and choose **Request access**. The request contains the joining device's public identity, display name, random request ID, and target share; it cannot authorize itself. The owner compares the complete `SHA256:` device fingerprint and explicitly approves or rejects it. Requests are deduplicated, rate limited, capped, and expire after ten minutes. After approval, a scan returns an invitation scoped to that device's identity token; the SFTP endpoint still enforces the complete SSH key and the client pins the host key. Alternatively, use the retained invitation QR path. QR encoding and decoding occur locally; no online QR service sees the invitation.
 
 ### On the computer connecting to the folder
 
@@ -601,7 +600,7 @@ cat ~/.local/state/tuxindrive/startup.log
 cat ~/.local/state/tuxindrive/crash.log
 ```
 
-Reinstall the current package with `sudo apt install ./tuxindrive_0.26.8_all.deb`.
+Reinstall the current package with `sudo apt install ./tuxindrive_0.26.9_all.deb`.
 
 ## 13. Data safety
 
@@ -611,10 +610,10 @@ Reinstall the current package with `sudo apt install ./tuxindrive_0.26.8_all.deb
 - Do not point multiple normal jobs at overlapping local folders.
 - Removing a TuxInDrive job does not delete its local or cloud files.
 
-### Security upgrade checklist for 0.26.8
+### Security upgrade checklist for 0.26.9
 
-1. Install `tuxindrive_0.26.8_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
-2. Confirm **Settings → Check for updates** reports 0.26.8 and no signature or expiry error.
+1. Install `tuxindrive_0.26.9_all.deb`; the upgrade closes an older running TuxInDrive instance. Reopen TuxInDrive and restart Nautilus.
+2. Confirm **Settings → Check for updates** reports 0.26.9 and no signature or expiry error.
 3. Reconnect each provider once and verify that `~/.config/rclone/rclone.conf` is encrypted and mode `0600`; do not print or upload it.
 4. Confirm the `TuxInDrive rclone configuration` entry exists in GNOME Passwords and Keys/Secret Service. Do not delete it without an export/recovery plan.
 5. Review peer invitations, revoke unused device and Onion credentials, and exchange replacements through an authenticated channel when compromise is suspected.

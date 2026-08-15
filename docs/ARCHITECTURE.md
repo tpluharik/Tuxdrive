@@ -1,6 +1,6 @@
 # TuxInDrive architecture
 
-This document describes how TuxInDrive 0.26.8 is implemented. It complements
+This document describes how TuxInDrive 0.26.9 is implemented. It complements
 the task-oriented [user guide](USER_GUIDE.md), persisted-field
 [configuration reference](CONFIGURATION.md), and threat-focused
 [security guide](SECURITY_HARDENING.md).
@@ -160,7 +160,7 @@ packaged extension expose the same operations in Linux file-manager menus.
 ## Peer and collaboration implementation
 
 `peer.py` manages Ed25519/SSH identities, invitations, host-key pinning,
-per-device authorization, LAN discovery, edit leases and isolated SFTP
+per-device authorization, request/approval LAN discovery, edit leases and isolated SFTP
 listeners. Roles are enforced at both job direction and server authorization.
 One-time drops use dedicated roots and expire/consume independently.
 

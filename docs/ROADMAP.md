@@ -7,7 +7,18 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.8
+## Current baseline: 0.26.9
+
+### Completed in 0.26.9
+
+Version 0.26.9 adds owner-approved LAN collaboration. A folder can be
+advertised before collaborators are known, but no file listener starts until
+the owner approves a device fingerprint. Access requests are bounded,
+deduplicated, rate limited and short-lived; approved advertisements are scoped
+to that device while the SFTP endpoint continues to enforce its complete key.
+The primary UI is reduced to selecting a folder, requesting access and
+approving a person, with remote-network and privacy controls kept as advanced
+options.
 
 ### Completed in 0.26.8
 

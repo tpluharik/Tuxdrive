@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 from tuxindrive.models import AuthorizedPeer, PeerRole, PeerShare, PeerTransportPolicy, SyncJob
 from tuxindrive.peer import (
     DiscoveredPeer, FileLease, LanDiscovery, PeerError, PeerInvitation, PeerLeaseManager,
-    PeerManager, key_fingerprint, normalize_public_key, validate_port,
+    PeerManager, PendingPeerRequest, key_fingerprint, normalize_public_key, validate_port,
 )
 from tuxindrive.security import sign_json
 from cryptography.hazmat.primitives import serialization
@@ -67,7 +67,81 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(decoded.host, "198.51.100.20")
         self.assertEqual(decoded.port, 22022)
         self.assertEqual(decoded.host_key, KEY)
-        self.assertEqual(json.loads(encoded)["tuxindrive_peer"], 5)
+        self.assertEqual(json.loads(encoded)["tuxindrive_peer"], 6)
+
+    def test_non_object_or_malformed_recipient_invitation_is_rejected(self):
+        with self.assertRaises(PeerError):
+            PeerInvitation.decode("[]")
+        encoded = json.loads(PeerInvitation("Project", "192.0.2.10", 22022, KEY).encode())
+        encoded["recipient_token"] = "not-a-recipient-token"
+        with self.assertRaises(PeerError):
+            PeerInvitation.decode(json.dumps(encoded))
+
+    def test_unapproved_lan_share_can_be_discovered_without_exposing_files(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare("Team folder", str(folder), "192.0.2.10", 22022, id="team")
+            host = root / "hosts" / share.id
+            host.parent.mkdir(parents=True)
+            host.write_text("private", encoding="utf-8")
+            host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            manager = PeerManager(root=root)
+            with patch.object(manager.discovery, "start"):
+                manager.start(share)
+            announcements = manager._discovery_invitations()
+            self.assertIn(share.id, manager.shared_ids)
+            self.assertFalse(manager.running_shares)
+            self.assertEqual(len(announcements), 1)
+            self.assertTrue(announcements[0].approval_required)
+            with self.assertRaisesRegex(PeerError, "Request access"):
+                DiscoveredPeer(
+                    share.name, "192.0.2.10", share.port, KEY, share.id,
+                    approval_required=True,
+                ).invitation()
+
+    def test_lan_access_request_is_rate_limited_deduplicated_and_never_auto_approved(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare("Team", str(folder), "192.0.2.10", id="team")
+            manager = PeerManager(root=Path(temporary) / "peer")
+            manager._advertised_shares[share.id] = share
+            request = {
+                "tuxindrive_lan_request": 1,
+                "request_id": "a" * 32,
+                "share_id": share.id,
+                "device_name": "Alice laptop",
+                "public_key": KEY,
+            }
+            manager._receive_access_request(request, "192.0.2.55")
+            manager._receive_access_request({**request, "request_id": "b" * 32}, "192.0.2.55")
+            pending = manager.pending_requests(share.id)
+            self.assertEqual(len(pending), 1)
+            self.assertIsInstance(pending[0], PendingPeerRequest)
+            self.assertEqual(pending[0].fingerprint, key_fingerprint(KEY))
+            self.assertEqual(share.authorized_peers, [])
+
+    def test_authorized_lan_announcement_is_scoped_to_recipient(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare(
+                "Team", str(folder), "192.0.2.10", 22022,
+                authorized_peers=[AuthorizedPeer("Alice", KEY)], id="team",
+            )
+            host = root / "hosts" / share.id
+            host.parent.mkdir(parents=True)
+            host.write_text("private", encoding="utf-8")
+            host.with_suffix(".pub").write_text(KEY, encoding="utf-8")
+            manager = PeerManager(root=root)
+            manager._advertised_shares[share.id] = share
+            announcements = manager._discovery_invitations()
+            self.assertEqual(len(announcements), 2)
+            public, authorized = announcements
+            self.assertTrue(public.approval_required)
+            self.assertFalse(authorized.approval_required)
+            self.assertTrue(authorized.recipient_token)
 
     def test_onion_invitation_is_v3_and_never_contains_direct_fallback(self):
         onion = "a" * 56 + ".onion"
@@ -223,9 +297,26 @@ class PeerSharingTests(unittest.TestCase):
         self.assertEqual(share.authorized_peers[0].name, "Legacy peer")
 
     def test_discovered_peer_requires_same_pinned_fingerprint(self):
-        peer = DiscoveredPeer("Team", "192.0.2.8", 22022, KEY, "share-1", 15)
+        peer = DiscoveredPeer(
+            "Team", "192.0.2.8", 22022, KEY, "share-1", 15,
+            role=PeerRole.READ_ONLY,
+        )
         self.assertEqual(peer.fingerprint, key_fingerprint(KEY))
         self.assertEqual(peer.invitation().lease_minutes, 15)
+        self.assertEqual(peer.invitation().role, PeerRole.READ_ONLY)
+
+    def test_tor_only_share_is_never_announced_on_lan(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root, folder = Path(temporary) / "peer", Path(temporary) / "shared"
+            folder.mkdir()
+            share = PeerShare(
+                "Private", str(folder), "", 22022,
+                authorized_peers=[AuthorizedPeer("Alice", KEY)], id="private",
+                transport_policy=PeerTransportPolicy.TOR_ONLY, onion_enabled=True,
+            )
+            manager = PeerManager(root=root)
+            manager._advertised_shares[share.id] = share
+            self.assertEqual(manager._discovery_invitations(), [])
 
     def test_public_key_rejects_authorized_keys_options_and_multiline_input(self):
         self.assertEqual(normalize_public_key(KEY + " laptop"), KEY)
