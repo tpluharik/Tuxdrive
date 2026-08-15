@@ -89,7 +89,7 @@ class UpdateManagerTests(unittest.TestCase):
             UpdateManager.parse_manifest(self.release_payload(url=windows_url), self.public, "macos")
 
     def test_repository_manifest_matches_current_or_staged_debian_release(self):
-        """Allow one staged patch while its signed package is being built."""
+        """Allow a durable Release asset or the legacy repository package path."""
         from tuxindrive import __version__
 
         release = UpdateManager.parse_manifest(Path("update/latest-v2.json").read_bytes())
@@ -97,10 +97,13 @@ class UpdateManagerTests(unittest.TestCase):
         published = version_key(release.version)
         self.assertEqual(published[:2], current[:2])
         self.assertIn(current[2] - published[2], (0, 1))
-        package = Path(f"dist/tuxdrive_{release.version}_all.deb")
-        self.assertTrue(package.is_file(), "the signed Debian package must remain available")
-        self.assertEqual(release.url.rsplit("/", 1)[-1], package.name)
-        self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
+        package_name = release_package_name(release, "linux")
+        if "/releases/download/" in release.url:
+            self.assertIn(f"/releases/download/v{release.version}/", release.url)
+        else:
+            package = Path("dist") / package_name
+            self.assertTrue(package.is_file(), "the signed Debian package must remain available")
+            self.assertEqual(release.sha256, hashlib.sha256(package.read_bytes()).hexdigest())
 
     def test_repository_platform_channels_are_signed_and_version_bound(self):
         """Keep every published platform channel on the current release."""
