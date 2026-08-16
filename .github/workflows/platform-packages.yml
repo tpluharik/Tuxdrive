@@ -148,7 +148,7 @@ jobs:
           TUXINDRIVE_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
-          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+          if [[ "$GITHUB_REF" == refs/tags/v* || "$GITHUB_REF" == refs/heads/main ]]; then
             test -n "$ANDROID_KEYSTORE_BASE64"
             test -n "$TUXINDRIVE_ANDROID_STORE_PASSWORD"
             test -n "$TUXINDRIVE_ANDROID_KEY_ALIAS"

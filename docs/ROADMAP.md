@@ -7,12 +7,13 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.10
+## Current baseline: 0.26.11
 
-### Completed in 0.26.10
+### Completed in 0.26.11
 
-Version 0.26.10 makes every desktop dialog resizable and scrollable within the
-available monitor work area, and converts Android Settings to a scrolling list.
+Version 0.26.11 opens every desktop dialog maximized and keeps its intended
+layout inside a two-axis scrolling canvas, while Android Settings remains a
+scrolling list for small or split-screen displays.
 The desktop and mobile interfaces now provide persistent one-click controls to
 hide the network meter and live activity display. Disabling either display also
 stops its periodic sampling or rendering work until the user re-enables it in

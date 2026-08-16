@@ -4,6 +4,12 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+## 0.26.11 — maximized scrollable dialogs
+
+- Open every desktop dialog maximized on its current monitor instead of shrinking the requested layout to a fraction of the available work area.
+- Preserve each dialog's intended content dimensions inside an automatic two-axis scrolling canvas, keeping controls reachable on smaller displays without compressing the layout.
+- Build the Android release package with the configured release signing key when an unreleased bumped version is published directly from `main`.
+
 ## 0.26.10 — responsive controls and optional live rendering
 
 - Made every desktop dialog resizable and automatically scrollable when its content exceeds the monitor work area or the user shrinks the window.

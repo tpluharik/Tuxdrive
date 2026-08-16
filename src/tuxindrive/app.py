@@ -163,7 +163,7 @@ class ResponsiveDialog(Gtk.Dialog):
             return
         self._responsive_content_ready = True
         self.set_resizable(True)
-        width, height = self.get_default_size()
+        requested_width, requested_height = self.get_default_size()
         display = Gdk.Display.get_default()
         monitor = None
         if display is not None:
@@ -177,9 +177,13 @@ class ResponsiveDialog(Gtk.Dialog):
                 monitor = display.get_monitor(0)
         if monitor is not None:
             workarea = monitor.get_workarea()
-            width = min(width, max(320, int(workarea.width * 0.92))) if width > 0 else -1
-            height = min(height, max(240, int(workarea.height * 0.88))) if height > 0 else -1
-            self.set_default_size(width, height)
+            # Open dialogs at the maximum usable monitor size. The original
+            # layout size is retained below as the scrollable canvas instead
+            # of compressing controls to fit a smaller display.
+            self.set_default_size(
+                max(320, int(workarea.width)),
+                max(240, int(workarea.height)),
+            )
 
         area = self.get_content_area()
         children = list(area.get_children())
@@ -188,6 +192,10 @@ class ResponsiveDialog(Gtk.Dialog):
         wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=area.get_spacing())
         wrapper.set_hexpand(True)
         wrapper.set_vexpand(True)
+        wrapper.set_size_request(
+            requested_width if requested_width > 0 else -1,
+            requested_height if requested_height > 0 else -1,
+        )
         packing: list[tuple[Gtk.Widget, bool, bool, int, Gtk.PackType]] = []
         for child in children:
             packing.append((
@@ -215,9 +223,11 @@ class ResponsiveDialog(Gtk.Dialog):
     def show_all(self) -> None:
         self._prepare_responsive_content()
         super().show_all()
+        self.maximize()
 
     def run(self) -> int:
         self._prepare_responsive_content()
+        self.maximize()
         return super().run()
 
 
