@@ -11,13 +11,20 @@ never used as update sources.
 - `macos/` — macOS DMG channel
 - `windows/` — Windows x64 installer channel
 
+Linux uses the compatibility channel at `update/latest-v2.json`; the workflow
+creates `releases/linux/packages` only as temporary build staging. It is not a
+committed or client-facing channel directory.
+
 Clients trust only expiring Ed25519-signed manifests, an approved TuxInDrive
 download origin, a version-bound package filename, and the declared SHA-256.
 
-A push to `main` builds verification artifacts only. A version tag such as
-`v0.26.8` publishes the durable installers at:
+A relevant push to `main` builds all four packages and publishes a durable
+Release only when the source version does not already exist. An existing
+release is never replaced by an ordinary main-branch build. A matching version
+tag validates the tag/source version pair and can publish the same package set.
+For example, 0.26.11 is available at:
 
-`https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.8`
+`https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.11`
 
 Maintainer signing, validation, publication, and rollback rules are documented
 in [`docs/RELEASES.md`](../docs/RELEASES.md).

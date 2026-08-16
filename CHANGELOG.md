@@ -4,6 +4,10 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+- Refreshed the complete user, operator, architecture, configuration, security,
+  testing, platform, release-channel and roadmap documentation for the 0.26.11
+  implementation; no runtime behavior or update trust root changed.
+
 ## 0.26.11 — maximized scrollable dialogs
 
 - Open every desktop dialog maximized on its current monitor instead of shrinking the requested layout to a fraction of the available work area.

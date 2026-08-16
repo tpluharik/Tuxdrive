@@ -1,7 +1,7 @@
 # TuxInDrive release process
 
 This document defines the release and signed update-channel workflow for
-TuxInDrive 0.26.7 and later. It is intended for maintainers. Users should use
+TuxInDrive 0.26.11. It is intended for maintainers. Users should use
 the installation and update instructions in the [user guide](USER_GUIDE.md).
 
 ## Release outputs
@@ -11,13 +11,15 @@ the installation and update instructions in the [user guide](USER_GUIDE.md).
 | Windows x64 | `TuxInDrive-VERSION-windows-x64-setup.exe` and portable ZIP | `releases/windows/latest-v2.json` |
 | macOS | `TuxInDrive-VERSION-macos-ARCH.dmg` | `releases/macos/latest-v2.json` |
 | Android | `TuxInDrive-VERSION-android.apk` | `releases/android/latest-v2.json` |
-| Linux | Debian package distributed through the Linux release/update path | signed Linux update metadata configured by the updater |
+| Linux | `tuxindrive_VERSION_all.deb` | `update/latest-v2.json` |
 
 Large packages are GitHub Release assets, not Git objects. The dedicated
 `releases/windows`, `releases/macos`, and `releases/android` folders are stable
 channel roots: each contains the signed manifest and `packages/README.md`
-pointing to the durable Release URL. Seven-day Actions artifacts are build
-evidence only and are never updater sources.
+pointing to the durable Release URL. Linux retains the compatibility channel
+under `update/`. Seven-day Actions artifacts and the workflow's temporary
+`releases/linux/packages` staging directory are build evidence only and are
+never updater sources.
 
 ## Version sources
 
@@ -63,18 +65,22 @@ version tag to point at a different commit.
 
 ## Continuous-integration behavior
 
-`.github/workflows/platform-packages.yml` builds Windows, macOS, and Android on
-relevant pushes to `main`, manual dispatch, and version tags. Main-branch runs
-produce short-lived verification artifacts. A version tag requires the Android
-release keystore, validates that the tag equals the source version, downloads
-all platform artifacts, checks exact version-bound names, produces
-`SHA256SUMS.txt`, and creates or updates the matching GitHub Release.
+`.github/workflows/platform-packages.yml` builds Linux, Windows, macOS, and
+Android on relevant pushes to `main`, manual dispatch, and version tags. A
+main-branch run publishes a durable `vVERSION` Release only when that source
+version has no Release yet; an existing Release is left unchanged. A version
+tag validates that the tag equals the source version. Both publication paths
+require the Android release keystore, download all platform artifacts, check
+exact version-bound names, produce `SHA256SUMS.txt`, and publish one complete
+package set. Documentation-only commits do not trigger this path-filtered
+workflow.
 
-The Windows job freezes the GTK/Python application in MSYS2 and produces an
-installer plus portable ZIP. The macOS job builds the GTK application and DMG.
-The Android job builds a pinned rclone gomobile library, then runs release lint
-and assembly with the signing secrets. Publishing waits for all three jobs; a
-failed platform blocks the release rather than publishing a partial channel.
+The Linux job builds the Debian package. The Windows job freezes the GTK/Python
+application in MSYS2 and produces an installer plus portable ZIP. The macOS job
+builds the GTK application and DMG. The Android job builds a pinned rclone
+gomobile library, then runs release tests, lint and assembly with the signing
+secrets. Publishing waits for all four jobs; a failed platform blocks the
+release rather than publishing a partial channel.
 
 ## Manifest publication
 

@@ -1,7 +1,7 @@
 # TuxInDrive operations guide
 
 This guide covers normal administration, health checks, traffic policy,
-backup, recovery, and incident response for TuxInDrive 0.26.10. User-facing
+backup, recovery, and incident response for TuxInDrive 0.26.11. User-facing
 procedures are in the [user guide](USER_GUIDE.md); persisted fields and exact
 paths are in [Configuration](CONFIGURATION.md).
 
@@ -163,6 +163,12 @@ signature checks or download an installer from an untrusted mirror.
 Platform packages live as durable assets on the matching GitHub Release. The
 repository folders contain signed channel manifests and package-location
 documentation, not large installer binaries. See [Release process](RELEASES.md).
+
+On `main`, a package workflow can publish the source version only when that
+version does not already have a durable Release. Existing releases are left
+immutable. A documentation-only commit does not run the package workflow
+because its path filter excludes Markdown; it therefore cannot replace an
+installer or silently change an update channel.
 
 ## Incident response
 

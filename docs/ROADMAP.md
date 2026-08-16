@@ -18,6 +18,10 @@ The desktop and mobile interfaces now provide persistent one-click controls to
 hide the network meter and live activity display. Disabling either display also
 stops its periodic sampling or rendering work until the user re-enables it in
 Settings, without deleting logs or accumulated daily traffic totals.
+The repository documentation, security baseline, platform matrix, release
+process and automated-test inventory are synchronized with this release. This
+is documentation maintenance, not a change to cryptographic trust roots or
+runtime behavior.
 
 ### Completed in 0.26.9
 

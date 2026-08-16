@@ -4,7 +4,8 @@
 
 This index separates end-user instructions, operator guidance, implementation
 details, security controls, and release procedures. Documentation describes
-TuxInDrive 0.26.10 unless a section is explicitly historical.
+TuxInDrive 0.26.11 unless a section is explicitly historical. Release-specific
+facts are identified by version; planned work is never described as shipped.
 
 ## Start here
 
@@ -20,6 +21,7 @@ TuxInDrive 0.26.10 unless a section is explicitly historical.
 | Security reviewers | [Security hardening](SECURITY_HARDENING.md) | Trust boundaries, credential storage, update verification and residual risk. |
 | Platform users | [Platform support](PLATFORM_SUPPORT.md) | Linux, Windows, macOS and Android differences and requirements. |
 | Contributors | [Contributing](../CONTRIBUTING.md) | Development workflow and pull-request expectations. |
+| Release users | [Platform channels](../releases/README.md) | Stable updater manifests and durable installer locations. |
 
 ## Feature and history references
 
@@ -42,3 +44,9 @@ TuxInDrive 0.26.10 unless a section is explicitly historical.
 Documentation changes are release work. A feature is not complete until its
 user behavior, configuration, security implications, tests, and operational
 failure modes are reflected in the appropriate documents above.
+
+When documents disagree, the signed manifest and immutable package describe
+what can be installed, the configuration reference describes persisted state,
+and the security policy defines the supported trust boundary. Report drift as
+a documentation bug rather than relying on an older screenshot or Actions
+artifact.

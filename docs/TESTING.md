@@ -18,17 +18,17 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **326 automated tests: 315 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Bandwidth tests cover directional parsing, stricter global/job limits, shared admission and byte-rate control; engine tests cover jitter and atomic incremental reservation; network-meter tests cover rate/daily persistence and malformed or unavailable operating-system counters. Profile tests cover desktop encryption, the separate rclone unlock-key handoff, bounded multi-frame QR interoperability, mixed/incomplete/tampered frame rejection, and actionable rejection of older incomplete mobile backups. Proton tests verify browser-only arguments, forced Secret Service storage, expiry recovery, redaction, `/my-files` confinement, unsafe-name and symlink rejection, nested exclusions, mass-change blocking, native backend routing and the absence of rclone callback/mount execution. Performance tests exercise real Linux inotify delivery, startup-race capture, remote-failure retry, queue-overflow reconciliation, adaptive/provider-aware monitor safety, cache protection and unchanged-write suppression. Packaging/updater tests cover Windows, macOS and signed Android outputs, dedicated release channels, exact current manifests and the fixed original-key 0.19.1 bridge.
+The TuxInDrive development suite contains **339 automated tests: 328 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real OAuth or GitHub tokens, cloud accounts, Onion credentials, peer identities, vault passwords, presence passphrases, or personal files. Bandwidth tests cover directional parsing, stricter global/job limits, shared admission and byte-rate control; engine tests cover jitter and atomic incremental reservation; network-meter tests cover rate/daily persistence and malformed or unavailable operating-system counters. Profile tests cover desktop encryption, Secret Service/credential-helper fallback, the separate rclone unlock-key handoff, bounded multi-frame QR interoperability, mixed/incomplete/tampered frame rejection, and actionable rejection of older incomplete mobile backups. Peer tests cover approval-based LAN advertisements and requests in addition to authenticated endpoints. Packaging/updater tests cover Linux, Windows, macOS and signed Android outputs, dedicated release channels, exact current manifests and the fixed original-key 0.19.1 bridge.
 
 ## Test groups
 
 | Test module | Tests | What it verifies |
 |---|---:|---|
 | `test_audit.py` | 2 | Private audit persistence, filtering and malformed historical-line handling. |
-| `test_bandwidth.py` | 9 | Directional syntax and invalid values, stricter global/job limits, network-slot admission and release, update byte clock and bounded scan jitter. |
+| `test_bandwidth.py` | 10 | Directional syntax and invalid values, stricter global/job limits, network-slot admission and release, update byte clock and bounded scan jitter. |
 | `test_bootstrap.py` | 7 | Linux/macOS transfer-engine selection, rejection and identity-cached revalidation of incompatible/replaced rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_capabilities.py` | 3 | Complete provider records and conservative adaptive-mode restrictions. |
-| `test_config.py` | 10 | Round-trip persistence, bandwidth/theme/cache validation, legacy path compatibility, unchanged-write suppression, private permissions, and invalid configuration quarantine. |
+| `test_config.py` | 11 | Round-trip persistence, bandwidth/theme/cache/visibility validation, legacy path compatibility, unchanged-write suppression, private permissions, and invalid configuration quarantine. |
 | `test_delta.py` | 1 | Rolling BLAKE2 block signatures identify only modified ranges and calculate transferred bytes. |
 | `test_diagnostics.py` | 1 | Startup failures are written before GTK imports, allowing diagnosis when the graphical runtime cannot start. |
 | `test_platform_support.py` | 5 | Safe distribution parsing, Linux/macOS/Windows machine-readable capabilities and unsupported-architecture blocking. |
@@ -40,14 +40,14 @@ The TuxInDrive development suite contains **326 automated tests: 315 Python test
 | `test_offline_action.py` | 9 | Mounted-drive fast dispatch, cold-start queuing, both supported command-line availability option forms, lexical file routing without FUSE resolution, sibling-prefix rejection, exact file-rule isolation, nested offline/online-only precedence, and green-state publication only for locally verified rules. |
 | `test_nautilus_extension.py` | 12 | Exact path/menu isolation, cached/coalesced badge refresh, URI lifecycle, Nautilus 4.1 construction, sensitivity and verified offline transitions. |
 | `test_network_usage.py` | 10 | Linux/macOS/Windows counter parsing and failure handling, platform dispatch, current rates, daily reset, counter rollover and private persistent totals. |
-| `test_packaging.py` | 15 | Debian/Windows/macOS/Android packaging, release-channel layout, native assets, upgrade process, Nautilus routing and emblem metadata. |
-| `test_password_helper.py` | 4 | Private credential-helper input/output, migration-key storage and rejection behavior. |
+| `test_packaging.py` | 17 | Debian/Windows/macOS/Android packaging, release-channel layout, native assets, automatic missing-version publication, upgrade process, Nautilus routing and emblem metadata. |
+| `test_password_helper.py` | 8 | Private credential-helper input/output, packaged Secret Service fallback, migration-key storage and rejection behavior. |
 | `test_profile_qr.py` | 3 | Stable desktop/Android QR protocol, multi-frame ordering/deduplication, bounds and incomplete/mixed/tampered transfer rejection. |
 | `test_performance.py` | 12 | Inotify delivery/startup race, remote retry, overflow reconciliation, monitor safety, cache protection, fail-closed markers and performance hooks. |
 | `test_process_control.py` | 4 | Portable process creation, cancellation, process-group cleanup and timeout behavior. |
 | `test_proton.py` | 29 | Official CLI install/login/session, Secret Service, redaction/confinement, backend migration, safety previews, global admission and fail-closed routing. |
 | `test_collaboration.py` | 11 | Offline CRDT convergence, iterative deep-chain handling, immutable/bounded operation state, checkpoints, review/presence, deterministic ODT/ODS round trips, ZIP-bomb rejection, unsafe XML rejection and binary fallback. |
-| `test_peer.py` | 22 | Invitation compatibility, roles/drops/transports, signed atomic deltas, isolated device roots, authorization/revocation, host-key pinning, leases and private identities. |
+| `test_peer.py` | 27 | Invitation compatibility, approval-based LAN requests/advertisements, roles/drops/transports, signed atomic deltas, isolated device roots, authorization/revocation, host-key pinning, leases and private identities. |
 | `test_policies.py` | 7 | Maximum-usage defaults plus controlled battery, metered-network and normal/overnight schedule decisions, including fail-open probe handling. |
 | `test_recovery.py` | 8 | Local archive/restore behavior, disabled retention, malformed/foreign record rejection, expiry pruning, mass-change and ransomware-suffix blocking, and integrity-audit parsing. |
 | `test_security.py` | 8 | Empty/absolute/parent path rejection, symlink refusal, confined atomic installation, Ed25519-only keys and signed transaction tamper detection. |
@@ -98,9 +98,9 @@ Android JVM coverage is kept beside the mobile source: `MobileValidationTest` co
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.26.10_all.deb
-dpkg-deb --contents dist/tuxindrive_0.26.10_all.deb
-sha256sum dist/tuxindrive_0.26.10_all.deb
+dpkg-deb --info dist/tuxindrive_0.26.11_all.deb
+dpkg-deb --contents dist/tuxindrive_0.26.11_all.deb
+sha256sum dist/tuxindrive_0.26.11_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -115,8 +115,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.26.10 \
-  --package dist/tuxindrive_0.26.10_all.deb \
+python3 scripts/sign-update.py --version 0.26.11 \
+  --package dist/tuxindrive_0.26.11_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```
