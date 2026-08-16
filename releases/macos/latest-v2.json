@@ -1,8 +1,8 @@
 {
-  "version": "0.26.9",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.9/TuxInDrive-0.26.9-macos-arm64.dmg",
-  "sha256": "15902e0d0c867499a5cd5e472ff1f764d6abeb4dae55be1aee7e036a36c4cdbe",
-  "notes": "Approval-based local collaboration and safer network sharing",
-  "expires_at": "2027-02-11T10:38:39.463490+00:00",
-  "signature": "jn/F+7Z7cyKUA8h9PjarBOz7vzwwHolMjc/LcuHGtj1MKU1Gbclc+xUR8/QEbp722OfZpckLCowgaU9RpAd9Cw=="
+  "version": "0.26.10",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.10/TuxInDrive-0.26.10-macos-arm64.dmg",
+  "sha256": "f4a38cc32fc787f03f47703fb3569f9d9103e2fc738d777f5a6bc09002043e47",
+  "notes": "Responsive dialogs and optional live network and activity rendering",
+  "expires_at": "2027-02-12T10:30:58.034673+00:00",
+  "signature": "Gl9XHG0A/qP17LfX75fkzdWaFdo9Xj0GPEGaiBelxAG+GXqu9QxDjqY4GA+QsCcOQowfaVGE0/dTDME//ru5Dw=="
 }

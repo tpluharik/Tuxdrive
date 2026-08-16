@@ -1,8 +1,8 @@
 {
-  "version": "0.26.9",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.9/tuxindrive_0.26.9_all.deb",
-  "sha256": "28f558aeec6cd25864081183ba30bf1fa2e0098c60abc4c990f4b94fb70e3bec",
-  "notes": "Approval-based local collaboration and safer network sharing",
-  "expires_at": "2027-02-11T10:44:26.507975+00:00",
-  "signature": "7Hok3ANvuTQ+09JRSoA8PRa7BldfrBlobHS1agvXPWe3sBXi9t+B4MSRgMll0nHTZHKd0Bru6Bnridm1e7/BAw=="
+  "version": "0.26.10",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.10/tuxindrive_0.26.10_all.deb",
+  "sha256": "38b17f582f3100dfbe9f454b97d4a499b8451d270645f2574bdefc0cf593bc0b",
+  "notes": "Responsive dialogs and optional live network and activity rendering",
+  "expires_at": "2027-02-12T10:30:58.034673+00:00",
+  "signature": "3c2MVYx5jq72tP9+1zmI/8YYfyecRtygGY6NN8K/0Oq+9rdmTaQxWbcgLKN8WFkc5oqicrIqxYVE5PqmgbSHDw=="
 }
