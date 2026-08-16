@@ -65,6 +65,7 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     val networkMeter = remember { NetworkUsageMeter(context.applicationContext) }
     var networkUsage by remember { mutableStateOf(networkMeter.current()) }
     var showNetworkUsage by remember { mutableStateOf(repository.showNetworkUsage()) }
+    var showActivityLog by remember { mutableStateOf(repository.showActivityLog()) }
     LaunchedEffect(networkMeter, showNetworkUsage) {
         if (showNetworkUsage) {
             while (true) {
@@ -92,7 +93,7 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                Destination.entries.forEach { item ->
+                Destination.entries.filter { it != Destination.Activity || showActivityLog }.forEach { item ->
                     NavigationBarItem(
                         selected = destination == item,
                         onClick = { destination = item },
@@ -105,7 +106,10 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
     ) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Header(busy)
-            if (showNetworkUsage) NetworkMeter(networkUsage)
+            if (showNetworkUsage) NetworkMeter(networkUsage) {
+                showNetworkUsage = false
+                repository.setShowNetworkUsage(false)
+            }
             if (error.isNotBlank()) {
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
@@ -116,28 +120,46 @@ private fun TuxInDriveMobile(repository: MobileRepository) {
                 Destination.Accounts -> AccountsScreen(repository, remotes, events, ::refresh)
                 Destination.Sync -> SyncScreen(repository, remotes, events)
                 Destination.Files -> FilesScreen(repository, remotes, events)
-                Destination.Activity -> ActivityScreen(events)
+                Destination.Activity -> ActivityScreen(events) {
+                    showActivityLog = false
+                    repository.setShowActivityLog(false)
+                    destination = Destination.Settings
+                }
                 Destination.Settings -> SettingsScreen(
                     repository,
                     showNetworkUsage,
-                ) {
-                    showNetworkUsage = it
-                    repository.setShowNetworkUsage(it)
-                }
+                    showActivityLog,
+                    onShowNetworkUsageChange = {
+                        showNetworkUsage = it
+                        repository.setShowNetworkUsage(it)
+                    },
+                    onShowActivityLogChange = {
+                        showActivityLog = it
+                        repository.setShowActivityLog(it)
+                    },
+                )
             }
         }
     }
 }
 
 @Composable
-private fun NetworkMeter(usage: MobileNetworkUsage) {
+private fun NetworkMeter(usage: MobileNetworkUsage, onHide: () -> Unit) {
     Card(
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Text("Network", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Network",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = onHide) { Text("Hide") }
+            }
             if (!usage.available) {
                 Text("Traffic counters unavailable", style = MaterialTheme.typography.bodySmall)
             } else {
@@ -417,13 +439,18 @@ private fun FilesScreen(repository: MobileRepository, remotes: List<String>, eve
 }
 
 @Composable
-private fun ActivityScreen(events: List<String>) {
+private fun ActivityScreen(events: List<String>, onHide: () -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxSize(),
     ) {
-        item { SectionTitle("Activity", "This device") }
+        item {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { SectionTitle("Activity", "This device") }
+                TextButton(onClick = onHide) { Text("Hide") }
+            }
+        }
         items(events) { event -> CloudCard(event, "Completed") }
     }
 }
@@ -432,7 +459,9 @@ private fun ActivityScreen(events: List<String>) {
 private fun SettingsScreen(
     repository: MobileRepository,
     showNetworkUsage: Boolean,
+    showActivityLog: Boolean,
     onShowNetworkUsageChange: (Boolean) -> Unit,
+    onShowActivityLogChange: (Boolean) -> Unit,
 ) {
     var wifiOnly by remember { mutableStateOf(repository.wifiOnly()) }
     var chargingOnly by remember { mutableStateOf(repository.chargingOnly()) }
@@ -447,58 +476,80 @@ private fun SettingsScreen(
     val pickTree = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri != null) repository.selectTree(uri)
     }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        SectionTitle("Mobile settings", "rclone $engine")
-        SettingSwitch("Wi-Fi only", "Pause automatic transfers on metered mobile data", wifiOnly) { wifiOnly = it }
-        SettingSwitch("Only while charging", "Defer background work until power is connected", chargingOnly) { chargingOnly = it }
-        OutlinedTextField(
-            value = bandwidthLimit,
-            onValueChange = { value ->
-                bandwidthLimit = value
-                repository.setBandwidthLimit(value)
-            },
-            label = { Text("Global bandwidth limit") },
-            supportingText = { Text("Combined safety target, for example 10M or 2M:10M") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        SettingSwitch(
-            "Show network usage",
-            "Display current speed and daily device totals",
-            showNetworkUsage,
-            onShowNetworkUsageChange,
-        )
-        OutlinedButton(onClick = { pickTree.launch(null) }, modifier = Modifier.fillMaxWidth()) {
-            Text(if (repository.selectedTree().isBlank()) "Choose offline files folder" else "Change offline files folder")
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        item { SectionTitle("Mobile settings", "rclone $engine") }
+        item { SettingSwitch("Wi-Fi only", "Pause automatic transfers on metered mobile data", wifiOnly) { wifiOnly = it } }
+        item { SettingSwitch("Only while charging", "Defer background work until power is connected", chargingOnly) { chargingOnly = it } }
+        item {
+            OutlinedTextField(
+                value = bandwidthLimit,
+                onValueChange = { value ->
+                    bandwidthLimit = value
+                    repository.setBandwidthLimit(value)
+                },
+                label = { Text("Global bandwidth limit") },
+                supportingText = { Text("Combined safety target, for example 10M or 2M:10M") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
         }
-        OutlinedButton(
-            enabled = !updateBusy,
-            onClick = {
-                scope.launch {
-                    updateBusy = true
-                    runCatching {
-                        withContext(Dispatchers.IO) {
-                            val update = repository.checkUpdate() ?: return@withContext null
-                            update to repository.downloadUpdate(update)
-                        }
-                    }.onSuccess { result ->
-                        if (result == null) {
-                            updateStatus = "TuxInDrive ${BuildConfig.VERSION_NAME} is up to date"
-                        } else {
-                            updateStatus = "TuxInDrive ${result.first.version} verified; opening installer"
-                            repository.installUpdate(result.second)
-                        }
-                    }.onFailure { updateStatus = it.message ?: "Update check failed" }
-                    updateBusy = false
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (updateBusy) "Checking and verifying…" else "Check for updates") }
-        Text(updateStatus, style = MaterialTheme.typography.bodySmall)
-        Text(
-            "Android grants access only to folders you choose. Long transfers use OS-managed background work and remain visible to you.",
-            style = MaterialTheme.typography.bodySmall,
-        )
+        item {
+            SettingSwitch(
+                "Show network usage",
+                "Display current speed and daily device totals",
+                showNetworkUsage,
+                onShowNetworkUsageChange,
+            )
+        }
+        item {
+            SettingSwitch(
+                "Show activity log",
+                "Render the Activity destination; hiding it also removes it from navigation",
+                showActivityLog,
+                onShowActivityLogChange,
+            )
+        }
+        item {
+            OutlinedButton(onClick = { pickTree.launch(null) }, modifier = Modifier.fillMaxWidth()) {
+                Text(if (repository.selectedTree().isBlank()) "Choose offline files folder" else "Change offline files folder")
+            }
+        }
+        item {
+            OutlinedButton(
+                enabled = !updateBusy,
+                onClick = {
+                    scope.launch {
+                        updateBusy = true
+                        runCatching {
+                            withContext(Dispatchers.IO) {
+                                val update = repository.checkUpdate() ?: return@withContext null
+                                update to repository.downloadUpdate(update)
+                            }
+                        }.onSuccess { result ->
+                            if (result == null) {
+                                updateStatus = "TuxInDrive ${BuildConfig.VERSION_NAME} is up to date"
+                            } else {
+                                updateStatus = "TuxInDrive ${result.first.version} verified; opening installer"
+                                repository.installUpdate(result.second)
+                            }
+                        }.onFailure { updateStatus = it.message ?: "Update check failed" }
+                        updateBusy = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text(if (updateBusy) "Checking and verifying…" else "Check for updates") }
+        }
+        item { Text(updateStatus, style = MaterialTheme.typography.bodySmall) }
+        item {
+            Text(
+                "Android grants access only to folders you choose. Long transfers use OS-managed background work and remain visible to you.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
     }
 }
 

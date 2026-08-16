@@ -431,6 +431,7 @@ class AppSettings:
     streaming_cache_min_free_gib: int = 5
     streaming_refresh_mode: str = "realtime"
     show_network_usage: bool = True
+    show_live_activity_log: bool = True
     config_version: int = 1
 
     @classmethod

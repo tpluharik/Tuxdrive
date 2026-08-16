@@ -4,6 +4,14 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
 
 ## Unreleased
 
+## 0.26.10 — responsive controls and optional live rendering
+
+- Made every desktop dialog resizable and automatically scrollable when its content exceeds the monitor work area or the user shrinks the window.
+- Made Android Settings a fully scrollable screen so all controls remain reachable on small phones and in split-screen mode.
+- Added persistent one-click hide controls for the desktop and Android network meter; hiding it stops periodic sampling and rendering until it is re-enabled in Settings.
+- Added persistent one-click hide controls for the desktop live activity log and Android Activity destination; hiding them stops log rendering until they are re-enabled in Settings.
+- Preserved existing visibility defaults and configuration compatibility for upgrades.
+
 ## 0.26.9 — approval-based local collaboration
 
 - Replaced the circular manual-key LAN pairing flow with discoverable folder advertisements and explicit owner approval requests.

@@ -1,7 +1,7 @@
 # TuxInDrive configuration reference
 
 This reference describes the persisted desktop configuration in TuxInDrive
-0.26.9. Normal changes should be made in **Settings**, **Connect account**, or
+0.26.10. Normal changes should be made in **Settings**, **Connect account**, or
 **Add/Edit folder**. Stop TuxInDrive and make a backup before manually editing
 JSON; a syntactically valid but inconsistent mapping can still synchronize the
 wrong location.
@@ -70,6 +70,7 @@ job state (`initialized`, last run/status/error) is persisted with the job.
 | `streaming_cache_min_free_gib` | `5` | Free-space reserve, clamped to 1–1024 GiB. |
 | `streaming_refresh_mode` | `realtime` | `realtime`, `balanced`, or `low_traffic`. |
 | `show_network_usage` | `true` | Feature flag for the current/daily traffic panel. |
+| `show_live_activity_log` | `true` | Feature flag for live-log rendering and visibility. |
 | `config_version` | `1` | Persisted schema generation. |
 
 ### Bandwidth syntax and scope
@@ -84,8 +85,10 @@ option are serialized while the global limit is active.
 
 The network usage panel is a device-interface meter, not per-job accounting.
 Its current rates and local-day totals can include traffic from other
-applications. Turning the panel off stops presenting it; it does not disable
-the bandwidth controller.
+applications. Its Hide button and Settings switch both stop periodic meter
+sampling and rendering without deleting accumulated totals; neither disables
+the bandwidth controller. Hiding the Live activity log similarly stops reading
+and rendering log tails until the display is re-enabled in Settings.
 
 ## Accounts
 

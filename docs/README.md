@@ -4,7 +4,7 @@
 
 This index separates end-user instructions, operator guidance, implementation
 details, security controls, and release procedures. Documentation describes
-TuxInDrive 0.26.9 unless a section is explicitly historical.
+TuxInDrive 0.26.10 unless a section is explicitly historical.
 
 ## Start here
 

@@ -1,6 +1,6 @@
 # TuxInDrive architecture
 
-This document describes how TuxInDrive 0.26.9 is implemented. It complements
+This document describes how TuxInDrive 0.26.10 is implemented. It complements
 the task-oriented [user guide](USER_GUIDE.md), persisted-field
 [configuration reference](CONFIGURATION.md), and threat-focused
 [security guide](SECURITY_HARDENING.md).
@@ -206,7 +206,9 @@ origin, filename, size and digest checks in `AndroidUpdater.kt`.
 
 Android is a native Compose application rather than a GTK port:
 
-- `MainActivity.kt` renders Accounts, Sync, Files, Activity and Settings.
+- `MainActivity.kt` renders Accounts, Sync, Files, optional Activity and a
+  scrollable Settings screen; persistent visibility flags stop network/activity
+  rendering when those surfaces are hidden.
 - `RcloneCore.kt` wraps the embedded gomobile RPC API, private rclone config,
   browsing, bisync and the runtime bandwidth limit.
 - `MobileSyncWorker.kt` uses WorkManager constraints and a foreground service.

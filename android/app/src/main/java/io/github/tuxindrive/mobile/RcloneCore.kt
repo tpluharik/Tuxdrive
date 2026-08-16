@@ -246,6 +246,7 @@ class MobileRepository(context: Context) {
     fun chargingOnly(): Boolean = preferences.getBoolean("charging-only", false)
     fun automaticSync(): Boolean = preferences.getBoolean("automatic-sync", false)
     fun showNetworkUsage(): Boolean = preferences.getBoolean("show-network-usage", true)
+    fun showActivityLog(): Boolean = preferences.getBoolean("show-activity-log", true)
     fun bandwidthLimit(): String = preferences.getString("global-bandwidth-limit", "10M").orEmpty()
 
     fun setBandwidthLimit(value: String): Boolean {
@@ -257,6 +258,10 @@ class MobileRepository(context: Context) {
 
     fun setShowNetworkUsage(enabled: Boolean) {
         preferences.edit().putBoolean("show-network-usage", enabled).apply()
+    }
+
+    fun setShowActivityLog(enabled: Boolean) {
+        preferences.edit().putBoolean("show-activity-log", enabled).apply()
     }
 
     fun enqueueSync(wifiOnly: Boolean, chargingOnly: Boolean) {

@@ -155,7 +155,73 @@ def _run_thread(function: Callable, callback: Callable, *args) -> None:
     threading.Thread(target=worker, daemon=True).start()
 
 
-class OAuthWizard(Gtk.Dialog):
+class ResponsiveDialog(Gtk.Dialog):
+    """Dialog whose content remains reachable on small or resized screens."""
+
+    def _prepare_responsive_content(self) -> None:
+        if getattr(self, "_responsive_content_ready", False):
+            return
+        self._responsive_content_ready = True
+        self.set_resizable(True)
+        width, height = self.get_default_size()
+        display = Gdk.Display.get_default()
+        monitor = None
+        if display is not None:
+            parent = self.get_transient_for()
+            parent_window = parent.get_window() if parent is not None else None
+            if parent_window is not None:
+                monitor = display.get_monitor_at_window(parent_window)
+            if monitor is None:
+                monitor = display.get_primary_monitor()
+            if monitor is None and display.get_n_monitors() > 0:
+                monitor = display.get_monitor(0)
+        if monitor is not None:
+            workarea = monitor.get_workarea()
+            width = min(width, max(320, int(workarea.width * 0.92))) if width > 0 else -1
+            height = min(height, max(240, int(workarea.height * 0.88))) if height > 0 else -1
+            self.set_default_size(width, height)
+
+        area = self.get_content_area()
+        children = list(area.get_children())
+        if not children:
+            return
+        wrapper = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=area.get_spacing())
+        wrapper.set_hexpand(True)
+        wrapper.set_vexpand(True)
+        packing: list[tuple[Gtk.Widget, bool, bool, int, Gtk.PackType]] = []
+        for child in children:
+            packing.append((
+                child,
+                bool(area.child_get_property(child, "expand")),
+                bool(area.child_get_property(child, "fill")),
+                int(area.child_get_property(child, "padding")),
+                area.child_get_property(child, "pack-type"),
+            ))
+            area.remove(child)
+        for child, expand, fill, padding, pack_type in packing:
+            if pack_type == Gtk.PackType.END:
+                wrapper.pack_end(child, expand, fill, padding)
+            else:
+                wrapper.pack_start(child, expand, fill, padding)
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_width(1)
+        scroll.set_min_content_height(1)
+        scroll.set_propagate_natural_width(False)
+        scroll.set_propagate_natural_height(False)
+        scroll.add(wrapper)
+        area.pack_start(scroll, True, True, 0)
+
+    def show_all(self) -> None:
+        self._prepare_responsive_content()
+        super().show_all()
+
+    def run(self) -> int:
+        self._prepare_responsive_content()
+        return super().run()
+
+
+class OAuthWizard(ResponsiveDialog):
     def __init__(
         self,
         parent: Gtk.Window,
@@ -395,7 +461,7 @@ class OAuthWizard(Gtk.Dialog):
         self.status.set_markup(f"<span foreground='#c01c28'>{GLib.markup_escape_text(message)}</span>")
 
 
-class ProtonAuthDialog(Gtk.Dialog):
+class ProtonAuthDialog(ResponsiveDialog):
     """Browser-only authorization through Proton's official CLI."""
 
     def __init__(
@@ -788,7 +854,7 @@ class ExceptionRulesEditor(Gtk.Box):
         self.entry.set_text("")
 
 
-class SyncJobDialog(Gtk.Dialog):
+class SyncJobDialog(ResponsiveDialog):
     def __init__(
         self,
         parent: Gtk.Window,
@@ -1096,7 +1162,7 @@ class SyncJobDialog(Gtk.Dialog):
         return location.name if location else "Cloud drive"
 
 
-class GitHubSyncDialog(Gtk.Dialog):
+class GitHubSyncDialog(ResponsiveDialog):
     """Configure a repository job while leaving authentication to system Git."""
 
     def __init__(
@@ -1246,7 +1312,7 @@ class GitHubSyncDialog(Gtk.Dialog):
         return account, job
 
 
-class RecoveryHistoryDialog(Gtk.Dialog):
+class RecoveryHistoryDialog(ResponsiveDialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication", job: SyncJob) -> None:
         super().__init__(title=f"Version history · {job.name}", transient_for=parent, modal=True)
         self.set_default_size(760, 480)
@@ -1286,7 +1352,7 @@ class RecoveryHistoryDialog(Gtk.Dialog):
         dialog.destroy()
 
 
-class IntegrityDialog(Gtk.Dialog):
+class IntegrityDialog(ResponsiveDialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication", job: SyncJob, conflicts_only: bool = False) -> None:
         super().__init__(title=("Conflict review center" if conflicts_only else "Integrity audit and repair"), transient_for=parent, modal=True)
         self.set_default_size(800, 520)
@@ -1360,7 +1426,7 @@ class IntegrityDialog(Gtk.Dialog):
         return False
 
 
-class VaultDialog(Gtk.Dialog):
+class VaultDialog(ResponsiveDialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
         super().__init__(title="Create encrypted cloud vault", transient_for=parent, modal=True)
         self.controller = controller
@@ -1409,7 +1475,7 @@ class VaultDialog(Gtk.Dialog):
         return Account(remote=remote, provider=Provider.VAULT, display_name=self.name.get_text().strip() or "Encrypted vault", vault_base_remote=base, vault_base_path=folder)
 
 
-class CollaborativeEditorDialog(Gtk.Dialog):
+class CollaborativeEditorDialog(ResponsiveDialog):
     """Local-first editor whose immutable operation files travel with a shared folder."""
 
     def __init__(self, parent: Gtk.Window) -> None:
@@ -1644,7 +1710,7 @@ class CollaborativeEditorDialog(Gtk.Dialog):
             self.status.set_text(str(exc))
 
 
-class PeerSharingDialog(Gtk.Dialog):
+class PeerSharingDialog(ResponsiveDialog):
     """Manage direct encrypted folders and connections without an intermediary."""
 
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
@@ -2245,7 +2311,7 @@ class PeerSharingDialog(Gtk.Dialog):
                 result = subprocess.run([encoder, "-o", image_file.name, "-s", "7", "--", value], capture_output=True, text=True, timeout=20, check=False)
                 if result.returncode:
                     raise PeerError((result.stderr or "Could not generate QR code").strip())
-                dialog = Gtk.Dialog(title=f"Pair with {share.name}", transient_for=self, modal=True)
+                dialog = ResponsiveDialog(title=f"Pair with {share.name}", transient_for=self, modal=True)
                 dialog.get_content_area().set_border_width(18)
                 dialog.get_content_area().pack_start(Gtk.Image.new_from_file(image_file.name), True, True, 0)
                 fingerprint = key_fingerprint(self.controller.peers.host_public_key(share))
@@ -2494,7 +2560,7 @@ class PeerSharingDialog(Gtk.Dialog):
         )
 
 
-class ProfileDialog(Gtk.Dialog):
+class ProfileDialog(ResponsiveDialog):
     """Encrypted, user-owned cloud profile backup and device restore."""
 
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
@@ -2661,7 +2727,7 @@ class ProfileDialog(Gtk.Dialog):
         return False
 
 
-class ProfileQrDialog(Gtk.Dialog):
+class ProfileQrDialog(ResponsiveDialog):
     """Display one encrypted profile transfer frame at a time."""
 
     def __init__(self, parent: Gtk.Window, frames: list[str]) -> None:
@@ -2729,7 +2795,7 @@ class ProfileQrDialog(Gtk.Dialog):
             self.temporary.cleanup()
 
 
-class OperationsDashboard(Gtk.Dialog):
+class OperationsDashboard(ResponsiveDialog):
     def __init__(self, parent: Gtk.Window, controller: "TuxInDriveApplication") -> None:
         super().__init__(title="TuxInDrive sync health and audit", transient_for=parent, modal=False)
         self.set_default_size(920, 620)
@@ -2782,7 +2848,7 @@ class OperationsDashboard(Gtk.Dialog):
         return self._tree(("Provider", "Streaming", "Polling", "Hashes", "Moves", "Share links", "Versions", "Notes"), rows)
 
 
-class HelpCenterDialog(Gtk.Dialog):
+class HelpCenterDialog(ResponsiveDialog):
     """Searchable offline documentation in the selected UI language."""
 
     def __init__(self, parent: Gtk.Window) -> None:
@@ -2955,6 +3021,11 @@ class MainWindow(Gtk.ApplicationWindow):
         network_title.get_style_context().add_class("network-title")
         network_title.set_tooltip_text(tr("network_traffic_hint"))
         self.network_strip.pack_start(network_title, False, False, 0)
+        hide_network = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        hide_network.set_relief(Gtk.ReliefStyle.NONE)
+        hide_network.set_tooltip_text("Hide network traffic and stop meter rendering")
+        hide_network.connect("clicked", self._hide_network_usage)
+        self.network_strip.pack_end(hide_network, False, False, 0)
         self.network_values: dict[str, Gtk.Label] = {}
         for key, icon_name, label in (
             ("download_rate", "go-down-symbolic", tr("download_now")),
@@ -3006,10 +3077,18 @@ class MainWindow(Gtk.ApplicationWindow):
         scroll.add(self.job_list)
         main.pack_start(scroll, True, True, 0)
 
-        activity = Gtk.Expander(label=tr("live_log"))
+        activity = Gtk.Expander()
         self.activity_panel = activity
         activity.get_style_context().add_class("activity-panel")
         activity.set_expanded(True)
+        activity_header = Gtk.Box(spacing=8)
+        activity_header.pack_start(Gtk.Label(label=tr("live_log")), True, True, 0)
+        hide_activity = Gtk.Button.new_from_icon_name("window-close-symbolic", Gtk.IconSize.MENU)
+        hide_activity.set_relief(Gtk.ReliefStyle.NONE)
+        hide_activity.set_tooltip_text("Hide the live activity log and stop rendering it")
+        hide_activity.connect("clicked", self._hide_activity_log)
+        activity_header.pack_end(hide_activity, False, False, 0)
+        activity.set_label_widget(activity_header)
         self.activity_view = Gtk.TextView()
         self.activity_view.set_editable(False)
         self.activity_view.set_cursor_visible(False)
@@ -3022,6 +3101,9 @@ class MainWindow(Gtk.ApplicationWindow):
         activity_scroll.add(self.activity_view)
         activity.add(activity_scroll)
         main.pack_start(activity, False, True, 0)
+        activity.set_no_show_all(
+            not self.controller.config.settings.show_live_activity_log
+        )
         content.pack_start(main, True, True, 0)
 
         self.infobar = Gtk.InfoBar()
@@ -3120,6 +3202,27 @@ class MainWindow(Gtk.ApplicationWindow):
         elif self._network_source:
             GLib.source_remove(self._network_source)
             self._network_source = 0
+
+    def _hide_network_usage(self, _button: Gtk.Widget) -> None:
+        self.set_network_meter_enabled(False)
+        self.controller.save()
+
+    def set_activity_log_enabled(self, enabled: bool) -> None:
+        self.controller.config.settings.show_live_activity_log = enabled
+        self.activity_panel.set_no_show_all(not enabled)
+        self.activity_panel.set_visible(enabled)
+        if enabled:
+            self.activity_panel.set_expanded(True)
+            self._refresh_activity_log()
+        else:
+            self.activity_panel.set_expanded(False)
+            self._activity_files.clear()
+            self._activity_content = ""
+            self.activity_view.get_buffer().set_text("")
+
+    def _hide_activity_log(self, _button: Gtk.Widget) -> None:
+        self.set_activity_log_enabled(False)
+        self.controller.save()
 
     def _render_network_usage(self, usage) -> None:
         if not usage.available:
@@ -3566,7 +3669,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.refresh()
 
     def _choose_provider(self, _button: Gtk.Widget) -> None:
-        dialog = Gtk.Dialog(title=tr("choose_provider"), transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title=tr("choose_provider"), transient_for=self, modal=True)
         dialog.set_default_size(560, 360)
         area = dialog.get_content_area()
         area.set_border_width(24)
@@ -3683,7 +3786,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.refresh()
 
     def _group_name_dialog(self, title: str, action: str, value: str = "") -> str:
-        dialog = Gtk.Dialog(title=title, transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title=title, transient_for=self, modal=True)
         area = dialog.get_content_area()
         area.set_border_width(20)
         entry = Gtk.Entry()
@@ -3721,7 +3824,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.refresh()
 
     def _move_to_group(self, _button: Gtk.Widget, job: SyncJob) -> None:
-        dialog = Gtk.Dialog(title="Move to group", transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title="Move to group", transient_for=self, modal=True)
         area = dialog.get_content_area()
         area.set_border_width(20)
         combo = Gtk.ComboBoxText()
@@ -3829,7 +3932,7 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog.destroy()
 
     def _rename_job(self, _button: Gtk.Button, job: SyncJob) -> None:
-        dialog = Gtk.Dialog(title="Rename synchronized folder", transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title="Rename synchronized folder", transient_for=self, modal=True)
         area = dialog.get_content_area()
         area.set_border_width(20)
         area.set_spacing(10)
@@ -3941,7 +4044,7 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def _show_settings(self, _button: Gtk.Widget) -> None:
-        dialog = Gtk.Dialog(title="TuxInDrive settings", transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title="TuxInDrive settings", transient_for=self, modal=True)
         _set_window_brand_icon(dialog)
         dialog.set_default_size(580, 700)
         dialog.get_style_context().add_class("tuxindrive-dialog")
@@ -3962,6 +4065,8 @@ class MainWindow(Gtk.ApplicationWindow):
         nautilus.set_active(self.controller.config.settings.nautilus_integration)
         network_usage = Gtk.CheckButton(label="Show current and daily network usage")
         network_usage.set_active(self.controller.config.settings.show_network_usage)
+        live_activity = Gtk.CheckButton(label="Show and render the Live activity log")
+        live_activity.set_active(self.controller.config.settings.show_live_activity_log)
         theme_frame = Gtk.Frame(label=tr("visual_style"))
         theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         theme_box.set_border_width(12)
@@ -4020,7 +4125,7 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, policy, metered, global_bandwidth, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, live_activity, policy, metered, global_bandwidth, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
             dialog.get_content_area().pack_start(widget, False, False, 6)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
@@ -4055,6 +4160,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.start_minimized = minimized.get_active()
             self.controller.config.settings.nautilus_integration = nautilus.get_active()
             self.controller.config.settings.show_network_usage = network_usage.get_active()
+            self.controller.config.settings.show_live_activity_log = live_activity.get_active()
             selected_theme = normalize_theme(theme.get_active_id())
             theme_changed = selected_theme != self.controller.config.settings.visual_theme
             self.controller.config.settings.visual_theme = selected_theme
@@ -4076,6 +4182,7 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.save()
             self.controller.configure_autostart()
             self.set_network_meter_enabled(network_usage.get_active())
+            self.set_activity_log_enabled(live_activity.get_active())
             if theme_changed:
                 self.controller.apply_visual_theme(selected_theme)
         dialog.destroy()
@@ -4093,7 +4200,7 @@ class MainWindow(Gtk.ApplicationWindow):
         if self.update_dialog:
             self.update_dialog.present()
             return
-        dialog = Gtk.Dialog(title="TuxInDrive update", transient_for=self, modal=True)
+        dialog = ResponsiveDialog(title="TuxInDrive update", transient_for=self, modal=True)
         _set_window_brand_icon(dialog)
         dialog.set_default_size(520, 210)
         area = dialog.get_content_area()
@@ -4274,7 +4381,11 @@ class MainWindow(Gtk.ApplicationWindow):
         self.controller.run_job(job)
 
     def _refresh_activity_log(self) -> bool:
-        if not self.get_visible() or not self.activity_panel.get_expanded():
+        if (
+            not self.controller.config.settings.show_live_activity_log
+            or not self.get_visible()
+            or not self.activity_panel.get_expanded()
+        ):
             return True
         sources = [application_log_path()]
         sync_directory = cache_root() / "logs"

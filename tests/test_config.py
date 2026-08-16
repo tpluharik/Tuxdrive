@@ -126,6 +126,12 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(config.settings.show_network_usage)
         self.assertFalse(config.to_dict()["settings"]["show_network_usage"])
 
+    def test_live_activity_feature_flag_defaults_on_and_round_trips(self):
+        self.assertTrue(AppConfig.from_dict({}).settings.show_live_activity_log)
+        config = AppConfig.from_dict({"settings": {"show_live_activity_log": False}})
+        self.assertFalse(config.settings.show_live_activity_log)
+        self.assertFalse(config.to_dict()["settings"]["show_live_activity_log"])
+
     def test_global_bandwidth_limit_defaults_safely_and_is_validated(self):
         self.assertEqual(AppConfig.from_dict({}).settings.global_bandwidth_limit, "10M")
         configured = AppConfig.from_dict({"settings": {"global_bandwidth_limit": "2M:8M"}})
