@@ -1,8 +1,8 @@
 {
-  "version": "0.26.10",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.10/tuxindrive_0.26.10_all.deb",
-  "sha256": "38b17f582f3100dfbe9f454b97d4a499b8451d270645f2574bdefc0cf593bc0b",
-  "notes": "Responsive dialogs and optional live network and activity rendering",
-  "expires_at": "2027-02-12T10:30:58.034673+00:00",
-  "signature": "3c2MVYx5jq72tP9+1zmI/8YYfyecRtygGY6NN8K/0Oq+9rdmTaQxWbcgLKN8WFkc5oqicrIqxYVE5PqmgbSHDw=="
+  "version": "0.26.11",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.11/tuxindrive_0.26.11_all.deb",
+  "sha256": "cb2dad713f265facaf3b7011e57d449751c11e9ef443eb79747b03864bddf567",
+  "notes": "Maximized desktop dialogs with preserved scrollable layouts",
+  "expires_at": "2027-02-12T11:00:57.498834+00:00",
+  "signature": "k9kQOcBPnnlawZHYkmKLjhK41dN7DZzcc3NkoQ8fyTwxiDxJQ7iS+vikAuB0OZoGUGIMkLEweT0kKF6vqTOzDw=="
 }
