@@ -17,6 +17,25 @@ on:
       - ".github/workflows/platform-packages.yml"
 
 jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+        with:
+          persist-credentials: false
+      - name: Build Debian package
+        run: sh scripts/build-deb.sh
+      - name: Stage dedicated Linux release folder
+        run: |
+          version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
+          mkdir -p releases/linux/packages
+          cp "dist/tuxindrive_${version}_all.deb" releases/linux/packages/
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: tuxindrive-linux
+          retention-days: 7
+          path: releases/linux/packages/tuxindrive_*_all.deb
+
   windows:
     runs-on: windows-latest
     steps:
@@ -154,8 +173,8 @@ jobs:
           path: releases/android/packages/TuxInDrive-*-android.apk
 
   publish-release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos, android]
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
+    needs: [linux, windows, macos, android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -168,12 +187,17 @@ jobs:
           path: release-assets
           merge-multiple: true
       - name: Validate version-bound platform packages
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
-          test "$RELEASE_TAG" = "v$version"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            release_tag="$GITHUB_REF_NAME"
+            test "$release_tag" = "v$version"
+          else
+            release_tag="v$version"
+          fi
+          printf 'RELEASE_TAG=%s\n' "$release_tag" >> "$GITHUB_ENV"
           find release-assets -type f -print
+          test "$(find release-assets -type f -name "tuxindrive_${version}_all.deb" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-setup.exe" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-portable.zip" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-macos-*.dmg" | wc -l)" -eq 1
@@ -184,12 +208,15 @@ jobs:
       - name: Publish durable platform packages
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           mapfile -t packages < <(find release-assets -type f -print)
-          test "${#packages[@]}" -eq 5
+          test "${#packages[@]}" -eq 6
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber
+            if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+              gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber
+            else
+              echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+            fi
           else
             gh release create "$RELEASE_TAG" "${packages[@]}" \
               --target "$GITHUB_SHA" --generate-notes --title "TuxInDrive ${RELEASE_TAG#v}"
