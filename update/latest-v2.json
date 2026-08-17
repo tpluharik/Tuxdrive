@@ -1,8 +1,8 @@
 {
-  "version": "0.26.13",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.13/tuxindrive_0.26.13_all.deb",
-  "sha256": "8365b12864ea86899bd4d8462d8fbb732ec431970c3e3cf603041f4175cc758c",
-  "notes": "Server installer repair and package verification",
-  "expires_at": "2027-02-13T08:57:16.416477+00:00",
-  "signature": "iRruJbTgGEQTGngT8xV3Nqs1YpWA7V745wuTUe9iKy3oBPICjQDfx+sBK/VS24eIoya+G62kobaDxwO5Ybm+BA=="
+  "version": "0.26.14",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.14/tuxindrive_0.26.14_all.deb",
+  "sha256": "675755c68e8071a31aa6e427687210ed651b5f11c3d0b7affe90dbde3f5d6b02",
+  "notes": "Immutable server package repair and verified platform release",
+  "expires_at": "2027-02-13T09:21:38.022674+00:00",
+  "signature": "+PtTRjr/yU26bh6LPIFXpHEumVvBK7ds4W5y1uVAEfWpFN44X9bMZzyH7jsGFxKjyXGNJoSgmluE9/lcn868BA=="
 }
