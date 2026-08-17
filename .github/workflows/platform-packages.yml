@@ -223,7 +223,8 @@ jobs:
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber
             else
-              echo "Release $RELEASE_TAG already exists; leaving it unchanged."
+              echo "::error::Release $RELEASE_TAG already exists. Bump the application version before publishing from main."
+              exit 1
             fi
           else
             gh release create "$RELEASE_TAG" "${packages[@]}" \

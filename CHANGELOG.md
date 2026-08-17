@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.14 — immutable server package repair
+
+- Isolated the server Python runtime under `/usr/lib/tuxindrive-server` so the
+  server and desktop Debian packages can be installed together safely.
+- Added clean Ubuntu 24.04, Debian 12 and Debian 13 co-installation checks and
+  verified the installed bootstrap token plus server configuration command.
+- Made an existing same-version Release a hard failure for branch publishing,
+  preventing a successful workflow from silently retaining stale artifacts.
+
 ## 0.26.13 — server installer repair
 
 - Fixed the Linux server launcher so the post-install initializer receives the

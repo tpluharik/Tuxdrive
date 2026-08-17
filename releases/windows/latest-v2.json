@@ -1,8 +1,8 @@
 {
-  "version": "0.26.12",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.12/TuxInDrive-0.26.12-windows-x64-setup.exe",
-  "sha256": "6a936ef3e62ea7a52901ee7787419b1132509e345d489645229d970114916aa5",
-  "notes": "Self-hosted server preview and client integration feature flag",
-  "expires_at": "2027-02-13T08:14:50.273845+00:00",
-  "signature": "tY+MZtubMD+HT8QroFlakubSBNvvxWjBlDdI8sW2Gy7T52XOrgO6v83kbZ4+IZWlXU9ty3xTKJlYQgMEQ0AJDQ=="
+  "version": "0.26.13",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.13/TuxInDrive-0.26.13-windows-x64-setup.exe",
+  "sha256": "24954dfee2dbcde3650403bca6139a07eb81d7246fb851e26e86cecf16818972",
+  "notes": "Server installer repair and package verification",
+  "expires_at": "2027-02-13T08:57:17.617961+00:00",
+  "signature": "Q9R3FDkERjx8RpxUIRRcf2tWtkDJ6IlYiun6TpQ8na8iyt0YwdwBNH0uy4HkFtN3oqhc5Ri85vP+PIdwncnbAg=="
 }

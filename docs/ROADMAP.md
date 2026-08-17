@@ -7,7 +7,15 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.13
+## Current baseline: 0.26.14
+
+### Completed in 0.26.14: immutable server package repair
+
+The server runtime now has a private library root and can be installed beside
+the desktop package without Debian file-ownership conflicts. Clean-distribution
+CI verifies the complete install and initialization path. Branch-based release
+publishing now refuses to reuse an existing version tag, ensuring maintainers
+bump the version instead of silently leaving stale public artifacts in place.
 
 ### Completed in 0.26.13: server installer repair
 

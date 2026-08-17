@@ -1,8 +1,8 @@
 {
-  "version": "0.26.12",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.12/TuxInDrive-0.26.12-macos-arm64.dmg",
-  "sha256": "1cccfa7697d6dc932195cdc99f80c67a85af99a8a17ed63d69dfb44075d192bc",
-  "notes": "Self-hosted server preview and client integration feature flag",
-  "expires_at": "2027-02-13T08:14:46.647213+00:00",
-  "signature": "jkCSULbj+PdIAytyqOoOWj4T2ddhnQDock3O8WT5Ae2Fj/nwPQOjaMHsWMR83Zw8GSAUbBoGlVAOAkjIjRzcBA=="
+  "version": "0.26.13",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.13/TuxInDrive-0.26.13-macos-arm64.dmg",
+  "sha256": "ba1cd5060831a1dd7c753a3240c9061589f9a1ae2a7c26245b45a16902f435ac",
+  "notes": "Server installer repair and package verification",
+  "expires_at": "2027-02-13T08:57:17.717931+00:00",
+  "signature": "Y4IR217Xj8xgTwiIGCOYitDa+cdfFPSa23Vd2SW9Cqsl3Zwfo7o+6ZVbS1lfi3UL31TvO0a7ZxLN6NZXiGifAg=="
 }
