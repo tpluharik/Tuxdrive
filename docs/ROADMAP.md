@@ -7,7 +7,23 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.11
+## Current baseline: 0.26.12
+
+### Completed in 0.26.12: server preview
+
+The first Linux server package implements the planned role boundaries as a
+functional preview: GTK-free cloud/peer agent, opaque mailbox, rendezvous,
+content-addressed encrypted object cache, encrypted collaboration delivery,
+allowlisted byte relay, update attestation, authenticated administration API,
+and read-only MCP. Roles are independently enabled; remote HTTP fails closed
+without TLS; payload, TTL, quota and audit bounds are enforced; and desktop
+integration defaults off behind a Settings flag with native token storage.
+Direct peer/cloud operation remains unchanged.
+
+This is not completion of the 1.0 hardening milestone. Federation, web UI,
+hardware-backed service keys, OCI/NAS/Windows/macOS packages, push adapters,
+stable SDK schemas, mutating MCP consent, external review and long-duration
+fault testing remain planned. See [Server preview](SERVER.md).
 
 ### Completed in 0.26.11
 
@@ -150,10 +166,10 @@ The next recommended development milestone is **1.0.0 — operational hardening*
 | 28 | Hardware-backed keys and recovery trustees | Security | Medium | Support TPM/FIDO2-backed device keys where available and optional threshold recovery split across user-selected trusted devices. Recovery must never allow a TuxInDrive server or a single provider account to decrypt workspace content. |
 | 29 | Encrypted workspace messaging and file comments | Cooperation | High | Add end-to-end encrypted text threads, replies, reactions, file annotations and decisions beside shared files. Messages use the same verified membership model but a separate versioned event stream so file synchronization cannot corrupt conversation state. |
 | 30 | Secure workspace membership and administration | Cooperation | High | Add owner/admin/member/guest roles, invitation approval, expiry, device-level revocation and a signed membership history. Administrative actions must be authenticated, locally auditable and unable to reveal past plaintext to newly added members unless users explicitly re-share it. |
-| 31 | Optional zero-knowledge mailbox server | Server | High | Provide a small self-hostable service that temporarily queues opaque encrypted operations for offline devices. Enforce quotas, expiry and abuse controls; the server should not receive content keys, filenames or plaintext, while documentation must disclose observable IP, timing, size and account metadata. |
-| 32 | Optional encrypted object and snapshot server | Server | Medium | Add a self-hosted, content-addressed ciphertext store for large files and workspace snapshots when no peer is online. Use client-side encryption, signed manifests, retention limits and garbage collection; direct peer transfer remains preferred when available. |
+| 31 | Optional zero-knowledge mailbox server | Server | Preview on main | Self-hosted opaque encrypted queue now enforces tenant quotas, expiry, acknowledgement deletion, size/rate bounds and audit. External review, federation and internet-scale abuse testing remain. |
+| 32 | Optional encrypted object and snapshot server | Server | Preview on main | Content-addressed ciphertext storage now provides tenant isolation, deduplication, expiry and quotas. Signed client manifests, production garbage collection and large-scale testing remain. |
 | 33 | Federated workspace directory and rendezvous | Server | Research | Let independently operated TuxInDrive servers exchange only signed device/workspace routing envelopes, without federation-wide user search by default. Support HTTPS and authenticated onion endpoints, domain pinning and server migration without changing end-to-end workspace identity. |
-| 34 | Reproducible TuxInDrive server appliance | Server | Medium | Package the mailbox/rendezvous/object roles as a hardened container and Ubuntu service with minimal ports, automatic key rotation, backup/restore, metrics without filenames, safe upgrades and an onion-service deployment profile. Offer each role independently to minimize metadata concentration. |
+| 34 | Reproducible TuxInDrive server appliance | Server | Linux `.deb` preview | A separate hardened systemd `.deb` and independently enabled roles now exist. OCI/NAS images, automatic rotation, reproducibility/provenance, web administration and an onion reverse-proxy profile remain. |
 | 35 | Local-first real-time Markdown and text editing | Editing | Completed 0.17.0 | An operation-based CRDT stores immutable per-actor operations separately from exported files, supports offline edits and deterministic merge order, and exposes explicit import/export checkpoints compatible with ordinary Markdown/text editors. |
 | 36 | Structured ODT collaborative editing | Editing | Research adapter 0.17.0 | ODT imports paragraphs, style references, comments and tracked-change markers. Deterministic snapshots preserve original XML for recovery and warn before unsupported inline structures can flatten; broader structured operations and round-trip fixtures remain research. |
 | 37 | ODS and common document-format adapters | Editing | Research adapter 0.17.0 | ODS sheets/cells/formulas have structured import and deterministic recoverable export. DOCX/XLSX/PDF deliberately use lock/version/review rather than unsafe real-time mutation pending format-specific convergence evidence. |

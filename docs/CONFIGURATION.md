@@ -1,7 +1,7 @@
 # TuxInDrive configuration reference
 
 This reference describes the persisted desktop configuration in TuxInDrive
-0.26.11. Normal changes should be made in **Settings**, **Connect account**, or
+0.26.12. Normal changes should be made in **Settings**, **Connect account**, or
 **Add/Edit folder**. Stop TuxInDrive and make a backup before manually editing
 JSON; a syntactically valid but inconsistent mapping can still synchronize the
 wrong location.
@@ -71,6 +71,9 @@ job state (`initialized`, last run/status/error) is persisted with the job.
 | `streaming_refresh_mode` | `realtime` | `realtime`, `balanced`, or `low_traffic`. |
 | `show_network_usage` | `true` | Feature flag for the current/daily traffic panel. |
 | `show_live_activity_log` | `true` | Feature flag for live-log rendering and visibility. |
+| `server_integration_enabled` | `false` | Preview feature flag. False means no server client is created and no request is made. |
+| `server_url` | `http://127.0.0.1:9443` | Server origin only; remote plain HTTP, embedded credentials, paths, queries and fragments are rejected. Loopback HTTP matches the local server default; remote servers require HTTPS. |
+| `server_ca_file` | empty | Optional PEM CA for a privately issued server certificate. |
 | `config_version` | `1` | Persisted schema generation. |
 
 ### Bandwidth syntax and scope
@@ -89,6 +92,12 @@ applications. Its Hide button and Settings switch both stop periodic meter
 sampling and rendering without deleting accumulated totals; neither disables
 the bandwidth controller. Hiding the Live activity log similarly stops reading
 and rendering log tails until the display is re-enabled in Settings.
+
+The server bearer token is intentionally absent from this configuration. It is
+stored under a URL-derived entry in Secret Service, Credential Manager, or
+Keychain. Changing the URL selects another credential entry. The server's own
+schema, role, quota, retention and TLS fields are documented in
+[Server preview](SERVER.md#configuration).
 
 ## Accounts
 

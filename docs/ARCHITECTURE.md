@@ -1,6 +1,6 @@
 # TuxInDrive architecture
 
-This document describes how TuxInDrive 0.26.11 is implemented. It complements
+This document describes how TuxInDrive 0.26.12 is implemented. It complements
 the task-oriented [user guide](USER_GUIDE.md), persisted-field
 [configuration reference](CONFIGURATION.md), and threat-focused
 [security guide](SECURITY_HARDENING.md).
@@ -11,7 +11,9 @@ TuxInDrive is a local orchestration layer around provider APIs, rclone, Git,
 the official Proton Drive CLI, operating-system credential stores, and
 platform file APIs. The desktop application is Python with GTK 3. Android is a
 native Kotlin/Jetpack Compose application embedding rclone through gomobile.
-Cloud data does not pass through a TuxInDrive service.
+Cloud data does not pass through a TuxInDrive service unless the user explicitly
+enables the separate server preview and selects one of its opaque coordination
+roles. Enabling it does not reroute existing cloud or direct-peer transfers.
 
 ```text
 Desktop GTK / Android Compose UI
@@ -225,6 +227,34 @@ Android is a native Compose application rather than a GTK port:
 
 Only persisted URI permissions grant Android folder access. Unique WorkManager
 names and a process mutex prevent duplicate scheduled/manual jobs.
+
+## Server implementation
+
+`server.py` is a GTK-free composition root for `tuxindrive-server`. It loads a
+validated schema-1 server configuration, refuses non-loopback HTTP, hashes
+bearer tokens before comparison, applies per-source request admission, creates
+`ServerStore`, and starts only the roles named in `enabled_roles`.
+
+`HeadlessAgent` composes `ConfigStore`, `GlobalBandwidthController`,
+`ProtonDriveClient`, `SyncEngine`, `TransferPolicy`, and `PeerManager`. It can
+schedule normal cloud/Git/Proton jobs, start enabled peer endpoints (including
+configured Tor peer services), and expose redacted status plus explicit
+sync/dry-run/cancel operations without importing GTK. Streaming/FUSE jobs are
+deliberately not scheduled by the system service.
+
+`server_store.py` owns private SQLite mailbox, rendezvous, content-addressed
+object, collaboration and audit tables. Tenant identity comes from the
+authenticated token mapping; payload columns remain opaque bytes, TTL/quota
+checks run under one store lock, and WAL/full-sync durability is enabled.
+
+`server_client.py` enforces origin-only URLs, HTTPS outside loopback, normal CA
+verification, bounded JSON and authenticated requests. `server_credentials.py`
+stores the bearer token in the platform credential service under a URL-derived
+key. `AppSettings.server_integration_enabled` defaults to false, so no server
+request occurs until the user explicitly enables integration.
+
+The versioned API also provides an allowlisted bounded `CONNECT` relay, signed
+manifest attestation and read-only MCP JSON-RPC. See [Server preview](SERVER.md).
 
 ## Platform integration
 

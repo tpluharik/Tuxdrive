@@ -1,7 +1,7 @@
 # TuxInDrive release process
 
 This document defines the release and signed update-channel workflow for
-TuxInDrive 0.26.11. It is intended for maintainers. Users should use
+TuxInDrive 0.26.12. It is intended for maintainers. Users should use
 the installation and update instructions in the [user guide](USER_GUIDE.md).
 
 ## Release outputs
@@ -12,6 +12,7 @@ the installation and update instructions in the [user guide](USER_GUIDE.md).
 | macOS | `TuxInDrive-VERSION-macos-ARCH.dmg` | `releases/macos/latest-v2.json` |
 | Android | `TuxInDrive-VERSION-android.apk` | `releases/android/latest-v2.json` |
 | Linux | `tuxindrive_VERSION_all.deb` | `update/latest-v2.json` |
+| Linux server preview | `tuxindrive-server_VERSION_all.deb` | No automatic-update channel in the first preview |
 
 Large packages are GitHub Release assets, not Git objects. The dedicated
 `releases/windows`, `releases/macos`, and `releases/android` folders are stable
@@ -20,6 +21,15 @@ pointing to the durable Release URL. Linux retains the compatibility channel
 under `update/`. Seven-day Actions artifacts and the workflow's temporary
 `releases/linux/packages` staging directory are build evidence only and are
 never updater sources.
+
+The server is intentionally a separate Debian package built with
+`scripts/build-server-deb.sh`. It is not installed by the desktop package. The
+cross-platform release workflow publishes it as a durable asset beside the
+client packages after all platform jobs pass. Before a server package is
+attached to a Release, run its focused tests, inspect its installed layout and
+control scripts, validate the systemd hardening and perform a clean
+Debian/Ubuntu install. A future server update channel must receive its own signed
+platform/product manifest; it must never reuse the desktop Linux manifest.
 
 ## Version sources
 

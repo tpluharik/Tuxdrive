@@ -432,6 +432,9 @@ class AppSettings:
     streaming_refresh_mode: str = "realtime"
     show_network_usage: bool = True
     show_live_activity_log: bool = True
+    server_integration_enabled: bool = False
+    server_url: str = "http://127.0.0.1:9443"
+    server_ca_file: str = ""
     config_version: int = 1
 
     @classmethod
@@ -458,6 +461,14 @@ class AppSettings:
                 data[key] = default
         if data.get("streaming_refresh_mode") not in {"realtime", "balanced", "low_traffic"}:
             data["streaming_refresh_mode"] = "realtime"
+        from .server_client import normalize_server_url
+        try:
+            data["server_url"] = normalize_server_url(
+                data.get("server_url", "http://127.0.0.1:9443")
+            )
+        except ValueError:
+            data["server_url"] = "http://127.0.0.1:9443"
+            data["server_integration_enabled"] = False
         return cls(**data)
 
 

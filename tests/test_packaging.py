@@ -217,6 +217,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("name: tuxindrive-android", platforms)
         self.assertIn(":app:testDebugUnitTest", platforms)
         self.assertIn(":app:testReleaseUnitTest", platforms)
+        self.assertIn("sh scripts/build-server-deb.sh", platforms)
+        self.assertIn('tuxindrive-server_${version}_all.deb', platforms)
         self.assertTrue(Path("scripts/build-windows.ps1").is_file())
         self.assertTrue(Path("scripts/build-macos.sh").is_file())
         self.assertTrue(Path("packaging/windows/TuxInDrive.iss").is_file())

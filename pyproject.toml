@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuxindrive"
-version = "0.26.11"
+version = "0.26.12"
 description = "Native multi-provider cloud sync and streaming client for desktop and mobile"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -19,6 +19,7 @@ dependencies = [
 [project.scripts]
 tuxindrive = "tuxindrive.app:main"
 tuxindrive-rclone-password = "tuxindrive.password_helper:main"
+tuxindrive-server = "tuxindrive.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

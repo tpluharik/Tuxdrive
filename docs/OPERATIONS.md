@@ -1,7 +1,7 @@
 # TuxInDrive operations guide
 
 This guide covers normal administration, health checks, traffic policy,
-backup, recovery, and incident response for TuxInDrive 0.26.11. User-facing
+backup, recovery, and incident response for TuxInDrive 0.26.12. User-facing
 procedures are in the [user guide](USER_GUIDE.md); persisted fields and exact
 paths are in [Configuration](CONFIGURATION.md).
 
@@ -169,6 +169,32 @@ version does not already have a durable Release. Existing releases are left
 immutable. A documentation-only commit does not run the package workflow
 because its path filter excludes Markdown; it therefore cannot replace an
 installer or silently change an update channel.
+
+## Server operation
+
+The server is a separate package and system service. Check it without exposing
+configuration or tokens:
+
+```bash
+systemctl status tuxindrive-server
+journalctl -u tuxindrive-server --since today
+curl http://127.0.0.1:9443/healthz
+sudo -u tuxindrive-server tuxindrive-server check \
+  --config /etc/tuxindrive-server/server.json
+```
+
+The public probe contains no version, role or tenant data. Use the client's
+authenticated **Test server connection** action for complete health. Back up
+`server.json` and `server.sqlite3` together while stopped or with a
+transaction-consistent SQLite backup. The database contains ciphertext plus
+sensitive metadata and requires the same endpoint protection as ordinary logs.
+
+If a bearer token is exposed, generate a new high-entropy token, replace its
+digest in `token_hashes`, distribute the raw token through another trusted
+channel, restart, and remove the old digest. Never bind remotely without TLS.
+Keep `relay_targets` empty unless an exact nested-encryption endpoint is needed,
+and remove unused roles rather than relying only on a firewall. See
+[Server preview](SERVER.md) for installation, configuration and backup limits.
 
 ## Incident response
 

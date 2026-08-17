@@ -10,6 +10,8 @@ on:
       - "android/**"
       - "branding/**"
       - "packaging/windows/**"
+      - "packaging/server/**"
+      - "scripts/build-server-deb.sh"
       - "scripts/build-windows.ps1"
       - "scripts/build-windows-msys2.sh"
       - "scripts/build-macos.sh"
@@ -24,17 +26,22 @@ jobs:
         with:
           persist-credentials: false
       - name: Build Debian package
-        run: sh scripts/build-deb.sh
+        run: |
+          sh scripts/build-deb.sh
+          sh scripts/build-server-deb.sh
       - name: Stage dedicated Linux release folder
         run: |
           version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
           mkdir -p releases/linux/packages
           cp "dist/tuxindrive_${version}_all.deb" releases/linux/packages/
+          cp "dist/tuxindrive-server_${version}_all.deb" releases/linux/packages/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-linux
           retention-days: 7
-          path: releases/linux/packages/tuxindrive_*_all.deb
+          path: |
+            releases/linux/packages/tuxindrive_*_all.deb
+            releases/linux/packages/tuxindrive-server_*_all.deb
 
   windows:
     runs-on: windows-latest
@@ -198,6 +205,7 @@ jobs:
           printf 'RELEASE_TAG=%s\n' "$release_tag" >> "$GITHUB_ENV"
           find release-assets -type f -print
           test "$(find release-assets -type f -name "tuxindrive_${version}_all.deb" | wc -l)" -eq 1
+          test "$(find release-assets -type f -name "tuxindrive-server_${version}_all.deb" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-setup.exe" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-portable.zip" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-macos-*.dmg" | wc -l)" -eq 1
@@ -210,7 +218,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -t packages < <(find release-assets -type f -print)
-          test "${#packages[@]}" -eq 6
+          test "${#packages[@]}" -eq 7
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber

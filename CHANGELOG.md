@@ -2,11 +2,16 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
-## Unreleased
+## 0.26.12 — self-hosted server preview
 
 - Refreshed the complete user, operator, architecture, configuration, security,
-  testing, platform, release-channel and roadmap documentation for the 0.26.11
-  implementation; no runtime behavior or update trust root changed.
+  testing, platform, release-channel and roadmap documentation for the 0.26.12
+  implementation; the existing update trust root remains unchanged.
+- Added the first self-hosted Linux server preview with a separate `.deb`,
+  hardened systemd service, headless reuse of the sync/peer engines, bounded
+  opaque mailbox/rendezvous/object/collaboration storage, allowlisted relay,
+  attestation, read-only MCP, authenticated API, and a default-off desktop
+  Settings feature flag whose token remains in the native credential store.
 
 ## 0.26.11 — maximized scrollable dialogs
 

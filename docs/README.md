@@ -4,7 +4,7 @@
 
 This index separates end-user instructions, operator guidance, implementation
 details, security controls, and release procedures. Documentation describes
-TuxInDrive 0.26.11 unless a section is explicitly historical. Release-specific
+TuxInDrive 0.26.12 unless a section is explicitly historical. Release-specific
 facts are identified by version; planned work is never described as shipped.
 
 ## Start here
@@ -20,6 +20,7 @@ facts are identified by version; planned work is never described as shipped.
 | Maintainers | [Release process](RELEASES.md) | Versioning, native builds, signed update channels, artifacts, validation and rollback. |
 | Security reviewers | [Security hardening](SECURITY_HARDENING.md) | Trust boundaries, credential storage, update verification and residual risk. |
 | Platform users | [Platform support](PLATFORM_SUPPORT.md) | Linux, Windows, macOS and Android differences and requirements. |
+| Server operators | [Server preview](SERVER.md) | Headless roles, `.deb` installation, API, client feature flag, quotas, TLS and limitations. |
 | Contributors | [Contributing](../CONTRIBUTING.md) | Development workflow and pull-request expectations. |
 | Release users | [Platform channels](../releases/README.md) | Stable updater manifests and durable installer locations. |
 

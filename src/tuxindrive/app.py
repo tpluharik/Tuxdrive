@@ -83,6 +83,8 @@ from .nautilus_support import (
 from .themes import THEMES, css_for_theme, normalize_theme, theme_by_key
 from .network_usage import NetworkUsageMeter, format_bytes
 from .bandwidth import GlobalBandwidthController, normalize_bandwidth_limit
+from .server_client import ServerClient, ServerClientError, normalize_server_url
+from .server_credentials import store_server_token
 
 try:  # Ubuntu's AppIndicator extension provides Windows-like tray controls.
     gi.require_version("AyatanaAppIndicator3", "0.1")
@@ -4077,6 +4079,27 @@ class MainWindow(Gtk.ApplicationWindow):
         network_usage.set_active(self.controller.config.settings.show_network_usage)
         live_activity = Gtk.CheckButton(label="Show and render the Live activity log")
         live_activity.set_active(self.controller.config.settings.show_live_activity_log)
+        server_integration = Gtk.CheckButton(label="Enable TuxInDrive server integration (preview)")
+        server_integration.set_active(self.controller.config.settings.server_integration_enabled)
+        server_url = Gtk.Entry()
+        server_url.set_placeholder_text("Server URL, for example https://server.example:9443")
+        server_url.set_text(self.controller.config.settings.server_url)
+        server_token = Gtk.Entry()
+        server_token.set_visibility(False)
+        server_token.set_input_purpose(Gtk.InputPurpose.PASSWORD)
+        server_token.set_placeholder_text("API token (leave blank to keep the stored token)")
+        server_ca = Gtk.Entry()
+        server_ca.set_placeholder_text("Optional private CA certificate path")
+        server_ca.set_text(self.controller.config.settings.server_ca_file)
+        server_hint = Gtk.Label(
+            label=(
+                "Disabled by default. When enabled, TuxInDrive can contact your self-hosted "
+                "server for health, encrypted mailbox/object/rendezvous/collaboration roles, "
+                "and headless job status. The API token is stored in the native credential store."
+            ),
+            xalign=0,
+        )
+        server_hint.set_line_wrap(True)
         theme_frame = Gtk.Frame(label=tr("visual_style"))
         theme_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         theme_box.set_border_width(12)
@@ -4135,8 +4158,9 @@ class MainWindow(Gtk.ApplicationWindow):
         schedule_end = Gtk.Entry()
         schedule_end.set_placeholder_text("Allowed until HH:MM")
         schedule_end.set_text(self.controller.config.settings.schedule_end)
-        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, live_activity, policy, metered, global_bandwidth, battery, cache_row, streaming_refresh, schedule_start, schedule_end):
+        for widget in (theme_frame, launch, notifications, minimized, nautilus, network_usage, live_activity, policy, metered, global_bandwidth, battery, cache_row, streaming_refresh, schedule_start, schedule_end, server_integration, server_url, server_token, server_ca, server_hint):
             dialog.get_content_area().pack_start(widget, False, False, 6)
+        dialog.add_button("Test server connection", 5)
         dialog.add_button("Peer-to-peer sharing…", 3)
         dialog.add_button("TuxInDrive Profile / migrate…", 4)
         dialog.add_button("Check for updates", 2)
@@ -4161,16 +4185,27 @@ class MainWindow(Gtk.ApplicationWindow):
                 bandwidth_value = normalize_bandwidth_limit(
                     global_bandwidth.get_text()
                 )
+                server_url_value = normalize_server_url(server_url.get_text())
             except ValueError as exc:
                 dialog.destroy()
                 self.message(str(exc), Gtk.MessageType.ERROR)
                 return
+            if server_token.get_text():
+                try:
+                    store_server_token(server_url_value, server_token.get_text())
+                except RuntimeError as exc:
+                    dialog.destroy()
+                    self.message(str(exc), Gtk.MessageType.ERROR)
+                    return
             self.controller.config.settings.launch_at_login = launch.get_active()
             self.controller.config.settings.notifications = notifications.get_active()
             self.controller.config.settings.start_minimized = minimized.get_active()
             self.controller.config.settings.nautilus_integration = nautilus.get_active()
             self.controller.config.settings.show_network_usage = network_usage.get_active()
             self.controller.config.settings.show_live_activity_log = live_activity.get_active()
+            self.controller.config.settings.server_integration_enabled = server_integration.get_active()
+            self.controller.config.settings.server_url = server_url_value
+            self.controller.config.settings.server_ca_file = server_ca.get_text().strip()
             selected_theme = normalize_theme(theme.get_active_id())
             theme_changed = selected_theme != self.controller.config.settings.visual_theme
             self.controller.config.settings.visual_theme = selected_theme
@@ -4190,6 +4225,11 @@ class MainWindow(Gtk.ApplicationWindow):
             self.controller.config.settings.schedule_start = start_value
             self.controller.config.settings.schedule_end = end_value
             self.controller.save()
+            self.controller.server_client = (
+                ServerClient(server_url_value, server_ca.get_text().strip())
+                if server_integration.get_active()
+                else None
+            )
             self.controller.configure_autostart()
             self.set_network_meter_enabled(network_usage.get_active())
             self.set_activity_log_enabled(live_activity.get_active())
@@ -4202,6 +4242,30 @@ class MainWindow(Gtk.ApplicationWindow):
             self._show_peer_sharing(_button)
         elif response == 4:
             ProfileDialog(self, self.controller)
+        elif response == 5:
+            try:
+                test_url = normalize_server_url(server_url.get_text())
+                client = ServerClient(
+                    test_url,
+                    server_ca.get_text().strip(),
+                    token=server_token.get_text() or None,
+                )
+            except (ValueError, RuntimeError, ServerClientError) as exc:
+                self.message(str(exc), Gtk.MessageType.ERROR)
+                return
+            self.message("Testing the TuxInDrive server connection…")
+            _run_thread(client.health, self._server_health_ready)
+
+    def _server_health_ready(self, result: dict | None, error: Exception | None) -> bool:
+        if error or not result:
+            self.message(f"TuxInDrive server connection failed: {error}", Gtk.MessageType.ERROR)
+            return False
+        roles = ", ".join(str(item) for item in result.get("roles", [])) or "health only"
+        self.message(
+            f"TuxInDrive server {result.get('version', 'unknown')} is available. Roles: {roles}.",
+            Gtk.MessageType.INFO,
+        )
+        return False
 
     def _show_peer_sharing(self, _button: Gtk.Widget) -> None:
         PeerSharingDialog(self, self.controller)
@@ -4531,6 +4595,14 @@ class TuxInDriveApplication(Gtk.Application):
         self.peers = PeerManager(self.config.settings.rclone_path, audit=self.audit)
         self.profiles = ProfileManager(self.store, self.rclone)
         self.network_meter = NetworkUsageMeter()
+        self.server_client = (
+            ServerClient(
+                self.config.settings.server_url,
+                self.config.settings.server_ca_file,
+            )
+            if self.config.settings.server_integration_enabled
+            else None
+        )
         self.window: MainWindow | None = None
         self.indicator = None
         self._runtime_ready_once = False

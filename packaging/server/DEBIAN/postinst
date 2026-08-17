@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+if ! getent passwd tuxindrive-server >/dev/null; then
+  adduser --system --group --home /var/lib/tuxindrive-server \
+    --no-create-home --disabled-login tuxindrive-server
+fi
+install -d -m 0750 -o tuxindrive-server -g tuxindrive-server /etc/tuxindrive-server
+install -d -m 0750 -o tuxindrive-server -g tuxindrive-server /var/lib/tuxindrive-server
+if [ ! -f /etc/tuxindrive-server/server.json ]; then
+  runuser -u tuxindrive-server -- /usr/bin/tuxindrive-server init \
+    --config /etc/tuxindrive-server/server.json \
+    --state /var/lib/tuxindrive-server \
+    --token-file /var/lib/tuxindrive-server/bootstrap-token
+  chown root:root /var/lib/tuxindrive-server/bootstrap-token
+  chmod 0600 /var/lib/tuxindrive-server/bootstrap-token
+fi
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload || true
+fi
+printf '%s\n' \
+  'TuxInDrive Server installed. Read the initial API token with:' \
+  '  sudo cat /var/lib/tuxindrive-server/bootstrap-token' \
+  'Store it in the client Settings, then securely delete that bootstrap file.' \
+  'Start the server with: sudo systemctl enable --now tuxindrive-server'

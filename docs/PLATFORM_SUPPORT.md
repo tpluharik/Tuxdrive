@@ -1,6 +1,6 @@
 # Platform support and adaptive installation
 
-TuxInDrive 0.26.11 publishes packages for Debian-family Linux, Windows x64, macOS and Android. Linux, Windows and macOS use the same GTK desktop UI; Android uses a Material mobile UI backed by rclone's in-process gomobile library. Desktop dialogs open maximized and preserve their full layout inside a two-axis scrolling canvas; Android Settings is vertically scrollable. Credentials remain in GNOME Secret Service, Windows Credential Manager, macOS Keychain, or Android's private application sandbox. A missing optional integration disables only that feature. Package locations and updater behavior are documented in [Release process](RELEASES.md).
+TuxInDrive 0.26.12 publishes packages for Debian-family Linux, Windows x64, macOS and Android. Linux, Windows and macOS use the same GTK desktop UI; Android uses a Material mobile UI backed by rclone's in-process gomobile library. Desktop dialogs open maximized and preserve their full layout inside a two-axis scrolling canvas; Android Settings is vertically scrollable. Credentials remain in GNOME Secret Service, Windows Credential Manager, macOS Keychain, or Android's private application sandbox. A missing optional integration disables only that feature. Package locations and updater behavior are documented in [Release process](RELEASES.md).
 
 ## Compatibility matrix
 
@@ -11,6 +11,7 @@ The desktop baseline is Ubuntu 24.04/26.04, Debian 12/13, Windows 10/11 x64 and 
 | Windows 10/11 x64 | Native package CI | WinFsp optional | Application controls | Same GTK UI; Git must be installed for GitHub jobs. Explorer overlays are not included. |
 | macOS 12+ | Native package CI | macFUSE optional | Application controls | Same GTK UI; Finder overlays and Apple notarization require the release signing gate. |
 | Android 8+ phone/tablet | Native librclone + SAF | Offline selected folders | Native mobile controls | Material UI, encrypted config import, cloud browsing and WorkManager two-way sync; no transparent FUSE drive. |
+| Ubuntu/Debian Server amd64/arm64 | Separate headless `.deb` | Not scheduled by default | CLI/systemd/API | GTK-free sync/peer agent plus independently enabled encrypted coordination roles; remote API requires TLS. |
 | Ubuntu 26.04 GNOME | Expected | Expected with FUSE 3 | Nautilus 4.1 design target | Primary target; complete GNOME/Wayland VM release test required. |
 | Ubuntu 24.04 LTS GNOME | CI-installed | Expected with FUSE 3 | Nautilus 4.x | Supported; verify AppIndicator extension and unlocked GNOME Keyring in the user session. |
 | Debian 13 GNOME | CI-installed | Expected with FUSE 3 | Nautilus 4.x | Supported core; integration package versions come from Debian repositories. |
@@ -71,3 +72,8 @@ Before marking a distribution as fully verified, install the `.deb` on a clean a
 
 Equivalent clean-device gates for Windows, macOS, and Android are listed in
 [Release validation](RELEASES.md#release-validation).
+
+The first server package is Linux `Architecture: all` Python code; rclone,
+OpenSSH and optional Tor executables still need matching host-architecture
+packages. Windows Server, macOS LaunchDaemon, OCI/NAS appliances and public
+federation remain compatibility targets, not current package claims.

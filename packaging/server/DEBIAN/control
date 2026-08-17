@@ -1,0 +1,15 @@
+Package: tuxindrive-server
+Version: 0.26.12
+Section: net
+Priority: optional
+Architecture: all
+Maintainer: TuxInDrive contributors <tpluharik@users.noreply.github.com>
+Depends: python3 (>= 3.10), python3-cryptography, python3-defusedxml, adduser, ca-certificates, openssh-client, openssh-server, rclone
+Recommends: tor, obfs4proxy
+Homepage: https://github.com/tpluharik/TuxInDrive
+Description: Self-hosted encrypted coordination and headless synchronization server
+ TuxInDrive Server provides independently enabled headless synchronization,
+ peer hosting, opaque encrypted mailbox, rendezvous, object cache,
+ collaboration delivery, allowlisted no-storage relay, signed update
+ attestation, authenticated administration API, and read-only MCP roles.
+ Remote binding requires TLS and every private API requires a bearer token.
