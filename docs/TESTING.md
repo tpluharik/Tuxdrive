@@ -18,7 +18,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **356 automated tests: 345 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection and read-only MCP. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
+The TuxInDrive development suite contains **357 automated tests: 346 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection and read-only MCP. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
 
 ## Test groups
 
@@ -51,7 +51,7 @@ The TuxInDrive development suite contains **356 automated tests: 345 Python test
 | `test_policies.py` | 7 | Maximum-usage defaults plus controlled battery, metered-network and normal/overnight schedule decisions, including fail-open probe handling. |
 | `test_recovery.py` | 8 | Local archive/restore behavior, disabled retention, malformed/foreign record rejection, expiry pruning, mass-change and ransomware-suffix blocking, and integrity-audit parsing. |
 | `test_security.py` | 8 | Empty/absolute/parent path rejection, symlink refusal, confined atomic installation, Ed25519-only keys and signed transaction tamper detection. |
-| `test_server.py` | 17 | Private initialization, package-launcher forwarding, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, authenticated HTTP, relay rejection and read-only MCP. |
+| `test_server.py` | 18 | Private initialization, package-launcher forwarding and private library isolation, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, authenticated HTTP, relay rejection and read-only MCP. |
 | `test_themes.py` | 5 | Nordic Glass, Bento Cloud and Midnight Sync registration; shared components and distinct palettes; Midnight-only dark preference; persisted selection; safe legacy/invalid fallback. |
 | `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 19 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |

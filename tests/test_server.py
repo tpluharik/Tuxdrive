@@ -94,7 +94,14 @@ class ServerConfigurationTests(unittest.TestCase):
         source = launcher.read_text(encoding="utf-8")
         self.assertIn("' \"$@\"", source)
         self.assertNotIn("' tuxindrive-server \"$@\"", source)
+        self.assertIn('sys.path.insert(0,"/usr/lib/tuxindrive-server")', source)
         subprocess.run(["sh", "-n", str(launcher)], check=True)
+
+    def test_server_package_uses_a_private_library_root(self):
+        repository = Path(__file__).resolve().parents[1]
+        build_script = (repository / "scripts/build-server-deb.sh").read_text(encoding="utf-8")
+        self.assertIn("usr/lib/tuxindrive-server/tuxindrive", build_script)
+        self.assertNotIn('$PACKAGE_ROOT/usr/lib/tuxindrive"', build_script)
 
     def test_remote_bind_requires_tls(self):
         raw = {"bind": "0.0.0.0", "token_hashes": {"0" * 64: "owner"}}

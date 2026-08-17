@@ -8,6 +8,8 @@ This changelog summarizes user-visible releases. Detailed operation, safety limi
   requested `init` command instead of an extra executable-name argument.
 - Prepare the private server state directory before creating its locked system
   account, avoiding a misleading missing-home warning during installation.
+- Install the server runtime under its own private library root so the server
+  and desktop Debian packages can be installed together without file clashes.
 - Added package-launcher regression coverage and documented both GitHub Release
   installation and recovery from an unfinished 0.26.12 package configuration.
 
