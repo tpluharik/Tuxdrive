@@ -8,6 +8,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tuxindrive.models import AppConfig, AppSettings
 from tuxindrive.server import (
@@ -20,6 +21,7 @@ from tuxindrive.server import (
 from tuxindrive.server_client import ServerClient, ServerClientError, normalize_server_url
 from tuxindrive.server_credentials import credential_account
 from tuxindrive.server_store import ServerStore, ServerStoreError
+from tuxindrive.server_admin import _read_owned_source
 
 
 class ServerStoreTests(unittest.TestCase):
@@ -102,6 +104,36 @@ class ServerConfigurationTests(unittest.TestCase):
         build_script = (repository / "scripts/build-server-deb.sh").read_text(encoding="utf-8")
         self.assertIn("usr/lib/tuxindrive-server/tuxindrive", build_script)
         self.assertNotIn('$PACKAGE_ROOT/usr/lib/tuxindrive"', build_script)
+
+    def test_server_gui_is_packaged_and_uses_narrow_privileged_actions(self):
+        repository = Path(__file__).resolve().parents[1]
+        gui = (repository / "src/tuxindrive/server_gui.py").read_text(encoding="utf-8")
+        build = (repository / "scripts/build-server-deb.sh").read_text(encoding="utf-8")
+        control = (repository / "packaging/server/DEBIAN/control").read_text(encoding="utf-8")
+        desktop = (repository / "packaging/server/tuxindrive-server.desktop").read_text(encoding="utf-8")
+        self.assertIn('["/usr/bin/pkexec"]', gui)
+        self.assertNotIn("shell=True", gui)
+        self.assertIn('PACKAGED_LAUNCHER, "admin"', gui)
+        self.assertIn('"start": ["start", SERVICE]', gui)
+        self.assertIn("write-config", gui)
+        self.assertIn("tuxindrive-server.desktop", build)
+        self.assertIn("tuxindrive-server.svg", build)
+        self.assertIn("python3-gi", control)
+        self.assertIn("gir1.2-gtk-3.0", control)
+        self.assertIn("pkexec", control)
+        self.assertIn("Exec=tuxindrive-server gui", desktop)
+        self.assertIn("Terminal=false", desktop)
+
+    def test_privileged_config_staging_rejects_wrong_permissions(self):
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder) / "server.json"
+            source.write_text(json.dumps({"token_hashes": {"0" * 64: "owner"}}), encoding="utf-8")
+            source.chmod(0o600)
+            with mock.patch.dict(os.environ, {"PKEXEC_UID": str(os.getuid())}):
+                self.assertEqual(_read_owned_source(source)["token_hashes"], {"0" * 64: "owner"})
+                source.chmod(0o644)
+                with self.assertRaises(ServerError):
+                    _read_owned_source(source)
 
     def test_remote_bind_requires_tls(self):
         raw = {"bind": "0.0.0.0", "token_hashes": {"0" * 64: "owner"}}

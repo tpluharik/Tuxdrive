@@ -18,7 +18,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **357 automated tests: 346 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection and read-only MCP. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
+The TuxInDrive development suite contains **359 automated tests: 348 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection, read-only MCP, graphical package integration and its fixed no-shell privilege boundary. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
 
 ## Test groups
 
@@ -51,7 +51,7 @@ The TuxInDrive development suite contains **357 automated tests: 346 Python test
 | `test_policies.py` | 7 | Maximum-usage defaults plus controlled battery, metered-network and normal/overnight schedule decisions, including fail-open probe handling. |
 | `test_recovery.py` | 8 | Local archive/restore behavior, disabled retention, malformed/foreign record rejection, expiry pruning, mass-change and ransomware-suffix blocking, and integrity-audit parsing. |
 | `test_security.py` | 8 | Empty/absolute/parent path rejection, symlink refusal, confined atomic installation, Ed25519-only keys and signed transaction tamper detection. |
-| `test_server.py` | 18 | Private initialization, package-launcher forwarding and private library isolation, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, authenticated HTTP, relay rejection and read-only MCP. |
+| `test_server.py` | 20 | Private initialization, package-launcher forwarding and private library isolation, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, authenticated HTTP, relay rejection, read-only MCP, GUI/desktop packaging and private staging-file permission rejection. |
 | `test_themes.py` | 5 | Nordic Glass, Bento Cloud and Midnight Sync registration; shared components and distinct palettes; Midnight-only dark preference; persisted selection; safe legacy/invalid fallback. |
 | `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 19 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
@@ -99,9 +99,9 @@ Android JVM coverage is kept beside the mobile source: `MobileValidationTest` co
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.26.14_all.deb
-dpkg-deb --contents dist/tuxindrive_0.26.14_all.deb
-sha256sum dist/tuxindrive_0.26.14_all.deb
+dpkg-deb --info dist/tuxindrive_0.26.15_all.deb
+dpkg-deb --contents dist/tuxindrive_0.26.15_all.deb
+sha256sum dist/tuxindrive_0.26.15_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -116,8 +116,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.26.14 \
-  --package dist/tuxindrive_0.26.14_all.deb \
+python3 scripts/sign-update.py --version 0.26.15 \
+  --package dist/tuxindrive_0.26.15_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```
@@ -133,8 +133,8 @@ private bootstrap and installed module layout:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.14_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.14_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.15_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.15_all.deb
 PYTHONPATH=src python3 -m unittest -v tests.test_server
 ```
 

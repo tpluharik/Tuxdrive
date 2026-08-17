@@ -1,7 +1,7 @@
 # TuxInDrive operations guide
 
 This guide covers normal administration, health checks, traffic policy,
-backup, recovery, and incident response for TuxInDrive 0.26.14. User-facing
+backup, recovery, and incident response for TuxInDrive 0.26.15. User-facing
 procedures are in the [user guide](USER_GUIDE.md); persisted fields and exact
 paths are in [Configuration](CONFIGURATION.md).
 
@@ -195,6 +195,13 @@ channel, restart, and remove the old digest. Never bind remotely without TLS.
 Keep `relay_targets` empty unless an exact nested-encryption endpoint is needed,
 and remove unused roles rather than relying only on a firewall. See
 [Server preview](SERVER.md) for installation, configuration and backup limits.
+
+For normal interactive administration, open **TuxInDrive Server** from the
+Linux Applications menu. Its scrollable GUI manages the complete configuration,
+roles, quotas and limits, tenant/bootstrap tokens, service lifecycle and recent
+journal entries. Closing the window leaves the system service running. The
+`tuxindrive-server init`, `check` and `serve` commands remain available for
+unattended deployment, diagnostics and recovery.
 
 ## Incident response
 

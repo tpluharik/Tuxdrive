@@ -7,7 +7,18 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.14
+## Current baseline: 0.26.15
+
+### Completed in 0.26.15: graphical server administration
+
+The Linux server package now includes its own maximized, scrollable GTK
+administration application. It covers service start/stop/restart/enablement,
+the complete validated configuration schema, role and limit selection,
+tenant-token generation, bootstrap-token handling and journald inspection.
+The daemon remains independent of GTK and the existing CLI remains available
+for automation and recovery. Privileged GUI changes cross a narrow PolicyKit
+boundary with fixed targets, caller-owned private staging files, schema
+validation, atomic replacement and no shell execution.
 
 ### Completed in 0.26.14: immutable server package repair
 
@@ -222,7 +233,7 @@ The preferred implementation plan is a memory-safe portable core library with st
 | Platform / package | Process and user experience | Storage and background model | Supported roles | Platform-specific security and release requirements | Target phase |
 |---|---|---|---|---|---|
 | Ubuntu Desktop 26.04+ (`.deb`) | `tuxindrived` user service plus GTK client, tray and Nautilus extension; existing configuration migrates in place | `systemd --user`, FUSE streaming, inotify callbacks and XDG paths | Full cloud sync/streaming, peer host/client, collaboration client, local API and optional MCP | Preserve mode-`0600` secrets, user-scoped sockets and current package/update verification; GUI may stop without stopping transfers | Reference platform / 1.0 |
-| Ubuntu/Debian Server (`.deb`) | Headless daemon, `tuxindrive` CLI, optional read-only web administration and no desktop dependencies | System or per-user `systemd` unit; explicit service account and configured data roots | Peer host/client, scheduled sync, mailbox, rendezvous, encrypted object cache, relay, API and MCP | No FUSE requirement by default; system service uses sandboxing, capability restrictions, private temporary paths and journald secret filtering | 1.0 |
+| Ubuntu/Debian Server (`.deb`) | Headless daemon and CLI plus an optional local GTK administration application; read-only web administration remains planned | System or per-user `systemd` unit; explicit service account and configured data roots | Peer host/client, scheduled sync, mailbox, rendezvous, encrypted object cache, relay, API and MCP | No FUSE requirement by default; system service uses sandboxing, capability restrictions, private temporary paths and journald secret filtering | 1.0 |
 | Debian ARM64 / Raspberry Pi (`.deb`) | Same headless CLI/daemon with an ARM64 package and reduced-resource profile | `systemd`, inotify, removable disks and optional FUSE where supported | Always-on peer, encrypted mailbox/cache, local backup target and onion endpoint | Bound memory, concurrency, cache and CRDT history; publish signed ARM64 artifacts and test sudden power/storage removal | 1.0–1.1 |
 | Windows 11 (`.msi`/MSIX) | Per-user background agent, native tray/settings UI and Explorer integration | User process at sign-in for personal folders; optional Windows Service only for explicitly configured machine/server shares | Cloud sync/streaming where the backend supports it, peer client/host, collaboration, API and optional MCP | Use DPAPI/CNG-backed secrets, named-pipe ACLs, Authenticode signing and safe installer rollback; never show UI from a service session | 1.1 |
 | Windows Server (`.msi`) | Non-interactive Windows Service plus PowerShell/CLI and optional web administration | Service Control Manager, dedicated low-privilege account and Event Log | Peer endpoint, mailbox, rendezvous, object cache, relay, automation API and MCP | No LocalSystem default, strict service SID/filesystem ACLs, certificate rotation, unattended upgrade/rollback and remote-admin opt-in | 1.1 |

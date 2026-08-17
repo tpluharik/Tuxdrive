@@ -2,6 +2,16 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.15 — graphical server administration
+
+- Added a maximized, scrollable TuxInDrive Server application for Linux so an
+  administrator can manage the service without assembling command lines.
+- Moved the complete server configuration schema, roles, quotas, bandwidth,
+  relay/update targets, tenant-token generation, bootstrap-token handling,
+  service lifecycle and journal viewer into the graphical application.
+- Retained the `init`, `check` and `serve` commands for automation and recovery;
+  protected changes use fixed, validated, no-shell PolicyKit operations.
+
 ## 0.26.14 — immutable server package repair
 
 - Isolated the server Python runtime under `/usr/lib/tuxindrive-server` so the

@@ -503,14 +503,23 @@ def serve(config_path: Path) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    effective_argv = list(sys.argv[1:] if argv is None else argv)
+    if effective_argv[:1] == ["admin"]:
+        from .server_admin import main as admin_main
+        return admin_main(effective_argv[1:])
     parser = argparse.ArgumentParser(description="TuxInDrive self-hosted server")
-    sub = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("--version", action="version", version=__version__)
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("gui", help="open the graphical server administration application")
     init = sub.add_parser("init", help="create private server configuration and API token")
     init.add_argument("--config", type=Path, required=True); init.add_argument("--state", type=Path, required=True); init.add_argument("--token-file", type=Path)
     run = sub.add_parser("serve", help="run the server"); run.add_argument("--config", type=Path, required=True)
     check = sub.add_parser("check", help="validate configuration"); check.add_argument("--config", type=Path, required=True)
-    args = parser.parse_args(argv)
+    args = parser.parse_args(effective_argv)
     try:
+        if args.command in (None, "gui"):
+            from .server_gui import main as gui_main
+            return gui_main()
         if args.command == "init":
             token = initialize(args.config, args.state, args.token_file)
             if not args.token_file: print(token)

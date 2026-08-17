@@ -10,11 +10,14 @@ OUTPUT="$PROJECT_ROOT/dist/tuxindrive-server_${VERSION}_all.deb"
 rm -rf -- "$PACKAGE_ROOT"
 mkdir -p "$PACKAGE_ROOT/DEBIAN" "$PACKAGE_ROOT/usr/bin" \
   "$PACKAGE_ROOT/usr/lib/tuxindrive-server/tuxindrive" "$PACKAGE_ROOT/usr/lib/systemd/system" \
+  "$PACKAGE_ROOT/usr/share/applications" "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps" \
   "$PACKAGE_ROOT/usr/share/doc/tuxindrive-server" "$PROJECT_ROOT/dist"
 cp "$PROJECT_ROOT/packaging/server/DEBIAN/control" "$PACKAGE_ROOT/DEBIAN/control"
 cp "$PROJECT_ROOT/packaging/server/DEBIAN/postinst" "$PACKAGE_ROOT/DEBIAN/postinst"
 cp "$PROJECT_ROOT/packaging/server/tuxindrive-server" "$PACKAGE_ROOT/usr/bin/tuxindrive-server"
 cp "$PROJECT_ROOT/packaging/server/tuxindrive-server.service" "$PACKAGE_ROOT/usr/lib/systemd/system/tuxindrive-server.service"
+cp "$PROJECT_ROOT/packaging/server/tuxindrive-server.desktop" "$PACKAGE_ROOT/usr/share/applications/tuxindrive-server.desktop"
+cp "$PROJECT_ROOT/packaging/tuxindrive.svg" "$PACKAGE_ROOT/usr/share/icons/hicolor/scalable/apps/tuxindrive-server.svg"
 cp -R "$PROJECT_ROOT/src/tuxindrive/." "$PACKAGE_ROOT/usr/lib/tuxindrive-server/tuxindrive/"
 find "$PACKAGE_ROOT/usr/lib/tuxindrive-server" -type d -name __pycache__ -prune -exec rm -rf -- {} +
 cp "$PROJECT_ROOT/docs/SERVER.md" "$PACKAGE_ROOT/usr/share/doc/tuxindrive-server/SERVER.md"

@@ -3,7 +3,9 @@
 TuxInDrive Server is the first functional Linux implementation of the server
 and headless-agent plan. It is packaged separately as
 `tuxindrive-server_VERSION_all.deb`; installing the desktop package does not
-start a server. The client integration is disabled by default and becomes
+start a server. The server package includes its own GTK administration
+application; the service itself remains headless. The client integration is
+disabled by default and becomes
 available only after **Settings → Enable TuxInDrive server integration
 (preview)** is selected.
 
@@ -33,18 +35,18 @@ service manager. All `/v1/` endpoints require a bearer token.
 
 ## Installation
 
-Download `tuxindrive-server_0.26.14_all.deb` from the matching
-[GitHub Release](https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.14),
+Download `tuxindrive-server_0.26.15_all.deb` from the matching
+[GitHub Release](https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.15),
 then install that local file. The leading `./` is required so APT treats the
 name as a file instead of searching configured package repositories:
 
 ```bash
 cd ~/Downloads
-sudo apt install ./tuxindrive-server_0.26.14_all.deb
+sudo apt install ./tuxindrive-server_0.26.15_all.deb
 ```
 
 If configuration of the defective 0.26.12 preview was left unfinished,
-installing 0.26.14 replaces its launcher and completes the pending package
+installing 0.26.15 replaces its launcher and completes the pending package
 configuration. If APT asks to repair dependencies afterward, run:
 
 ```bash
@@ -56,9 +58,9 @@ Build and inspect the package:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.14_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.14_all.deb
-sudo apt install ./dist/tuxindrive-server_0.26.14_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.15_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.15_all.deb
+sudo apt install ./dist/tuxindrive-server_0.26.15_all.deb
 ```
 
 The package creates a locked `tuxindrive-server` system account, private
@@ -74,6 +76,38 @@ curl http://127.0.0.1:9443/healthz
 
 The service is not enabled automatically because installation must not expose a
 new network service without an administrator's explicit action.
+
+## Graphical administration
+
+Open **TuxInDrive Server** from the Linux Applications menu, or run this as the
+signed-in desktop user:
+
+```bash
+tuxindrive-server gui
+```
+
+Running `tuxindrive-server` with no command opens the same application. Do not
+run the GUI with `sudo`: it intentionally rejects a root desktop session. The
+window opens maximized, and each page remains scrollable on smaller displays.
+
+The application provides:
+
+- service status plus start, stop, restart, enable and disable controls;
+- every field in the validated server configuration, including roles, TLS,
+  storage, quotas, expiry, bandwidth, relay targets and update manifests;
+- local validation, protected save and an optional immediate service restart;
+- high-entropy tenant-token generation, tenant removal and one-time raw-token
+  display/copy while storing only its SHA-256 digest;
+- protected bootstrap-token display/copy and deletion; and
+- the latest service journal entries without requiring a terminal.
+
+The window runs unprivileged. Linux PolicyKit authorizes each protected action
+separately. The privileged helper accepts only fixed service/configuration
+operations: it does not invoke a shell or accept an arbitrary destination. A
+configuration save is staged in a caller-owned mode-0600 regular file, rejects
+symlinks, wrong ownership and permissive modes, validates the complete schema,
+then replaces the fixed system configuration atomically. Closing the GUI does
+not stop the server service.
 
 ## Client setup
 
@@ -93,6 +127,10 @@ It does not redirect existing direct or cloud jobs through the server merely
 because the feature flag is enabled.
 
 ## Configuration
+
+The graphical application is the normal interactive configuration method. The
+file format and commands below remain supported for backup, recovery and
+unattended automation.
 
 The default configuration is `/etc/tuxindrive-server/server.json`:
 

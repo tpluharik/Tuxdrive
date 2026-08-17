@@ -1,6 +1,6 @@
 # TuxInDrive architecture
 
-This document describes how TuxInDrive 0.26.14 is implemented. It complements
+This document describes how TuxInDrive 0.26.15 is implemented. It complements
 the task-oriented [user guide](USER_GUIDE.md), persisted-field
 [configuration reference](CONFIGURATION.md), and threat-focused
 [security guide](SECURITY_HARDENING.md).
@@ -255,6 +255,18 @@ request occurs until the user explicitly enables integration.
 
 The versioned API also provides an allowlisted bounded `CONNECT` relay, signed
 manifest attestation and read-only MCP JSON-RPC. See [Server preview](SERVER.md).
+
+`server_gui.py` is a separate GTK composition root for local administration;
+the daemon and `server_service.py` remain GTK-free. The GUI exposes the complete
+configuration schema, service lifecycle, tenant/bootstrap tokens and journal
+view without changing the headless API or systemd execution path.
+
+`server_admin.py` is the narrow PolicyKit privilege boundary used by that GUI.
+It accepts fixed operations and fixed system paths only, never a shell command
+or arbitrary destination. Configuration writes must arrive through a
+caller-owned, mode-0600, non-symlink regular staging file; the helper parses and
+validates the complete `ServerConfig`, writes atomically and restores the
+service account ownership before returning.
 
 ## Platform integration
 
