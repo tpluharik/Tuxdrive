@@ -57,8 +57,15 @@ jobs:
       - name: Read application version
         run: echo "TUXINDRIVE_VERSION=$(sed -n 's/^__version__ = \"\([^\"]*\)\"/\1/p' src/tuxindrive/__init__.py)" >> "$GITHUB_ENV"
       - name: Build adaptive package
-        run: sh scripts/build-deb.sh
+        run: |
+          sh scripts/build-deb.sh
+          sh scripts/build-server-deb.sh
       - name: Install mandatory core only
         run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "./dist/tuxindrive_${TUXINDRIVE_VERSION}_all.deb"
       - name: Verify installed layout and host discovery
         run: tuxindrive --version && tuxindrive --system-check --json
+      - name: Install and verify server package
+        run: |
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "./dist/tuxindrive-server_${TUXINDRIVE_VERSION}_all.deb"
+          test -s /var/lib/tuxindrive-server/bootstrap-token
+          tuxindrive-server check --config /etc/tuxindrive-server/server.json

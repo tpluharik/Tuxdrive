@@ -1,5 +1,5 @@
 Package: tuxindrive-server
-Version: 0.26.12
+Version: 0.26.13
 Section: net
 Priority: optional
 Architecture: all

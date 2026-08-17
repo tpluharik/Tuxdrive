@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.13 — server installer repair
+
+- Fixed the Linux server launcher so the post-install initializer receives the
+  requested `init` command instead of an extra executable-name argument.
+- Prepare the private server state directory before creating its locked system
+  account, avoiding a misleading missing-home warning during installation.
+- Added package-launcher regression coverage and documented both GitHub Release
+  installation and recovery from an unfinished 0.26.12 package configuration.
+
 ## 0.26.12 — self-hosted server preview
 
 - Refreshed the complete user, operator, architecture, configuration, security,

@@ -1,8 +1,8 @@
 {
-  "version": "0.26.11",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.11/TuxInDrive-0.26.11-macos-arm64.dmg",
-  "sha256": "e3dec7a4516f26be2162a2b19203aea5fbd57192ba31ef3702d37d609ca19909",
-  "notes": "Maximized desktop dialogs with preserved scrollable layouts",
-  "expires_at": "2027-02-12T11:00:57.498834+00:00",
-  "signature": "v6cP7UmT+n++sayrnrL6OrAvVuukgtXvB6PYcKcgqXvJ5C3h0UTsu8F/hi1JunnFj4IG84WGVb7rUFGVZyUHAQ=="
+  "version": "0.26.12",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.12/TuxInDrive-0.26.12-macos-arm64.dmg",
+  "sha256": "1cccfa7697d6dc932195cdc99f80c67a85af99a8a17ed63d69dfb44075d192bc",
+  "notes": "Self-hosted server preview and client integration feature flag",
+  "expires_at": "2027-02-13T08:14:46.647213+00:00",
+  "signature": "jkCSULbj+PdIAytyqOoOWj4T2ddhnQDock3O8WT5Ae2Fj/nwPQOjaMHsWMR83Zw8GSAUbBoGlVAOAkjIjRzcBA=="
 }

@@ -2,6 +2,7 @@
 set -eu
 
 if ! getent passwd tuxindrive-server >/dev/null; then
+  install -d -m 0750 /var/lib/tuxindrive-server
   adduser --system --group --home /var/lib/tuxindrive-server \
     --no-create-home --disabled-login tuxindrive-server
 fi

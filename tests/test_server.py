@@ -2,6 +2,7 @@ import base64
 import http.client
 import json
 import os
+import subprocess
 import tempfile
 import threading
 import time
@@ -86,6 +87,14 @@ class ServerConfigurationTests(unittest.TestCase):
             self.assertIn("Package: tuxindrive-server", (repository / "packaging/server/DEBIAN/control").read_text())
             self.assertIn("ProtectSystem=strict", (repository / "packaging/server/tuxindrive-server.service").read_text())
             self.assertTrue((repository / "scripts/build-server-deb.sh").is_file())
+
+    def test_server_launcher_preserves_only_user_cli_arguments(self):
+        repository = Path(__file__).resolve().parents[1]
+        launcher = repository / "packaging/server/tuxindrive-server"
+        source = launcher.read_text(encoding="utf-8")
+        self.assertIn("' \"$@\"", source)
+        self.assertNotIn("' tuxindrive-server \"$@\"", source)
+        subprocess.run(["sh", "-n", str(launcher)], check=True)
 
     def test_remote_bind_requires_tls(self):
         raw = {"bind": "0.0.0.0", "token_hashes": {"0" * 64: "owner"}}

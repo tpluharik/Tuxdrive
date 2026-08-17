@@ -7,7 +7,16 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.12
+## Current baseline: 0.26.13
+
+### Completed in 0.26.13: server installer repair
+
+The server package launcher now forwards only administrator-supplied CLI
+arguments, allowing first-install initialization and subsequent systemd checks
+to complete. Package installation prepares the service state directory before
+creating the locked account, and automated coverage guards both the launcher
+argument boundary and shell syntax. The server roles and security boundaries
+introduced in 0.26.12 are otherwise unchanged.
 
 ### Completed in 0.26.12: server preview
 

@@ -33,13 +33,32 @@ service manager. All `/v1/` endpoints require a bearer token.
 
 ## Installation
 
+Download `tuxindrive-server_0.26.13_all.deb` from the matching
+[GitHub Release](https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.13),
+then install that local file. The leading `./` is required so APT treats the
+name as a file instead of searching configured package repositories:
+
+```bash
+cd ~/Downloads
+sudo apt install ./tuxindrive-server_0.26.13_all.deb
+```
+
+If configuration of the defective 0.26.12 preview was left unfinished,
+installing 0.26.13 replaces its launcher and completes the pending package
+configuration. If APT asks to repair dependencies afterward, run:
+
+```bash
+sudo apt --fix-broken install
+sudo dpkg --configure -a
+```
+
 Build and inspect the package:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.12_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.12_all.deb
-sudo apt install ./dist/tuxindrive-server_0.26.12_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.13_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.13_all.deb
+sudo apt install ./dist/tuxindrive-server_0.26.13_all.deb
 ```
 
 The package creates a locked `tuxindrive-server` system account, private
