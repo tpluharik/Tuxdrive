@@ -1,12 +1,40 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 
 from .models import FolderGroup, SyncJob
 
 
 JOB_DRAG_PREFIX = "tuxindrive-job:"
 MAX_JOB_DRAG_ID_LENGTH = 256
+
+
+def cloud_selection_paths(selected: Iterable[str] | None = None) -> set[str]:
+    """Keep cloud choices independently of the asynchronously rendered tree."""
+    paths = {str(path).strip("/") for path in (selected or [])}
+    return paths or {""}
+
+
+def toggle_cloud_selection(current: Iterable[str], path: str, selected: bool) -> set[str]:
+    """Apply one hierarchical cloud-folder toggle to persistent selection state."""
+    path = path.strip("/")
+    values = {str(item).strip("/") for item in current}
+    if not selected:
+        values.discard(path)
+        return values
+    values = {
+        item for item in values
+        if item and path and not item.startswith(path + "/") and not path.startswith(item + "/")
+    }
+    values.add(path)
+    return values
+
+
+def initial_cloud_paths(existing: SyncJob | None, account_remote: str) -> list[str]:
+    """Preserve an edit path only while editing its original cloud account."""
+    if existing is not None and existing.account_remote == account_remote:
+        return [existing.remote_path]
+    return [""]
 
 
 def job_drag_payload(job_id: str) -> str:

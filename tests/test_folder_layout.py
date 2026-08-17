@@ -1,9 +1,12 @@
 import unittest
 
 from tuxindrive.folder_layout import (
+    cloud_selection_paths,
+    initial_cloud_paths,
     job_drag_payload,
     job_id_from_drag_payload,
     move_job,
+    toggle_cloud_selection,
     valid_group_id,
 )
 from tuxindrive.models import FolderGroup, SyncJob
@@ -73,6 +76,19 @@ class FolderLayoutTests(unittest.TestCase):
         self.assertEqual(job_id_from_drag_payload(b"\xff"), "")
         self.assertEqual(job_id_from_drag_payload("tuxindrive-job:"), "")
         self.assertEqual(job_drag_payload("bad\x00id"), "")
+
+    def test_cloud_selection_survives_before_async_tree_row_is_rendered(self):
+        selected = cloud_selection_paths(["Documents/Projects"])
+        self.assertEqual(selected, {"Documents/Projects"})
+        selected = toggle_cloud_selection(selected, "Documents", True)
+        self.assertEqual(selected, {"Documents"})
+        selected = toggle_cloud_selection(selected, "", True)
+        self.assertEqual(selected, {""})
+
+    def test_editing_another_account_defaults_to_its_root(self):
+        existing = SyncJob("onedrive-old", "/tmp/drive", remote_path="Documents")
+        self.assertEqual(initial_cloud_paths(existing, "onedrive-old"), ["Documents"])
+        self.assertEqual(initial_cloud_paths(existing, "onedrive-new"), [""])
 
 
 if __name__ == "__main__":

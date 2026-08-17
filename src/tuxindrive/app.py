@@ -64,7 +64,14 @@ from .models import (
     paths_overlap, safe_streaming_overlap,
 )
 from .github_sync import GitHubSyncError, parse_repository_url, repository_item_url, validate_branch
-from .folder_layout import job_drag_payload, job_id_from_drag_payload, move_job
+from .folder_layout import (
+    cloud_selection_paths,
+    initial_cloud_paths,
+    job_drag_payload,
+    job_id_from_drag_payload,
+    move_job,
+    toggle_cloud_selection,
+)
 from .peer import DiscoveredPeer, PeerError, PeerInvitation, PeerManager, key_fingerprint, local_network_address, normalize_public_key, validate_host, validate_port
 from .recovery import AuditIssue, IntegrityAuditor, RecoveryEntry, SafetyError
 from .rclone import ConfigQuestion, ConfigResult, DriveLocation, RcloneClient, RcloneError
@@ -662,7 +669,7 @@ class CloudFolderTree(Gtk.Box):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=6)
         self.client = client
         self.remote = remote
-        self.pending = {path.strip("/") for path in (selected or [])}
+        self.selected_paths = cloud_selection_paths(selected)
         self.store = Gtk.TreeStore(bool, str, str, bool)
         self.view = Gtk.TreeView(model=self.store)
         self.view.set_headers_visible(False)
@@ -689,28 +696,26 @@ class CloudFolderTree(Gtk.Box):
 
     def reset(self, remote: str, selected: list[str] | None = None) -> None:
         self.remote = remote
-        self.pending = {path.strip("/") for path in (selected or [])}
+        self.selected_paths = cloud_selection_paths(selected)
         self.store.clear()
-        root_selected = "" in self.pending or not self.pending
+        root_selected = "" in self.selected_paths
         root = self.store.append(None, [root_selected, "Entire cloud drive", "", False])
         self.store.append(root, [False, "Loading…", "", True])
         self.view.expand_row(self.store.get_path(root), False)
         self._load(root)
 
     def selections(self) -> list[str]:
-        values: list[str] = []
-
-        def collect(model, _path, tree_iter, _data) -> bool:
-            if model.get_value(tree_iter, 0) and model.get_value(tree_iter, 1) != "Loading…":
-                values.append(model.get_value(tree_iter, 2))
-            return False
-
-        self.store.foreach(collect, None)
-        return values
+        # The cloud tree loads in worker threads. The user's choices must not
+        # disappear merely because a selected row has not rendered yet.
+        return sorted(self.selected_paths, key=lambda value: (value != "", value))
 
     def _toggle(self, _renderer, path: str) -> None:
         tree_iter = self.store.get_iter(path)
         selected = not self.store.get_value(tree_iter, 0)
+        cloud_path = self.store.get_value(tree_iter, 2)
+        self.selected_paths = toggle_cloud_selection(
+            self.selected_paths, cloud_path, selected
+        )
         self.store.set_value(tree_iter, 0, selected)
         if selected:
             parent = self.store.iter_parent(tree_iter)
@@ -780,7 +785,7 @@ class CloudFolderTree(Gtk.Box):
         parent_path = self.store.get_value(target, 2)
         for name in folders or []:
             full_path = f"{parent_path}/{name}".strip("/")
-            row = self.store.append(target, [full_path in self.pending, name, full_path, False])
+            row = self.store.append(target, [full_path in self.selected_paths, name, full_path, False])
             self.store.append(row, [False, "Loading…", full_path, True])
         self.status.set_text(f"{len(self.selections())} cloud location(s) selected")
         self._expand_pending(target)
@@ -801,7 +806,7 @@ class CloudFolderTree(Gtk.Box):
 
     def _expand_pending(self, parent) -> None:
         parent_path = self.store.get_value(parent, 2)
-        for wanted in self.pending:
+        for wanted in self.selected_paths:
             if not wanted or not wanted.startswith(f"{parent_path}/" if parent_path else ""):
                 continue
             child = self.store.iter_children(parent)
@@ -1002,6 +1007,11 @@ class SyncJobDialog(ResponsiveDialog):
     def job(self) -> SyncJob:
         return self.jobs()[0]
 
+    def validation_error(self, message: str) -> None:
+        self.folder_tree.status.set_markup(
+            f"<span foreground='#c01c28'>{GLib.markup_escape_text(message)}</span>"
+        )
+
     def jobs(self) -> list[SyncJob]:
         filename = self.local.get_filename() or str(Path.home() / "TuxInDrive")
         excluded = self.excludes.rules()
@@ -1104,7 +1114,7 @@ class SyncJobDialog(ResponsiveDialog):
             self.location.append(value.key, value.name)
             self.location.set_active_id(value.key)
             self.location.set_sensitive(False)
-            self.folder_tree.reset(remote, [self.existing.remote_path] if self.existing else [""])
+            self.folder_tree.reset(remote, initial_cloud_paths(self.existing, remote))
             return
         self.location.append("loading", "Loading My Drive and Shared Drives…")
         self.location.set_active_id("loading")
@@ -1155,7 +1165,7 @@ class SyncJobDialog(ResponsiveDialog):
             self.location.set_active_id(selected)
             self.location.set_sensitive(len(locations or []) > 1)
             location = self.locations[selected]
-            initial = [self.existing.remote_path] if self.existing else [""]
+            initial = initial_cloud_paths(self.existing, remote)
             self.folder_tree.reset(location.scoped_remote, initial)
         return False
 
@@ -3864,21 +3874,22 @@ class MainWindow(Gtk.ApplicationWindow):
             self.message("Connect a cloud account first.", Gtk.MessageType.WARNING)
             return
         dialog = SyncJobDialog(self, self.controller.cloud_browser, accounts)
-        if dialog.run() == Gtk.ResponseType.OK:
+        while dialog.run() == Gtk.ResponseType.OK:
             jobs = dialog.jobs()
             existing_jobs = list(self.controller.config.jobs)
             if not jobs:
-                self.message("Select at least one cloud folder.", Gtk.MessageType.ERROR)
+                dialog.validation_error("Select at least one cloud folder.")
+                continue
             elif any(
                 paths_overlap(job.local_path, item.local_path)
                 and not safe_streaming_overlap(job, item)
                 for job in jobs
                 for item in existing_jobs
             ):
-                self.message(
+                dialog.validation_error(
                     "That folder overlaps another job in an unsafe direction. A streaming drive may be an empty child folder of a normal sync job.",
-                    Gtk.MessageType.ERROR,
                 )
+                continue
             else:
                 self.controller.config.jobs.extend(jobs)
                 self.controller.save()
@@ -3886,6 +3897,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.refresh()
                 for job in jobs:
                     self.controller.run_job(job)
+                break
         dialog.destroy()
 
     def _toggle_job(self, switch: Gtk.Switch, _property, job: SyncJob) -> None:
@@ -3910,12 +3922,11 @@ class MainWindow(Gtk.ApplicationWindow):
         dialog = SyncJobDialog(
             self, self.controller.cloud_browser, self.controller.config.accounts, existing=job
         )
-        if dialog.run() == Gtk.ResponseType.OK:
+        while dialog.run() == Gtk.ResponseType.OK:
             values = dialog.jobs()
             if not values:
-                self.message("Select one cloud folder.", Gtk.MessageType.ERROR)
-                dialog.destroy()
-                return
+                dialog.validation_error("Select one cloud folder.")
+                continue
             updated = values[0]
             duplicate = any(
                 item.id != job.id
@@ -3924,10 +3935,10 @@ class MainWindow(Gtk.ApplicationWindow):
                 for item in self.controller.config.jobs
             )
             if duplicate:
-                self.message(
+                dialog.validation_error(
                     "Unsafe overlap. A streaming drive may be an empty child folder of a normal sync job, but not its parent.",
-                    Gtk.MessageType.ERROR,
                 )
+                continue
             else:
                 index = self.controller.config.jobs.index(job)
                 if (job.local_path, job.remote_spec, job.mode) != (
@@ -3941,6 +3952,7 @@ class MainWindow(Gtk.ApplicationWindow):
                 self.controller.save()
                 self.controller.reconfigure_callbacks()
                 self.refresh()
+                break
         dialog.destroy()
 
     def _rename_job(self, _button: Gtk.Button, job: SyncJob) -> None:

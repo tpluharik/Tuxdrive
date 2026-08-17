@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.16 — reliable synchronized-folder editing
+
+- Kept cloud-folder selections in persistent dialog state while the remote
+  folder tree loads asynchronously, so Save cannot silently lose a selection.
+- Reset folder selection to the new account root when an existing job is moved
+  to another account instead of retaining an invalid path from the old account.
+- Kept add/edit dialogs open and displayed validation errors inline when a
+  folder is missing or overlaps another job unsafely.
+
 ## 0.26.15 — graphical server administration
 
 - Added a maximized, scrollable TuxInDrive Server application for Linux so an
