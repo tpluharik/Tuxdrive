@@ -1,8 +1,8 @@
 {
-  "version": "0.26.11",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.11/tuxindrive_0.26.11_all.deb",
-  "sha256": "cb2dad713f265facaf3b7011e57d449751c11e9ef443eb79747b03864bddf567",
-  "notes": "Maximized desktop dialogs with preserved scrollable layouts",
-  "expires_at": "2027-02-12T11:00:57.498834+00:00",
-  "signature": "k9kQOcBPnnlawZHYkmKLjhK41dN7DZzcc3NkoQ8fyTwxiDxJQ7iS+vikAuB0OZoGUGIMkLEweT0kKF6vqTOzDw=="
+  "version": "0.26.12",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.12/tuxindrive_0.26.12_all.deb",
+  "sha256": "82f68057d707e6777b4fa5bad03d906b2ccbbab1833f9a49a07ad3f6943fa5f8",
+  "notes": "Self-hosted server preview and client integration feature flag",
+  "expires_at": "2027-02-13T07:18:40.726346+00:00",
+  "signature": "dfN1dIR4LaeN0H72QNKJvYT96yd/MH2OXUcsz0bswHtpEzX/Xjnd9Xy6WV+kfhjEWYiRNQHAwDnNRslruDaxBg=="
 }
