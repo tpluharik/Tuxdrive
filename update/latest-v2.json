@@ -1,8 +1,8 @@
 {
-  "version": "0.26.16",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.16/tuxindrive_0.26.16_all.deb",
-  "sha256": "7b35960825e96c70dc0098f368e3bd337e372e6fb89c4fdbd9ded95fdec49501",
-  "notes": "Reliable account editing and validation feedback",
-  "expires_at": "2026-11-15T17:36:10.124592+00:00",
-  "signature": "RpbNlTeLJu8P7IBCB7WapoFLhWCU/F02GHWbI6ScvKHKb8rIt1B8xWUGMiG0u3geAr3hzhWq2EiG0InG6VL6DQ=="
+  "version": "0.26.17",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.17/tuxindrive_0.26.17_all.deb",
+  "sha256": "6e33a8515c3bad0f6f10f6e448166946f3a3b494839a2e77565c9431c9ccf01a",
+  "notes": "Resizable desktop windows and bounded layouts",
+  "expires_at": "2026-11-16T13:40:57.507413+00:00",
+  "signature": "z2eekm9L57ViLlJwkamt0neek92nrOO+wJKH2GniKcSlsAX3JCjX/ogFVEvOv5YWeaaORbqcYlqfP4wj9+bsDQ=="
 }

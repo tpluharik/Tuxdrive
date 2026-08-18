@@ -1,8 +1,8 @@
 {
-  "version": "0.26.16",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.16/TuxInDrive-0.26.16-macos-arm64.dmg",
-  "sha256": "23c2f8650bd388ad3bb7e19da4e45627196b161d8312fd209a87f6687b5175a8",
-  "notes": "Reliable account editing and validation feedback",
-  "expires_at": "2026-11-15T17:36:10.324884+00:00",
-  "signature": "3nmORYG4TMd8Tb5h/Go1rhVu0NLjzrU5gCnYlOj/nYC4QDKSmKOEdFv6UN6z2SZudlk1nRNlAXk7pclpcxgZAQ=="
+  "version": "0.26.17",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.17/TuxInDrive-0.26.17-macos-arm64.dmg",
+  "sha256": "8a3638338712aca8c9157d79e4afb0152aef89fc8f0d38fd6ef851e27441422d",
+  "notes": "Resizable desktop windows and bounded layouts",
+  "expires_at": "2026-11-16T13:40:57.676246+00:00",
+  "signature": "RnT/hhTlD7J3y5cGh5ui9LSXWdJAj3IqAZA3tLf6xGzWwKGEvJ6AOV2Dz6/t46QzklwkSWV5yykuIC47XQMTCA=="
 }

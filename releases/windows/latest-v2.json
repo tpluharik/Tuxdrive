@@ -1,8 +1,8 @@
 {
-  "version": "0.26.16",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.16/TuxInDrive-0.26.16-windows-x64-setup.exe",
-  "sha256": "7cb39127e0d34c7ac76b5a3cf12da4ffe4da3caefdaa553c8a0957f2d8c0fca0",
-  "notes": "Reliable account editing and validation feedback",
-  "expires_at": "2026-11-15T17:36:10.218020+00:00",
-  "signature": "tuB2M8xfwV3P/qWvlvSwtCZdcrhfswyS/Wv7hKqd0DFF83kiG+5NyMjwO90wFcmyYXN5lTIm6uKBWYzYMbU5Bg=="
+  "version": "0.26.17",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.17/TuxInDrive-0.26.17-windows-x64-setup.exe",
+  "sha256": "fa0664d6746d197efe0ab225e30fc88a6176ff6cdda7d07f3abb3191e318382b",
+  "notes": "Resizable desktop windows and bounded layouts",
+  "expires_at": "2026-11-16T13:40:57.590610+00:00",
+  "signature": "DhrO09jhurzW6DLkTmaOcaUE62rQseV2wBSuJNgYqQubJHw9lG9/lTsEpUI7srJYI7gWVCk8hJaapK263QFIDg=="
 }
