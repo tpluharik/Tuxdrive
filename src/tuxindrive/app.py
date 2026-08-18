@@ -186,12 +186,15 @@ class ResponsiveDialog(Gtk.Dialog):
                 monitor = display.get_monitor(0)
         if monitor is not None:
             workarea = monitor.get_workarea()
-            # Open dialogs at the maximum usable monitor size. The original
-            # layout size is retained below as the scrollable canvas instead
-            # of compressing controls to fit a smaller display.
+            # Keep the dialog's intended size on large displays and cap it to
+            # the monitor on small displays. The scrollable canvas below keeps
+            # every control reachable without forcing the top-level window to
+            # adopt the content's (potentially very large) natural width.
+            target_width = requested_width if requested_width > 0 else 720
+            target_height = requested_height if requested_height > 0 else 560
             self.set_default_size(
-                max(320, int(workarea.width)),
-                max(240, int(workarea.height)),
+                min(target_width, max(320, int(workarea.width * 0.92))),
+                min(target_height, max(240, int(workarea.height * 0.92))),
             )
 
         area = self.get_content_area()
@@ -232,11 +235,9 @@ class ResponsiveDialog(Gtk.Dialog):
     def show_all(self) -> None:
         self._prepare_responsive_content()
         super().show_all()
-        self.maximize()
 
     def run(self) -> int:
         self._prepare_responsive_content()
-        self.maximize()
         return super().run()
 
 
@@ -2956,7 +2957,8 @@ class MainWindow(Gtk.ApplicationWindow):
     def __init__(self, application: "TuxInDriveApplication") -> None:
         super().__init__(application=application, title="TuxInDrive")
         self.controller = application
-        self.set_default_size(920, 620)
+        self.set_resizable(True)
+        self.set_default_size(1100, 760)
         _set_window_brand_icon(self)
         self.get_style_context().add_class("tuxindrive-surface")
         self.connect("delete-event", self._hide_instead_of_close)
@@ -3095,7 +3097,9 @@ class MainWindow(Gtk.ApplicationWindow):
         self.job_list.get_style_context().add_class("job-list")
         self.job_list.set_selection_mode(Gtk.SelectionMode.NONE)
         scroll = Gtk.ScrolledWindow()
-        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+        scroll.set_min_content_width(1)
+        scroll.set_propagate_natural_width(False)
         scroll.add(self.job_list)
         main.pack_start(scroll, True, True, 0)
 
@@ -3608,7 +3612,13 @@ class MainWindow(Gtk.ApplicationWindow):
                 continue
             actions.pack_start(widget, False, False, 0)
         actions.pack_end(remove, False, False, 0)
-        outer.pack_start(actions, False, False, 0)
+        actions_scroll = Gtk.ScrolledWindow()
+        actions_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        actions_scroll.set_min_content_width(1)
+        actions_scroll.set_propagate_natural_width(False)
+        actions_scroll.set_shadow_type(Gtk.ShadowType.NONE)
+        actions_scroll.add(actions)
+        outer.pack_start(actions_scroll, False, False, 0)
         row.add(outer)
         self._job_widgets[job.id] = {
             "status": status, "toggle": toggle, "toggle_handler": toggle_handler,

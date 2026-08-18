@@ -18,7 +18,7 @@ The dependency-install step is required when using an isolated Python environmen
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **361 automated tests: 350 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection, read-only MCP, graphical package integration and its fixed no-shell privilege boundary. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
+The TuxInDrive development suite contains **364 automated tests: 353 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection, read-only MCP, graphical package integration and its fixed no-shell privilege boundary. Desktop layout coverage verifies bounded dialogs, resizable client/server windows, and isolated scrolling for wide synchronized-folder actions. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
 
 ## Test groups
 
@@ -99,9 +99,9 @@ Android JVM coverage is kept beside the mobile source: `MobileValidationTest` co
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.26.16_all.deb
-dpkg-deb --contents dist/tuxindrive_0.26.16_all.deb
-sha256sum dist/tuxindrive_0.26.16_all.deb
+dpkg-deb --info dist/tuxindrive_0.26.17_all.deb
+dpkg-deb --contents dist/tuxindrive_0.26.17_all.deb
+sha256sum dist/tuxindrive_0.26.17_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -116,8 +116,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.26.16 \
-  --package dist/tuxindrive_0.26.16_all.deb \
+python3 scripts/sign-update.py --version 0.26.17 \
+  --package dist/tuxindrive_0.26.17_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```
@@ -133,8 +133,8 @@ private bootstrap and installed module layout:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.16_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.16_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.17_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.17_all.deb
 PYTHONPATH=src python3 -m unittest -v tests.test_server
 ```
 

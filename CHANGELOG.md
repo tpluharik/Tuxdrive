@@ -2,6 +2,15 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.17 — resizable desktop windows
+
+- Prevented long synchronized-folder action rows from setting an enormous
+  minimum window width; their controls now scroll within the folder card.
+- Restored normal resizing and natural initial sizes for the desktop client,
+  configuration dialogs, and graphical server administration application.
+- Capped dialogs to the active monitor while retaining two-axis scrolling so
+  every control remains reachable at small resolutions.
+
 ## 0.26.16 — reliable synchronized-folder editing
 
 - Kept cloud-folder selections in persistent dialog state while the remote

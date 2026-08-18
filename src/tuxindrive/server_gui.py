@@ -62,11 +62,11 @@ def _row(grid: Gtk.Grid, row: int, label: str, widget: Gtk.Widget) -> None:
 class ServerWindow(Gtk.ApplicationWindow):
     def __init__(self, application: Gtk.Application) -> None:
         super().__init__(application=application, title="TuxInDrive Server")
+        self.set_resizable(True)
         self.set_default_size(1100, 760)
         self.set_icon_name("tuxindrive-server")
         self._tokens: dict[str, str] = {}
         self._build()
-        self.maximize()
         GLib.idle_add(self.refresh_status)
 
     def _build(self) -> None:
