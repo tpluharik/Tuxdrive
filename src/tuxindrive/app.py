@@ -3151,6 +3151,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.update_install_button: Gtk.Button | None = None
         self._pending_update: UpdateRelease | None = None
         self._update_pulsing = False
+        self._update_operation_active = False
         GLib.timeout_add_seconds(1, self._refresh_activity_log)
         self._network_refreshing = False
         self._network_active = True
@@ -4321,6 +4322,7 @@ class MainWindow(Gtk.ApplicationWindow):
         self.update_status = status
         self.update_progress = progress
         self._pending_update = None
+        self._update_operation_active = False
         self._update_pulsing = True
         GLib.timeout_add(120, self._pulse_update_progress)
         dialog.show_all()
@@ -4336,6 +4338,8 @@ class MainWindow(Gtk.ApplicationWindow):
         if response == Gtk.ResponseType.OK and self._pending_update:
             release = self._pending_update
             self._pending_update = None
+            self._update_operation_active = True
+            dialog.set_deletable(False)
             self.update_install_button.set_sensitive(False)
             self.update_close_button.set_sensitive(False)
             self._update_pulsing = False
@@ -4348,6 +4352,13 @@ class MainWindow(Gtk.ApplicationWindow):
                 release,
                 self._report_update_download,
             )
+            return
+        if self._update_operation_active:
+            # The title-bar close button and Escape can emit a response even
+            # while the action buttons are disabled. Keep the dialog alive so
+            # the asynchronous completion callback always has valid widgets.
+            if self.update_status:
+                self.update_status.set_text("The verified update operation is still running. Please wait…")
             return
         self._destroy_update_dialog()
 
@@ -4405,7 +4416,12 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def _update_downloaded(self, package: Path | None, error: Exception | None) -> bool:
+        if not self.update_dialog or not self.update_progress or not self.update_status:
+            self._update_operation_active = False
+            return False
         if error or package is None:
+            self._update_operation_active = False
+            self.update_dialog.set_deletable(True)
             self.update_progress.set_fraction(0)
             self.update_progress.set_text("Download failed")
             self.update_status.set_text(f"Update download or verification failed: {error}")
@@ -4423,6 +4439,10 @@ class MainWindow(Gtk.ApplicationWindow):
         return False
 
     def _update_installed(self, _result, error: Exception | None) -> bool:
+        self._update_operation_active = False
+        if not self.update_dialog or not self.update_progress or not self.update_status:
+            return False
+        self.update_dialog.set_deletable(True)
         if error:
             self.update_progress.set_fraction(0)
             self.update_progress.set_text("Installation failed")

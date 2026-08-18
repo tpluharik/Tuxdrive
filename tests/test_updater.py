@@ -186,6 +186,32 @@ class UpdateManagerTests(unittest.TestCase):
         self.assertTrue(updates)
         self.assertEqual(updates[-1], (len(body), len(body)))
 
+    def test_download_uses_interactive_lane_instead_of_sync_gate(self):
+        body = b"interactive-update"
+        release = UpdateManager.parse_manifest(self.release_payload(body=body), self.public)
+        bandwidth = Mock()
+        bandwidth.interactive_transfer_guard.return_value = nullcontext()
+        with tempfile.TemporaryDirectory() as directory:
+            manager = UpdateManager("0.5.0", Path(directory), bandwidth=bandwidth)
+            with patch("urllib.request.urlopen", return_value=FakeResponse(body)):
+                manager.download(release)
+        bandwidth.interactive_transfer_guard.assert_called_once_with()
+        bandwidth.guard.assert_not_called()
+
+    def test_download_reuses_verified_cached_release(self):
+        body = b"already-downloaded-and-verified"
+        release = UpdateManager.parse_manifest(self.release_payload(body=body), self.public)
+        progress = []
+        with tempfile.TemporaryDirectory() as directory:
+            manager = UpdateManager("0.5.0", Path(directory))
+            target = Path(directory) / release_package_name(release)
+            target.write_bytes(body)
+            with patch("urllib.request.urlopen") as urlopen:
+                result = manager.download(release, lambda received, total: progress.append((received, total)))
+        urlopen.assert_not_called()
+        self.assertEqual(result, target)
+        self.assertEqual(progress, [(len(body), len(body))])
+
     def test_download_removes_bad_partial(self):
         release = UpdateManager.parse_manifest(self.release_payload(body=b"expected"), self.public)
         with tempfile.TemporaryDirectory() as directory:

@@ -150,26 +150,48 @@ class UpdateManager:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         target = self.cache_dir / release_package_name(release, self.target_platform)
         temporary = target.with_name(f"{target.name}.part")
+
+        # A retry after a closed dialog or interrupted installation should not
+        # download the same immutable release again. Trust only a regular file
+        # whose digest still matches the signed manifest.
+        if target.is_file() and not target.is_symlink() and target.stat().st_size <= MAX_UPDATE_SIZE:
+            cached_digest = hashlib.sha256()
+            with target.open("rb") as cached:
+                while chunk := cached.read(1024 * 1024):
+                    cached_digest.update(chunk)
+            if cached_digest.hexdigest() == release.sha256:
+                size = target.stat().st_size
+                if progress:
+                    progress(size, size)
+                return target
+        target.unlink(missing_ok=True)
+        temporary.unlink(missing_ok=True)
+
         request = urllib.request.Request(release.url, headers={"User-Agent": "TuxInDrive-Updater"})
         digest = hashlib.sha256()
-        with self.bandwidth.guard(exclusive=True):
-            with urllib.request.urlopen(request, timeout=60) as response, temporary.open("wb") as output:
-                total = int(response.headers.get("Content-Length", 0)) if hasattr(response, "headers") else 0
-                received = 0
-                while chunk := response.read(1024 * 1024):
-                    self.bandwidth.throttle_download(len(chunk))
-                    digest.update(chunk)
-                    output.write(chunk)
-                    received += len(chunk)
-                    if received > MAX_UPDATE_SIZE:
-                        temporary.unlink(missing_ok=True)
-                        raise ValueError("The update package exceeded its 1 GiB safety limit")
-                    if progress:
-                        progress(received, total)
-        if digest.hexdigest() != release.sha256:
+        try:
+            # A user-requested update has its own serialized lane so an active
+            # long-running sync cannot starve it. Bytes remain governed by the
+            # same global download clock as every other in-process transfer.
+            with self.bandwidth.interactive_transfer_guard():
+                with urllib.request.urlopen(request, timeout=60) as response, temporary.open("xb") as output:
+                    total = int(response.headers.get("Content-Length", 0)) if hasattr(response, "headers") else 0
+                    received = 0
+                    while chunk := response.read(1024 * 1024):
+                        self.bandwidth.throttle_download(len(chunk))
+                        digest.update(chunk)
+                        output.write(chunk)
+                        received += len(chunk)
+                        if received > MAX_UPDATE_SIZE:
+                            raise ValueError("The update package exceeded its 1 GiB safety limit")
+                        if progress:
+                            progress(received, total)
+            if digest.hexdigest() != release.sha256:
+                raise ValueError("Downloaded package failed SHA-256 verification")
+            temporary.replace(target)
+        except Exception:
             temporary.unlink(missing_ok=True)
-            raise ValueError("Downloaded package failed SHA-256 verification")
-        temporary.replace(target)
+            raise
         if progress:
             progress(target.stat().st_size, target.stat().st_size)
         return target

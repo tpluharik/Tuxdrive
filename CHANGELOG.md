@@ -2,6 +2,18 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.18 — reliable interactive updates
+
+- Prevented signed package downloads from waiting indefinitely behind a
+  long-running scheduled synchronization while retaining the global byte-rate
+  limit and one-at-a-time interactive transfer admission.
+- Kept the update dialog alive while download, verification, and installation
+  are active, eliminating a late-callback crash when the window was closed.
+- Reused an already downloaded package only after checking it again against
+  the SHA-256 digest in the signed manifest, making a safe retry immediate.
+- Removed incomplete package files after every failed download and made late
+  completion callbacks safe during application shutdown.
+
 ## 0.26.17 — resizable desktop windows
 
 - Prevented long synchronized-folder action rows from setting an enormous

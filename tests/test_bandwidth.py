@@ -113,6 +113,34 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
         self.assertFalse(control_thread.is_alive())
         self.assertFalse(transfer_thread.is_alive())
 
+    def test_interactive_transfer_is_not_starved_by_active_sync(self):
+        controller = GlobalBandwidthController("1M", max_active=1)
+        sync_entered = threading.Event()
+        release_sync = threading.Event()
+        interactive_completed = threading.Event()
+
+        def sync() -> None:
+            with controller.guard():
+                sync_entered.set()
+                release_sync.wait(timeout=1)
+
+        def interactive() -> None:
+            with controller.interactive_transfer_guard():
+                interactive_completed.set()
+
+        sync_thread = threading.Thread(target=sync)
+        sync_thread.start()
+        self.assertTrue(sync_entered.wait(timeout=1))
+        interactive_thread = threading.Thread(target=interactive)
+        interactive_thread.start()
+        interactive_thread.join(timeout=0.2)
+        release_sync.set()
+        sync_thread.join(timeout=1)
+
+        self.assertTrue(interactive_completed.is_set())
+        self.assertFalse(interactive_thread.is_alive())
+        self.assertFalse(sync_thread.is_alive())
+
 
 if __name__ == "__main__":
     unittest.main()

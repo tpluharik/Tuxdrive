@@ -84,6 +84,7 @@ class GlobalBandwidthController:
         self._slots = threading.BoundedSemaphore(self.max_active)
         self._admission = threading.Lock()
         self._control_plane = threading.Lock()
+        self._interactive_transfer = threading.Lock()
         self._lock = threading.RLock()
         self._next_download = 0.0
         self.limit = ""
@@ -130,6 +131,19 @@ class GlobalBandwidthController:
         or other small control-plane request.
         """
         with self._control_plane:
+            yield
+
+    @contextlib.contextmanager
+    def interactive_transfer_guard(self) -> Iterator[None]:
+        """Serialize user-requested transfers without sync-queue starvation.
+
+        Scheduled synchronizations can occupy the regular transfer gate for a
+        long time (and the default gate has one slot). Interactive operations
+        such as a signed application update must not wait indefinitely behind
+        them. They still use the shared byte-rate clock, while this separate
+        lane ensures that only one interactive package transfer runs at once.
+        """
+        with self._interactive_transfer:
             yield
 
     def throttle_download(self, byte_count: int) -> None:
