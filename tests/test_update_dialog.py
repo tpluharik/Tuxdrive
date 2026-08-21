@@ -6,9 +6,17 @@ from unittest.mock import Mock
 
 os.environ.setdefault("XDG_STATE_HOME", "/tmp/tuxindrive-test-state")
 
-from tuxindrive.app import Gtk, MainWindow  # noqa: E402
+try:
+    from tuxindrive.app import Gtk, MainWindow  # noqa: E402
+except SystemExit:
+    # The generic Python CI lane intentionally has no GTK runtime. Desktop
+    # packaging and platform lanes exercise the real GUI dependencies; keep
+    # these focused lifecycle tests available wherever GTK can be imported.
+    Gtk = None
+    MainWindow = None
 
 
+@unittest.skipUnless(MainWindow is not None, "GTK runtime is unavailable")
 class UpdateDialogLifecycleTests(unittest.TestCase):
     def test_close_response_is_ignored_while_update_operation_is_active(self):
         window = SimpleNamespace(
