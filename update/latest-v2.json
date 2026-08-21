@@ -1,8 +1,8 @@
 {
-  "version": "0.26.17",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.17/tuxindrive_0.26.17_all.deb",
-  "sha256": "6e33a8515c3bad0f6f10f6e448166946f3a3b494839a2e77565c9431c9ccf01a",
-  "notes": "Resizable desktop windows and bounded layouts",
-  "expires_at": "2026-11-16T13:40:57.507413+00:00",
-  "signature": "z2eekm9L57ViLlJwkamt0neek92nrOO+wJKH2GniKcSlsAX3JCjX/ogFVEvOv5YWeaaORbqcYlqfP4wj9+bsDQ=="
+  "version": "0.26.19",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.19/tuxindrive_0.26.19_all.deb",
+  "sha256": "e66f448f214bcd7cd95b6a805071e129c18c0fa6a7906ff272f2ee4116d2ae31",
+  "notes": "Reliable cloud repair with quieter bulk-change protection",
+  "expires_at": "2026-11-19T12:58:24.770322+00:00",
+  "signature": "VOZm6mPrcukrBqm36rRYbc0Yz4yu05HgXAxe1zk4lxp+u9B5XdmJs7EJj4aMVL7wp+NaJhC7MdvD5JRo3TD4CA=="
 }
