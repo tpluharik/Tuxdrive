@@ -7,7 +7,16 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.18
+## Current baseline: 0.26.19
+
+### Completed in 0.26.19: bidirectional integrity repair and quieter bulk protection
+
+Integrity findings now use the documented `rclone check --combined` direction:
+local-authoritative repair uploads local-only and changed files, while
+cloud-authoritative repair downloads cloud-only and changed files. One-sided
+deletions retain recovery copies where possible. Ordinary bulk-change pauses
+require both configured thresholds, with higher migrated defaults; deletion
+ceilings and ransomware-like suffix bursts remain independent hard stops.
 
 ### Completed in 0.26.18: reliable interactive updates
 

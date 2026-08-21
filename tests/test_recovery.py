@@ -8,7 +8,7 @@ from unittest import mock
 from tuxindrive.callbacks import FileChange
 from tuxindrive.models import SyncJob
 from tuxindrive.recovery import (
-    IntegrityAuditor, MassChangeGuard, RecoveryEntry, RecoveryManager, SafetyError,
+    AuditIssue, IntegrityAuditor, MassChangeGuard, RecoveryEntry, RecoveryManager, SafetyError,
 )
 
 
@@ -84,10 +84,21 @@ class RecoveryTests(unittest.TestCase):
 
     def test_mass_change_and_ransomware_suffixes_pause_job(self):
         self.job.mass_change_limit = 3
+        self.job.mass_change_percent = 3
         changes = [FileChange(f"file-{index}.txt", "local") for index in range(3)]
         self.assertTrue(MassChangeGuard.assess(self.job, changes, 100).blocked)
         encrypted = [FileChange(f"victim-{index}.locked", "local") for index in range(5)]
         self.assertTrue(MassChangeGuard.assess(self.job, encrypted, 100).blocked)
+
+    def test_bulk_guard_requires_count_and_percentage_but_keeps_hard_signals(self):
+        self.job.mass_change_limit = 500
+        self.job.mass_change_percent = 80
+        ordinary = [FileChange(f"file-{index}.txt", "local") for index in range(300)]
+        self.assertFalse(MassChangeGuard.assess(self.job, ordinary, 390).blocked)
+        large = [FileChange(f"file-{index}.txt", "local") for index in range(800)]
+        self.assertTrue(MassChangeGuard.assess(self.job, large, 900).blocked)
+        deleted = [FileChange(f"old-{index}.txt", "remote", deleted=True) for index in range(101)]
+        self.assertTrue(MassChangeGuard.assess(self.job, deleted, 1000).blocked)
 
     def test_mass_change_log_parsing_respects_disabled_protection(self):
         log = self.root / "preview.log"
@@ -101,6 +112,75 @@ class RecoveryTests(unittest.TestCase):
         auditor = IntegrityAuditor("rclone", self.manager)
         issues = auditor.audit(self.job)
         self.assertEqual([(item.symbol, item.path) for item in issues], [("*", "changed"), ("+", "local"), ("-", "cloud")])
+        self.assertEqual(issues[1].description, "Only on cloud/peer side")
+        self.assertEqual(issues[2].description, "Only on local side")
+
+    def test_repair_downloads_cloud_only_and_changed_files(self):
+        auditor = IntegrityAuditor("rclone", self.manager)
+        commands = []
+
+        def run(command):
+            commands.append(command)
+            if command[1] == "copyto" and not str(command[2]).startswith(str(self.local)):
+                Path(command[3]).write_bytes(b"from-cloud")
+
+        auditor._run = run
+        repaired = auditor.repair(
+            self.job,
+            [AuditIssue("+", "cloud-only.txt"), AuditIssue("*", "changed.txt")],
+            "remote",
+        )
+
+        self.assertEqual(repaired, 2)
+        self.assertEqual((self.local / "cloud-only.txt").read_bytes(), b"from-cloud")
+        self.assertEqual((self.local / "changed.txt").read_bytes(), b"from-cloud")
+        self.assertTrue(all(command[1] == "copyto" for command in commands))
+
+    def test_repair_removes_local_only_when_cloud_wins(self):
+        local_only = self.local / "local-only.txt"
+        local_only.write_bytes(b"local")
+        auditor = IntegrityAuditor("rclone", self.manager)
+        auditor._run = mock.Mock()
+
+        repaired = auditor.repair(self.job, [AuditIssue("-", "local-only.txt")], "remote")
+
+        self.assertEqual(repaired, 1)
+        self.assertFalse(local_only.exists())
+        auditor._run.assert_not_called()
+        self.assertTrue(self.manager.entries(self.job.id))
+
+    def test_repair_uploads_local_only_and_changed_files(self):
+        (self.local / "local-only.txt").write_bytes(b"local")
+        (self.local / "changed.txt").write_bytes(b"new")
+        auditor = IntegrityAuditor("rclone", self.manager)
+        auditor._run = mock.Mock()
+
+        repaired = auditor.repair(
+            self.job,
+            [AuditIssue("-", "local-only.txt"), AuditIssue("*", "changed.txt")],
+            "local",
+        )
+
+        self.assertEqual(repaired, 2)
+        sources = [command[2] for command in (call.args[0] for call in auditor._run.call_args_list)]
+        self.assertEqual(sources, [str(self.local / "local-only.txt"), str(self.local / "changed.txt")])
+
+    def test_repair_removes_cloud_only_when_local_wins_after_backup(self):
+        auditor = IntegrityAuditor("rclone", self.manager)
+        commands = []
+
+        def run(command):
+            commands.append(command)
+            if command[1] == "copyto":
+                Path(command[3]).write_bytes(b"remote-backup")
+
+        auditor._run = run
+        repaired = auditor.repair(self.job, [AuditIssue("+", "cloud-only.txt")], "local")
+
+        self.assertEqual(repaired, 1)
+        self.assertEqual([command[1] for command in commands], ["copyto", "deletefile"])
+        backup = self.manager.root / self.job.id / "remote-repair" / "cloud-only.txt"
+        self.assertEqual(backup.read_bytes(), b"remote-backup")
 
 
 if __name__ == "__main__":

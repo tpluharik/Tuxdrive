@@ -229,13 +229,22 @@ class ProtonClientTests(unittest.TestCase):
     def test_mass_change_guard_blocks_before_transfer(self):
         job = SyncJob(
             "proton-web", "/data/proton", initialized=True,
-            mass_change_limit=2, mass_change_percent=90,
+            mass_change_limit=2, mass_change_percent=60,
         )
         previous = {"local": {"a": "1", "b": "1", "c": "1"}, "remote": {}}
         with self.assertRaisesRegex(ProtonDriveError, "Protection paused"):
             self.client._guard_mass_change(
                 job, {"a": "2", "b": "2", "c": "1"}, {}, previous
             )
+
+    def test_mass_change_guard_does_not_pause_on_only_one_noisy_signal(self):
+        job = SyncJob(
+            "proton-web", "/data/proton", initialized=True,
+            mass_change_limit=500, mass_change_percent=80,
+        )
+        previous = {"local": {f"file-{index}": "1" for index in range(390)}, "remote": {}}
+        current = {key: "2" if index < 300 else value for index, (key, value) in enumerate(previous["local"].items())}
+        self.client._guard_mass_change(job, current, {}, previous)
 
     def test_sync_rejects_streaming_without_running_cli(self):
         job = SyncJob("proton-web", "/data/proton", mode=SyncMode.VIRTUAL_DRIVE)

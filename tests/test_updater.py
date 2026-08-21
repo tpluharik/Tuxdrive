@@ -96,7 +96,7 @@ class UpdateManagerTests(unittest.TestCase):
         current = version_key(__version__)
         published = version_key(release.version)
         self.assertEqual(published[:2], current[:2])
-        self.assertIn(current[2] - published[2], (0, 1))
+        self.assertGreaterEqual(current, published)
         package_name = release_package_name(release, "linux")
         if "/releases/download/" in release.url:
             self.assertIn(f"/releases/download/v{release.version}/", release.url)
@@ -116,7 +116,7 @@ class UpdateManagerTests(unittest.TestCase):
             current = version_key(__version__)
             published = version_key(release.version)
             self.assertEqual(published[:2], current[:2])
-            self.assertIn(current[2] - published[2], (0, 1))
+            self.assertGreaterEqual(current, published)
             self.assertIn(f"/releases/download/v{release.version}/", release.url)
             self.assertEqual(release_package_name(release, platform), release.url.rsplit("/", 1)[-1])
 

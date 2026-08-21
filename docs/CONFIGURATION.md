@@ -1,7 +1,7 @@
 # TuxInDrive configuration reference
 
 This reference describes the persisted desktop configuration in TuxInDrive
-0.26.18. Normal changes should be made in **Settings**, **Connect account**, or
+0.26.19. Normal changes should be made in **Settings**, **Connect account**, or
 **Add/Edit folder**. Stop TuxInDrive and make a backup before manually editing
 JSON; a syntactically valid but inconsistent mapping can still synchronize the
 wrong location.
@@ -136,8 +136,10 @@ directly without updating every `account_remote` reference.
 | Runtime | `initialized`, `last_run`, `last_status`, `last_error` |
 
 Defaults are a five-minute, real-time, two-way job; conflict copies; version
-history retained 30 days; a 100-delete cap; and ransomware thresholds of 200
-changes or 25 percent. Default excludes are `.Trash-*/**`, `*.part`, and
+history retained 30 days; a 100-delete cap; and ordinary bulk-change thresholds
+of 500 changed paths and 80 percent. Both bulk thresholds must be reached;
+deletion ceilings and ransomware-shaped filename suffixes remain independent
+hard stops. Default excludes are `.Trash-*/**`, `*.part`, and
 temporary Office lock files (`~$*`).
 
 `remote_scope` is a provider-selected root (for example a Shared Drive), while

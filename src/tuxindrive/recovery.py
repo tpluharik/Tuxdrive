@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -44,8 +45,10 @@ class AuditIssue:
     def description(self) -> str:
         return {
             "*": "Different content",
-            "+": "Only on local side",
-            "-": "Only on cloud/peer side",
+            # rclone check --combined compares source (local) with destination
+            # (cloud): '+' is missing from source and '-' from destination.
+            "+": "Only on cloud/peer side",
+            "-": "Only on local side",
             "!": "Could not verify",
         }.get(self.symbol, "Difference")
 
@@ -186,10 +189,19 @@ class MassChangeGuard:
         suspicious = sum(Path(item.path).suffix.lower() in cls.SUSPICIOUS_SUFFIXES for item in changes)
         percent = (changed * 100 / max(1, total_files))
         reasons = []
-        if changed >= max(1, job.mass_change_limit):
-            reasons.append(f"{changed} paths changed (limit {job.mass_change_limit})")
-        if total_files >= 20 and percent >= max(1, job.mass_change_percent):
-            reasons.append(f"{percent:.0f}% of known files changed")
+        # Ordinary bulk edits require both configured signals. An absolute
+        # count alone is noisy in large trees, while a percentage alone is
+        # noisy in small folders. Destructive and encryption-shaped activity
+        # remains independently blocked below.
+        if (
+            total_files >= 20
+            and changed >= max(1, job.mass_change_limit)
+            and percent >= max(1, job.mass_change_percent)
+        ):
+            reasons.append(
+                f"{changed} paths changed ({percent:.0f}% of known files; "
+                f"limits {job.mass_change_limit} and {job.mass_change_percent}%)"
+            )
         if deleted > max(10, job.max_delete):
             reasons.append(f"{deleted} deletion events exceed the safety ceiling")
         if suspicious >= 5:
@@ -259,7 +271,7 @@ class IntegrityAuditor:
                 continue
             remote = f"{job.remote_spec.rstrip('/')}/{relative}"
             if winner == "remote":
-                if issue.symbol == "+":
+                if issue.symbol == "-":
                     self.recovery.archive_local(job, relative, "removed by integrity repair")
                     unlink_confined(job.local, relative)
                 else:
@@ -269,7 +281,7 @@ class IntegrityAuditor:
                         self._run([self.rclone_path, "copyto", remote, str(staged), *self.bandwidth.rclone_args(job.bandwidth_limit)])
                         install_confined(staged, job.local, relative)
             else:
-                if issue.symbol == "-":
+                if issue.symbol == "+":
                     # Retain a local recovery copy before removing the remote-only file.
                     backup = self.recovery.root / job.id / "remote-repair" / relative
                     backup.parent.mkdir(parents=True, exist_ok=True)

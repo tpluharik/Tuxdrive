@@ -362,8 +362,8 @@ class SyncJob:
     version_history: bool = True
     version_retention_days: int = 30
     ransomware_protection: bool = True
-    mass_change_limit: int = 200
-    mass_change_percent: int = 25
+    mass_change_limit: int = 500
+    mass_change_percent: int = 80
     peer_leases: bool = False
     peer_lease_minutes: int = 10
     block_delta_transfer: bool = True
@@ -400,6 +400,12 @@ class SyncJob:
     @classmethod
     def from_dict(cls, value: dict[str, Any]) -> "SyncJob":
         data = dict(value)
+        # Migrate the former highly sensitive defaults. Explicit non-default
+        # operator thresholds remain untouched.
+        if data.get("mass_change_limit", 200) == 200:
+            data["mass_change_limit"] = 500
+        if data.get("mass_change_percent", 25) == 25:
+            data["mass_change_percent"] = 80
         data["mode"] = SyncMode(data.get("mode", SyncMode.TWO_WAY.value))
         data["conflict_policy"] = ConflictPolicy(
             data.get("conflict_policy", ConflictPolicy.KEEP_BOTH.value)

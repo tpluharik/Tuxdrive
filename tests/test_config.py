@@ -139,6 +139,22 @@ class ConfigStoreTests(unittest.TestCase):
         invalid = AppConfig.from_dict({"settings": {"global_bandwidth_limit": "fast"}})
         self.assertEqual(invalid.settings.global_bandwidth_limit, "10M")
 
+    def test_former_mass_change_defaults_are_migrated_without_overwriting_custom_values(self):
+        migrated = SyncJob.from_dict({
+            "account_remote": "cloud",
+            "local_path": "/tmp/cloud",
+            "mass_change_limit": 200,
+            "mass_change_percent": 25,
+        })
+        self.assertEqual((migrated.mass_change_limit, migrated.mass_change_percent), (500, 80))
+        custom = SyncJob.from_dict({
+            "account_remote": "cloud",
+            "local_path": "/tmp/cloud",
+            "mass_change_limit": 120,
+            "mass_change_percent": 60,
+        })
+        self.assertEqual((custom.mass_change_limit, custom.mass_change_percent), (120, 60))
+
     def test_streaming_refresh_mode_is_validated(self):
         self.assertEqual(AppConfig.from_dict({}).settings.streaming_refresh_mode, "realtime")
         config = AppConfig.from_dict({"settings": {"streaming_refresh_mode": "balanced"}})

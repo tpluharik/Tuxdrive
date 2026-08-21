@@ -823,7 +823,7 @@ class ProtonDriveClient:
         for label, current, earlier in directions:
             changed = sum(1 for key in set(current) | set(earlier) if current.get(key) != earlier.get(key))
             percent = int(changed * 100 / max(len(earlier), 1))
-            if changed >= job.mass_change_limit or percent >= job.mass_change_percent:
+            if changed >= job.mass_change_limit and percent >= job.mass_change_percent:
                 raise ProtonDriveError(
                     f"Protection paused Proton synchronization: {changed} {label} paths changed ({percent}%)."
                 )

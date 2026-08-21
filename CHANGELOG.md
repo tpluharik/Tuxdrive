@@ -2,6 +2,19 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.19 — working integrity repair with quieter bulk protection
+
+- Corrected the reversed `rclone check --combined` meanings for local-only and
+  cloud-only files, so choosing the local side uploads and choosing the cloud
+  side downloads the intended content.
+- Restored the missing temporary staging dependency used for verified incoming
+  repair files and retained recovery copies before destructive repair actions.
+- Reduced false mass-change pauses by requiring both the configured changed
+  path count and percentage for ordinary bulk edits. Deletion ceilings and
+  ransomware-shaped filename extensions remain independent hard stops.
+- Migrated the former 200-path/25-percent defaults to 500 paths/80 percent
+  without changing explicitly customized non-default thresholds.
+
 ## 0.26.18 — reliable interactive updates
 
 - Prevented signed package downloads from waiting indefinitely behind a
