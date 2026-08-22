@@ -1,8 +1,8 @@
 {
-  "version": "0.26.19",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.19/TuxInDrive-0.26.19-windows-x64-setup.exe",
-  "sha256": "be95b8716995f70e6d32856c8acff3da0a34799b2212da829ed2bd9da8d15d78",
-  "notes": "Reliable cloud repair with quieter bulk-change protection",
-  "expires_at": "2026-11-19T12:58:24.841907+00:00",
-  "signature": "g1opnQ//WKfIfyk8QpRueZl8mo+FCJ5UCQY37AOFBBmRIMM0cQBHXlkxf7yZYaQ86UgdSdntiAmP8ipEvYhBDw=="
+  "version": "0.26.20",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.20/TuxInDrive-0.26.20-windows-x64-setup.exe",
+  "sha256": "e2bbebab3cde9c51c16a67d9723cf40918180da4229b790894873b7780edfc17",
+  "notes": "Security hardening, bounded network workloads, and safer platform updates",
+  "expires_at": "2026-11-20T16:47:41.558351+00:00",
+  "signature": "7//UZu5Y8XzMjyRaCIvvoUWlUTcg69u9ow3Ff6ObrGWBgXrLSijG0KuQF+WYXLZ/D4Qs1SZ1VlXICVmOMyk9BA=="
 }

@@ -1,8 +1,8 @@
 {
-  "version": "0.26.19",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.19/tuxindrive_0.26.19_all.deb",
-  "sha256": "e66f448f214bcd7cd95b6a805071e129c18c0fa6a7906ff272f2ee4116d2ae31",
-  "notes": "Reliable cloud repair with quieter bulk-change protection",
-  "expires_at": "2026-11-19T12:58:24.770322+00:00",
-  "signature": "VOZm6mPrcukrBqm36rRYbc0Yz4yu05HgXAxe1zk4lxp+u9B5XdmJs7EJj4aMVL7wp+NaJhC7MdvD5JRo3TD4CA=="
+  "version": "0.26.20",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.20/tuxindrive_0.26.20_all.deb",
+  "sha256": "0fb022e66454e0a18aab4999827b3ca09470312ee0494ff1a09127cd2c1fe94e",
+  "notes": "Security hardening, bounded network workloads, and safer platform updates",
+  "expires_at": "2026-11-20T16:47:41.486033+00:00",
+  "signature": "QYroYijmUt+4tI+i4qO5AYyRAYtZWOwb3bzo5bjiNhB4P+HNBQD9pA7JbKvbg8qilera8Sn/gHIPBBXz82J8Dg=="
 }

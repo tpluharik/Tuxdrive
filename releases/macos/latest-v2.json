@@ -1,8 +1,8 @@
 {
-  "version": "0.26.19",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.19/TuxInDrive-0.26.19-macos-arm64.dmg",
-  "sha256": "134e79b4b0a7ebe406f16352d4973ae035acf27c1ca642f2251d12b48b129391",
-  "notes": "Reliable cloud repair with quieter bulk-change protection",
-  "expires_at": "2026-11-19T12:58:24.915521+00:00",
-  "signature": "zU9Ts6K3NrboUNLaH+qcckU93EDFmAyHggMaQxXGx82YqwkM155CgckmxGupH8pVriztY/AdSUsaWGMIi8o2Bg=="
+  "version": "0.26.20",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.20/TuxInDrive-0.26.20-macos-arm64.dmg",
+  "sha256": "baf3f40214b2ff8492acd5e4e5c035159a35e11c19d67dfd2b147bfd4973abda",
+  "notes": "Security hardening, bounded network workloads, and safer platform updates",
+  "expires_at": "2026-11-20T16:47:41.640478+00:00",
+  "signature": "laOAj235mhg9MP7p/uNxCOWcJs1xsIl/hpZ7MN4pvIfRuctnOVlTPGR+Qhg3WgwSMx8zpvSnHefdP0xbd7NEBQ=="
 }

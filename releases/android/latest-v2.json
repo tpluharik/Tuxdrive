@@ -1,8 +1,8 @@
 {
-  "version": "0.26.19",
-  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.19/TuxInDrive-0.26.19-android.apk",
-  "sha256": "2e253ab9b475c1e716a0606890e0a5c88866a305324325e5fa1b84c39b612b2c",
-  "notes": "Reliable cloud repair with quieter bulk-change protection",
-  "expires_at": "2026-11-19T12:58:25.148404+00:00",
-  "signature": "rs2hCaEm2S+jLC7CUKBYC+fC87v/yGtj1/fJeytJm/RTJdDoCGiytoX+JredrRi8gn8xTBSrJSOQiNW7if3cBw=="
+  "version": "0.26.20",
+  "url": "https://github.com/tpluharik/Tuxindrive/releases/download/v0.26.20/TuxInDrive-0.26.20-android.apk",
+  "sha256": "46abfb374e981044957a24d8406a0f5bfb956a2b5ea9acbd586d36476c0252df",
+  "notes": "Security hardening, bounded network workloads, and safer platform updates",
+  "expires_at": "2026-11-20T16:47:41.904334+00:00",
+  "signature": "4ctOcSRGMlW1fpwhrJDk6VLQ8kEt2d3xystMMhudTQ/grIGW05Xg0tqLXD49r62WLVpXNvyew47ZR0ZbUvPUDw=="
 }
