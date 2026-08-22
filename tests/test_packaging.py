@@ -217,6 +217,8 @@ class PackagingTests(unittest.TestCase):
         self.assertIn("name: tuxindrive-android", platforms)
         self.assertIn(":app:testSideloadDebugUnitTest", platforms)
         self.assertIn(":app:testSideloadReleaseUnitTest", platforms)
+        self.assertIn("golang.org/x/mobile/cmd/gobind@v0.0.0-20260709172247-6129f5bee9d5", platforms)
+        self.assertNotIn('"${HOME}/go/bin/gomobile" init', platforms)
         self.assertIn("sh scripts/build-server-deb.sh", platforms)
         self.assertIn('tuxindrive-server_${version}_all.deb', platforms)
         self.assertTrue(Path("scripts/build-windows.ps1").is_file())

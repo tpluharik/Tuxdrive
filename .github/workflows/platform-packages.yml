@@ -150,7 +150,7 @@ jobs:
           cd build/rclone-android
           go install golang.org/x/mobile/cmd/gobind@v0.0.0-20260709172247-6129f5bee9d5
           go install golang.org/x/mobile/cmd/gomobile@v0.0.0-20260709172247-6129f5bee9d5
-          "${HOME}/go/bin/gomobile" init
+          export PATH="${HOME}/go/bin:${PATH}"
           "${HOME}/go/bin/gomobile" bind -androidapi 26 -target=android -javapkg=org.rclone \
             -ldflags "-s -X github.com/rclone/rclone/fs.Version=v1.75.0" \
             -o "${GITHUB_WORKSPACE}/android/app/libs/rclone.aar" \
