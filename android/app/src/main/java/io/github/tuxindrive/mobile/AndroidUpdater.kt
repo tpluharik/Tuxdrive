@@ -7,8 +7,12 @@ import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters
 import org.bouncycastle.crypto.signers.Ed25519Signer
 import org.json.JSONObject
 import java.io.File
+import java.io.FileOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
+import java.nio.file.AtomicMoveNotSupportedException
+import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.util.Base64
@@ -25,6 +29,7 @@ class AndroidUpdater(private val context: Context) {
     private val maxPackageSize = 1024L * 1024L * 1024L
 
     fun check(): AndroidUpdate? {
+        require(BuildConfig.SELF_UPDATE_ENABLED) { "Self-update is disabled for this distribution" }
         val data = JSONObject(readUrl(manifestUrl, 128 * 1024))
         val version = data.getString("version")
         val url = data.getString("url")
@@ -58,18 +63,21 @@ class AndroidUpdater(private val context: Context) {
     }
 
     fun download(update: AndroidUpdate): File {
+        require(BuildConfig.SELF_UPDATE_ENABLED) { "Self-update is disabled for this distribution" }
+        require(isTrustedReleaseUrl(URL(update.url))) { "The Android update URL is not trusted" }
         val directory = File(context.cacheDir, "updates").apply { mkdirs() }
         val target = File(directory, "TuxInDrive-${update.version}-android.apk")
         val part = File(directory, "${target.name}.part")
-        val connection = URL(update.url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 20_000
-        connection.readTimeout = 60_000
-        connection.setRequestProperty("User-Agent", "TuxInDrive-Android-Updater")
+        val connection = openTrustedConnection(update.url, manifest = false, readTimeout = 60_000)
+        val advertisedLength = connection.contentLengthLong
+        require(advertisedLength < 0 || advertisedLength <= maxPackageSize) {
+            "The Android update exceeded the 1 GiB limit"
+        }
         val digest = MessageDigest.getInstance("SHA-256")
         var received = 0L
         try {
             connection.inputStream.use { input ->
-                part.outputStream().use { output ->
+                FileOutputStream(part).use { output ->
                     val buffer = ByteArray(1024 * 1024)
                     while (true) {
                         val count = input.read(buffer)
@@ -80,13 +88,20 @@ class AndroidUpdater(private val context: Context) {
                         digest.update(buffer, 0, count)
                         output.write(buffer, 0, count)
                     }
+                    output.fd.sync()
                 }
             }
             require(digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) } == update.sha256) {
                 "The downloaded Android package failed verification"
             }
-            target.delete()
-            check(part.renameTo(target)) { "The verified Android update could not be saved" }
+            try {
+                Files.move(
+                    part.toPath(), target.toPath(),
+                    StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING,
+                )
+            } catch (_error: AtomicMoveNotSupportedException) {
+                Files.move(part.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            }
             return target
         } catch (error: Exception) {
             part.delete()
@@ -116,6 +131,7 @@ class AndroidUpdater(private val context: Context) {
     }
 
     fun openInstaller(packageFile: File) {
+        require(BuildConfig.SELF_UPDATE_ENABLED) { "Self-update is disabled for this distribution" }
         val uri = FileProvider.getUriForFile(context, "${BuildConfig.APPLICATION_ID}.files", packageFile)
         context.startActivity(Intent(Intent.ACTION_VIEW).apply {
             setDataAndType(uri, "application/vnd.android.package-archive")
@@ -124,10 +140,11 @@ class AndroidUpdater(private val context: Context) {
     }
 
     private fun readUrl(url: String, limit: Int): String {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        connection.connectTimeout = 20_000
-        connection.readTimeout = 20_000
-        connection.setRequestProperty("User-Agent", "TuxInDrive-Android-Updater")
+        val connection = openTrustedConnection(url, manifest = true, readTimeout = 20_000)
+        val advertisedLength = connection.contentLengthLong
+        require(advertisedLength < 0 || advertisedLength <= limit) {
+            "The Android update manifest is too large"
+        }
         return try {
             connection.inputStream.use { input ->
                 val output = java.io.ByteArrayOutputStream()
@@ -143,6 +160,57 @@ class AndroidUpdater(private val context: Context) {
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun openTrustedConnection(
+        original: String,
+        manifest: Boolean,
+        readTimeout: Int,
+    ): HttpURLConnection {
+        var current = URL(original)
+        repeat(6) {
+            require(if (manifest) isTrustedManifestUrl(current) else isTrustedReleaseUrl(current)) {
+                "The Android update redirected to an untrusted origin"
+            }
+            val connection = current.openConnection() as HttpURLConnection
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 20_000
+            connection.readTimeout = readTimeout
+            connection.setRequestProperty("User-Agent", "TuxInDrive-Android-Updater")
+            when (val status = connection.responseCode) {
+                HttpURLConnection.HTTP_MOVED_PERM,
+                HttpURLConnection.HTTP_MOVED_TEMP,
+                HttpURLConnection.HTTP_SEE_OTHER,
+                307,
+                308 -> {
+                    val location = connection.getHeaderField("Location")
+                        ?: error("The Android update redirect has no destination")
+                    current = URL(current, location)
+                    connection.disconnect()
+                }
+                in 200..299 -> return connection
+                else -> {
+                    connection.disconnect()
+                    error("The Android update server returned HTTP $status")
+                }
+            }
+        }
+        error("The Android update exceeded the redirect limit")
+    }
+
+    private fun isTrustedManifestUrl(url: URL): Boolean =
+        url.protocol == "https" && url.userInfo == null && url.port == -1 &&
+            url.host.equals("raw.githubusercontent.com", ignoreCase = true) &&
+            url.path == "/tpluharik/TuxInDrive/main/releases/android/latest-v2.json" &&
+            url.query == null && url.ref == null
+
+    private fun isTrustedReleaseUrl(url: URL): Boolean {
+        if (url.protocol != "https" || url.userInfo != null || url.port != -1) return false
+        val host = url.host.lowercase()
+        if (host == "github.com") {
+            return url.toString().startsWith(trustedPrefix) && url.query == null && url.ref == null
+        }
+        return host == "release-assets.githubusercontent.com" || host == "objects.githubusercontent.com"
     }
 
 }

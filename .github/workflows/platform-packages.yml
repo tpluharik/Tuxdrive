@@ -16,6 +16,7 @@ on:
       - "scripts/build-windows-msys2.sh"
       - "scripts/build-macos.sh"
       - "pyproject.toml"
+      - "requirements*.txt"
       - ".github/workflows/platform-packages.yml"
 
 jobs:
@@ -29,12 +30,17 @@ jobs:
         run: |
           sh scripts/build-deb.sh
           sh scripts/build-server-deb.sh
+          python3 -m pip install -r requirements-ci.txt
+          version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
+          python3 -m pip_audit -r requirements-security.txt --format cyclonedx-json \
+            --output "dist/TuxInDrive-${version}-python.cdx.json"
       - name: Stage dedicated Linux release folder
         run: |
           version=$(PYTHONPATH=src python3 -c 'from tuxindrive import __version__; print(__version__)')
           mkdir -p releases/linux/packages
           cp "dist/tuxindrive_${version}_all.deb" releases/linux/packages/
           cp "dist/tuxindrive-server_${version}_all.deb" releases/linux/packages/
+          cp "dist/TuxInDrive-${version}-python.cdx.json" releases/linux/packages/
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: tuxindrive-linux
@@ -42,6 +48,7 @@ jobs:
           path: |
             releases/linux/packages/tuxindrive_*_all.deb
             releases/linux/packages/tuxindrive-server_*_all.deb
+            releases/linux/packages/TuxInDrive-*-python.cdx.json
 
   windows:
     runs-on: windows-latest
@@ -52,7 +59,7 @@ jobs:
       - uses: msys2/setup-msys2@fb197b72ce45fb24f17bf3f807a388985654d1f2
         with:
           msystem: UCRT64
-          update: true
+          update: false
           install: >-
             git
             mingw-w64-ucrt-x86_64-gtk3
@@ -94,12 +101,14 @@ jobs:
         with:
           persist-credentials: false
       - name: Install GTK desktop runtime
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
         run: brew install gtk+3 pygobject3
       - name: Install Python application dependencies
         run: |
           python3 -m venv --system-site-packages .venv-macos
-          .venv-macos/bin/python -m pip install --upgrade pip
-          .venv-macos/bin/python -m pip install . pyinstaller
+          .venv-macos/bin/python -m pip install --upgrade pip==25.2
+          .venv-macos/bin/python -m pip install -c requirements-release.txt . pyinstaller==6.16.0
       - name: Build ad-hoc signed macOS application image
         env:
           PYTHON_BIN: .venv-macos/bin/python
@@ -162,11 +171,11 @@ jobs:
             test -n "$TUXINDRIVE_ANDROID_KEY_PASSWORD"
             export TUXINDRIVE_ANDROID_KEYSTORE="$RUNNER_TEMP/tuxindrive-release.jks"
             printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$TUXINDRIVE_ANDROID_KEYSTORE"
-            gradle -p android --no-daemon :app:testReleaseUnitTest :app:lintRelease :app:assembleRelease
-            package=android/app/build/outputs/apk/release/app-release.apk
+            gradle -p android --no-daemon :app:testSideloadReleaseUnitTest :app:lintSideloadRelease :app:assembleSideloadRelease
+            package=android/app/build/outputs/apk/sideload/release/app-sideload-release.apk
           else
-            gradle -p android --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleDebug
-            package=android/app/build/outputs/apk/debug/app-debug.apk
+            gradle -p android --no-daemon :app:testSideloadDebugUnitTest :app:lintSideloadDebug :app:assembleSideloadDebug
+            package=android/app/build/outputs/apk/sideload/debug/app-sideload-debug.apk
           fi
           test -s "$package"
           mkdir -p dist
@@ -183,6 +192,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     needs: [linux, windows, macos, android]
     runs-on: ubuntu-latest
+    environment: release
     permissions:
       contents: write
     steps:
@@ -206,6 +216,7 @@ jobs:
           find release-assets -type f -print
           test "$(find release-assets -type f -name "tuxindrive_${version}_all.deb" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "tuxindrive-server_${version}_all.deb" | wc -l)" -eq 1
+          test "$(find release-assets -type f -name "TuxInDrive-${version}-python.cdx.json" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-setup.exe" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-windows-x64-portable.zip" | wc -l)" -eq 1
           test "$(find release-assets -type f -name "TuxInDrive-$version-macos-*.dmg" | wc -l)" -eq 1
@@ -218,7 +229,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           mapfile -t packages < <(find release-assets -type f -print)
-          test "${#packages[@]}" -eq 7
+          test "${#packages[@]}" -eq 8
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
               gh release upload "$RELEASE_TAG" "${packages[@]}" --clobber

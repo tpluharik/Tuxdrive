@@ -1,12 +1,21 @@
-# TuxInDrive 0.26.19 security hardening and secure operation
+# TuxInDrive 0.26.20 security hardening and secure operation
 
-This document explains the controls retained through TuxInDrive 0.26.19, including critical/high remediation, approval-based peer sharing, explicit online-only/offline retention, GitHub and Proton boundaries, global traffic control, signed platform updates, encrypted desktop-to-mobile migration, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md), implementation [architecture](ARCHITECTURE.md), and operational [runbook](OPERATIONS.md).
+This document explains the controls retained through TuxInDrive 0.26.20, including critical/high remediation, approval-based peer sharing, explicit online-only/offline retention, GitHub and Proton boundaries, global traffic control, signed platform updates, encrypted desktop-to-mobile migration, what changed for existing users, which data remain sensitive, what the controls do not guarantee, and how maintainers verify a release. It complements the concise vulnerability-reporting policy in [`SECURITY.md`](../SECURITY.md), implementation [architecture](ARCHITECTURE.md), and operational [runbook](OPERATIONS.md).
+
+> **Audit status (2026-08-22):** version 0.26.20 closes the audited server
+> configuration-boundary, bounded-network, Android updater and sensitive-path
+> findings with regression coverage. It also pins Python release tooling,
+> suppresses package-manager auto-updates, publishes a dependency SBOM and uses
+> a release environment. Fully immutable Windows/macOS package inputs,
+> Authenticode, Developer ID signing/notarization and signed provenance remain
+> tracked release-infrastructure work. See the
+> [full audit and remediation status](SECURITY_AUDIT_2026-08-22.md).
 
 ## Supported baseline and immediate action
 
 Version 0.25.0 changes product identifiers without changing cryptographic trust roots or silently relocating sensitive state. Fresh installations use TuxInDrive directories; upgrades use an existing legacy directory when no new directory exists. The credential helper checks the TuxInDrive Secret Service entry first and the pre-rebrand entry second. Existing encrypted profile formats, peer invitations and hidden remote metadata remain readable. The signed update bridge retains the old repository/package alias required by 0.24.x, while accepting only the two exact official GitHub raw prefixes and a filename matching the signed version.
 
-Version **0.26.19** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots, bounded ODF/CRDT parsing, verified GitHub rename migration, durable bisync baselines, guarded reinitialization, exact offline rules, stable VFS policy, bounded FUSE reads, URI-safe Nautilus integration, signed platform channels, encrypted QR/file profile migration, and the global bandwidth/admission controller. Local peer shares may be advertised before a collaborator is known, but no file endpoint starts until the owner approves a displayed device fingerprint; approved advertisements are recipient-scoped and the listener still enforces the complete SSH key. Pending requests expire, deduplicate, are capped globally, and are rate limited per source. Router mapping is opt-in. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
+Version **0.26.20** is the supported baseline. It retains root-side update re-verification, per-key peer endpoints, isolated send/drop roots, bounded ODF/CRDT parsing, verified GitHub rename migration, durable bisync baselines, guarded reinitialization, exact offline rules, stable VFS policy, bounded FUSE reads, URI-safe Nautilus integration, signed platform channels, encrypted QR/file profile migration, and the global bandwidth/admission controller. Local peer shares may be advertised before a collaborator is known, but no file endpoint starts until the owner approves a displayed device fingerprint; approved advertisements are recipient-scoped and the listener still enforces the complete SSH key. Pending requests expire, deduplicate, are capped globally, and are rate limited per source. Router mapping is opt-in. Python/PyPI installations require `cryptography>=50.0.0,<51`; Debian installations use the distribution-maintained `python3-cryptography` package so vendor backports remain valid.
 
 Version 0.23.0 preserves those controls while adding event-driven monitoring and cache limits. Inotify queue overflow triggers full reconciliation; executable-validation caches are invalidated by binary identity changes; atomic writes remain mandatory for changed configuration; and cache cleanup refuses to evict pinned, dirty, active, symlinked or ambiguously described objects. Invalid pin metadata disables eviction for that job rather than guessing.
 
@@ -16,7 +25,7 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 
 ## Security control inventory
 
-| Area | 0.26.19 behavior | Security purpose |
+| Area | 0.26.20 behavior | Security purpose |
 |---|---|---|
 | Updates | Desktop verification plus independent privileged manifest retrieval, signature/expiry validation, no-follow copy to root-only staging, SHA-256 and Debian identity verification before APT | Prevent unsigned, replayed, substituted, oversized, wrong-package and verification-to-install race attacks |
 | Cloud credentials | rclone authenticated encrypted configuration; random config key in GNOME Secret Service; password-command retrieval; private permissions; sensitive child processes disable same-user dumpability | Keep tokens/passwords out of TuxInDrive JSON, ordinary arguments, and world-readable files |
@@ -33,8 +42,8 @@ The 0.19.1 release completes a trust-root rotation without disabling verificatio
 | Transfer engine | rclone 1.75.0+ plus required safety capabilities; bounded verified bootstrap archive with unique safe member extraction | Reject unsupported or unsafe engines and malicious archives |
 | GitHub repositories | Credential-free GitHub-only URLs, validated branches/origins, noninteractive system Git credentials, fast-forward/rebase guards, conflict abort | Avoid token leakage, command injection and silent Git history overwrite |
 | Offline hydration | Root/child confinement, symlink rejection, progress-based inactivity timeout with one isolated retry, failed-pin rollback, exact file rules, stable no-remount retention, explicit nested online-only exceptions, and confined local pin manifests checked without remote reads | Avoid indefinitely blocked helpers, stale pending badges, sibling downloads, detached Nautilus views, silent reconnect downloads, false offline claims, generic-cache eviction of pinned content, and path escape |
-| CI/release | Pinned release dependencies, 353 Python tests plus 11 Android JVM tests, compile checks, high-severity Bandit, `pip-audit`, Debian client/server installation matrices, CycloneDX SBOM, signed-manifest verification | Make security regressions, broken installers and vulnerable dependencies release blockers |
-| Optional server | Default-off client flag; native token storage; token hashes at rest; TLS required off-loopback; independently disabled roles; opaque payloads; strict sizes/TTLs/quotas/rate limits; tenant-isolated SQLite; allowlisted relay; read-only MCP; hardened systemd service; unprivileged GUI using fixed no-shell PolicyKit operations and caller-owned mode-0600 staging | Provide self-hosted availability without silently redirecting transfers, accepting plaintext remote authentication, or exposing generic filesystem/shell tools |
+| CI/release | Commit-pinned GitHub Actions, tests, compile checks, high-severity Bandit, `pip-audit`, Debian installation matrices, CycloneDX SBOM, and signed-manifest verification; platform package-manager and PyInstaller inputs are not yet fully immutable | Detect regressions while TID-2026-03 tracks remaining supply-chain and native-signing work |
+| Optional server | Default-off client flag; loopback default; TLS required off-loopback; token digests; root-owned read-only configuration; randomized descriptor-relative atomic saves; role controls; opaque payloads; sizes/TTLs/quotas/rate limits; bounded request/relay concurrency and deadlines; tenant-isolated SQLite; bandwidth-controlled allowlisted relay; read-only MCP; systemd task/descriptor/memory ceilings | Preserve the privileged boundary and prevent one authenticated tenant/source from consuming unbounded server resources; still a preview, not an internet-scale public service |
 
 ## Dependency advisory response
 
@@ -95,7 +104,7 @@ Peer sharing and one-time drops remain enabled with per-key isolation. Read/writ
 ## Operator verification checklist
 
 1. Install only the repository package whose SHA-256 matches the signed manifest.
-2. Confirm the running version is 0.26.19 and the platform update check reports a valid signature, origin, filename, digest, size, architecture and expiry.
+2. Confirm the running version is 0.26.20 and the platform update check reports a valid signature, origin, filename, digest, size, architecture and expiry.
 3. Verify configuration/state directories are owned by the user and not group/world accessible.
 4. Confirm the rclone config is encrypted and the Secret Service entry is recoverable through an approved migration procedure.
 5. Review enabled cloud accounts, jobs, exception rules, peer keys, roles, Tor client credentials, relay settings, and public/NAT exposure.

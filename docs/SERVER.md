@@ -35,18 +35,18 @@ service manager. All `/v1/` endpoints require a bearer token.
 
 ## Installation
 
-Download `tuxindrive-server_0.26.19_all.deb` from the matching
-[GitHub Release](https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.19),
+Download `tuxindrive-server_0.26.20_all.deb` from the matching
+[GitHub Release](https://github.com/tpluharik/Tuxindrive/releases/tag/v0.26.20),
 then install that local file. The leading `./` is required so APT treats the
 name as a file instead of searching configured package repositories:
 
 ```bash
 cd ~/Downloads
-sudo apt install ./tuxindrive-server_0.26.19_all.deb
+sudo apt install ./tuxindrive-server_0.26.20_all.deb
 ```
 
 If configuration of the defective 0.26.12 preview was left unfinished,
-installing 0.26.19 replaces its launcher and completes the pending package
+installing 0.26.20 replaces its launcher and completes the pending package
 configuration. If APT asks to repair dependencies afterward, run:
 
 ```bash
@@ -58,13 +58,15 @@ Build and inspect the package:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.19_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.19_all.deb
-sudo apt install ./dist/tuxindrive-server_0.26.19_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.20_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.20_all.deb
+sudo apt install ./dist/tuxindrive-server_0.26.20_all.deb
 ```
 
-The package creates a locked `tuxindrive-server` system account, private
-configuration/state directories and a hardened systemd unit. It initializes a
+The package creates a locked `tuxindrive-server` system account, a root-owned
+`/etc/tuxindrive-server` directory, service-owned runtime state and a hardened
+systemd unit. `server.json` is `root:tuxindrive-server` mode `0640`; the service
+cannot modify it. It initializes a
 random 384-bit API token once. Read and then securely remove its bootstrap copy:
 
 ```bash
@@ -148,10 +150,22 @@ The default configuration is `/etc/tuxindrive-server/server.json`:
   "quota_mib_per_tenant": 512,
   "default_ttl_seconds": 86400,
   "global_bandwidth_limit": "10M",
+  "max_concurrent_requests": 16,
+  "max_requests_per_source": 4,
+  "request_timeout_seconds": 30,
+  "max_relay_connections": 4,
+  "max_relay_connections_per_tenant": 2,
+  "relay_idle_timeout_seconds": 30,
   "relay_targets": [],
   "update_manifests": []
 }
 ```
+
+Request admission is bounded globally and per source before a worker starts.
+Every accepted connection receives a read deadline. Relay admission is also
+bounded globally and per tenant; idle relays expire, total time/bytes remain
+capped, and both relay directions use the configured global bandwidth clock.
+The systemd unit independently caps tasks, file descriptors and memory.
 
 `token_hashes` maps token SHA-256 digests to tenant IDs. The bootstrap mapping
 uses the reserved tenant ID `owner`; only that token may list or start/cancel

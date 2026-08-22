@@ -77,11 +77,16 @@ def write_configuration(source: Path) -> None:
     _require_root()
     raw = _read_owned_source(source)
     validated = ServerConfig.from_dict(raw)
-    uid, gid = _service_identity()
+    _uid, gid = _service_identity()
     CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True, mode=0o750)
-    _private_write(CONFIG_PATH, json.dumps(asdict(validated), indent=2) + "\n")
-    os.chown(CONFIG_PATH, uid, gid)
-    os.chmod(CONFIG_PATH, 0o600)
+    _private_write(
+        CONFIG_PATH,
+        json.dumps(asdict(validated), indent=2) + "\n",
+        mode=0o640,
+        uid=0,
+        gid=gid,
+        require_root_parent=True,
+    )
 
 
 def read_configuration() -> dict:

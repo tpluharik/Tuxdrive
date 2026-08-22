@@ -2,6 +2,27 @@
 
 This changelog summarizes user-visible releases. Detailed operation, safety limitations, and recovery instructions are maintained in the [user guide](docs/USER_GUIDE.md).
 
+## 0.26.20 — server and update-channel security hardening
+
+- Made the server configuration directory root-owned and read-only to the
+  service, migrated the configuration to `root:tuxindrive-server` mode `0640`,
+  removed `/etc` from the service write set, and replaced predictable temporary
+  writes with randomized descriptor-relative no-follow atomic replacement.
+- Bounded server request and relay concurrency globally and per source/tenant,
+  added request and relay idle deadlines, applied the global upload/download
+  rate controller to relays, and added systemd task, descriptor and memory
+  ceilings.
+- Tightened TLS, database and headless-client path validation against symlinks,
+  unsafe modes and unexpected owners.
+- Hardened the Android sideload updater with explicit redirect/final-origin
+  validation, HTTPS-only network policy, advertised/downloaded size limits,
+  durable atomic package storage, and sideload-only package-install permission.
+- Pinned Python CI/release tools, disabled automatic Homebrew/MSYS2 updates,
+  added a release environment and published Python dependency SBOM, while
+  retaining native platform signing as an explicit maintainer requirement.
+- Added regression tests and documented the 2026-08-22 security audit,
+  remediation status and remaining release-provenance work.
+
 ## 0.26.19 — working integrity repair with quieter bulk protection
 
 - Corrected the reversed `rclone check --combined` meanings for local-only and

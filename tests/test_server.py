@@ -15,6 +15,7 @@ from tuxindrive.server import (
     ServerConfig,
     ServerError,
     TuxInDriveServer,
+    _private_write,
     hash_token,
     initialize,
 )
@@ -90,6 +91,32 @@ class ServerConfigurationTests(unittest.TestCase):
             self.assertIn("ProtectSystem=strict", (repository / "packaging/server/tuxindrive-server.service").read_text())
             self.assertTrue((repository / "scripts/build-server-deb.sh").is_file())
 
+    def test_private_write_refuses_precreated_temporary_symlink(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            victim = root / "victim"
+            victim.write_text("unchanged", encoding="utf-8")
+            hostile = root / ".server.json.known.tmp"
+            hostile.symlink_to(victim)
+            with mock.patch("tuxindrive.server.secrets.token_hex", return_value="known"):
+                with self.assertRaises(FileExistsError):
+                    _private_write(root / "server.json", "replacement")
+            self.assertEqual(victim.read_text(encoding="utf-8"), "unchanged")
+            self.assertFalse(hostile.exists())
+
+    def test_server_package_keeps_configuration_root_owned_and_read_only(self):
+        repository = Path(__file__).resolve().parents[1]
+        postinst = (repository / "packaging/server/DEBIAN/postinst").read_text(encoding="utf-8")
+        service = (repository / "packaging/server/tuxindrive-server.service").read_text(encoding="utf-8")
+        self.assertIn("-o root -g tuxindrive-server /etc/tuxindrive-server", postinst)
+        self.assertIn("chown root:tuxindrive-server /etc/tuxindrive-server/server.json", postinst)
+        self.assertIn("chmod 0640 /etc/tuxindrive-server/server.json", postinst)
+        self.assertNotIn("runuser -u tuxindrive-server", postinst)
+        self.assertIn("ReadWritePaths=/var/lib/tuxindrive-server\n", service)
+        self.assertNotIn("ReadWritePaths=/var/lib/tuxindrive-server /etc", service)
+        self.assertIn("TasksMax=128", service)
+        self.assertIn("MemoryMax=768M", service)
+
     def test_server_launcher_preserves_only_user_cli_arguments(self):
         repository = Path(__file__).resolve().parents[1]
         launcher = repository / "packaging/server/tuxindrive-server"
@@ -145,6 +172,23 @@ class ServerConfigurationTests(unittest.TestCase):
             ServerConfig.from_dict({"enabled_roles": ["shell"], "token_hashes": {"0" * 64: "owner"}})
         with self.assertRaises(ServerError):
             ServerConfig.from_dict({"token_hashes": {"short": "owner"}})
+
+    def test_server_resource_limits_are_bounded(self):
+        config = ServerConfig.from_dict({
+            "token_hashes": {"0" * 64: "owner"},
+            "max_concurrent_requests": 9999,
+            "max_requests_per_source": 9999,
+            "request_timeout_seconds": 0,
+            "max_relay_connections": 9999,
+            "max_relay_connections_per_tenant": 9999,
+            "relay_idle_timeout_seconds": 0,
+        })
+        self.assertEqual(config.max_concurrent_requests, 256)
+        self.assertEqual(config.max_requests_per_source, 256)
+        self.assertEqual(config.request_timeout_seconds, 5)
+        self.assertEqual(config.max_relay_connections, 64)
+        self.assertEqual(config.max_relay_connections_per_tenant, 64)
+        self.assertEqual(config.relay_idle_timeout_seconds, 5)
 
     def test_client_feature_flag_defaults_off_and_round_trips(self):
         self.assertFalse(AppSettings().server_integration_enabled)
@@ -223,6 +267,13 @@ class ServerApiTests(unittest.TestCase):
         connection = http.client.HTTPConnection("127.0.0.1", self.server.server_address[1])
         connection.request("CONNECT", "example.test:22", headers={"Authorization": f"Bearer {self.token}"})
         response = connection.getresponse(); self.assertEqual(response.status, 403); response.read(); connection.close()
+
+    def test_relay_admission_is_global_and_tenant_bounded(self):
+        self.assertTrue(self.server.reserve_relay("owner"))
+        self.assertTrue(self.server.reserve_relay("owner"))
+        self.assertFalse(self.server.reserve_relay("owner"))
+        self.server.release_relay("owner")
+        self.server.release_relay("owner")
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ PrivateTmp=yes
 PrivateDevices=yes
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/lib/tuxindrive-server /etc/tuxindrive-server
+ReadWritePaths=/var/lib/tuxindrive-server
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
@@ -31,6 +31,10 @@ CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
+TasksMax=128
+LimitNOFILE=4096
+MemoryMax=768M
+TimeoutStopSec=30s
 
 [Install]
 WantedBy=multi-user.target

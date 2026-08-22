@@ -87,6 +87,7 @@ class GlobalBandwidthController:
         self._interactive_transfer = threading.Lock()
         self._lock = threading.RLock()
         self._next_download = 0.0
+        self._next_upload = 0.0
         self.limit = ""
         self.configure(limit)
 
@@ -95,6 +96,7 @@ class GlobalBandwidthController:
         with self._lock:
             self.limit = normalized
             self._next_download = 0.0
+            self._next_upload = 0.0
 
     @property
     def enabled(self) -> bool:
@@ -147,13 +149,23 @@ class GlobalBandwidthController:
             yield
 
     def throttle_download(self, byte_count: int) -> None:
-        rate = _rate_bytes(self.limit, download=True)
+        self._throttle(byte_count, download=True)
+
+    def throttle_upload(self, byte_count: int) -> None:
+        self._throttle(byte_count, download=False)
+
+    def _throttle(self, byte_count: int, *, download: bool) -> None:
+        rate = _rate_bytes(self.limit, download=download)
         if rate is None or rate <= 0 or byte_count <= 0:
             return
         with self._lock:
             now = time.monotonic()
-            scheduled = max(now, self._next_download)
-            self._next_download = scheduled + byte_count / rate
+            next_transfer = self._next_download if download else self._next_upload
+            scheduled = max(now, next_transfer)
+            if download:
+                self._next_download = scheduled + byte_count / rate
+            else:
+                self._next_upload = scheduled + byte_count / rate
         delay = scheduled - now
         if delay > 0:
             time.sleep(delay)

@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools==80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuxindrive"
-version = "0.26.19"
+version = "0.26.20"
 description = "Native multi-provider cloud sync and streaming client for desktop and mobile"
 readme = "README.md"
 requires-python = ">=3.10"

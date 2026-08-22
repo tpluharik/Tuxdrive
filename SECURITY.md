@@ -2,11 +2,19 @@
 
 ## Supported release
 
-TuxInDrive 0.26.19 is the supported security baseline. Older packages retained for historical reference must not be installed on production systems. Installers and APKs are published as immutable assets on the matching GitHub Release; clients accept updates only through the signed platform manifests in `releases/`.
+TuxInDrive 0.26.20 is the supported security baseline. Older packages retained for historical reference must not be installed on production systems. Installers and APKs are published as immutable assets on the matching GitHub Release; clients accept updates only through the signed platform manifests in `releases/`.
+
+The source review dated **2026-08-22** found a high-severity privilege-boundary
+issue in the optional Linux server package, server resource-exhaustion risk,
+and release-supply-chain hardening gaps. Version 0.26.20 remediates the server
+boundary, bounded-network, Android updater and sensitive-path findings and adds
+regression coverage. Native Windows/macOS signing and fully immutable platform
+package-manager inputs remain release-environment work. See findings and status in
+[docs/SECURITY_AUDIT_2026-08-22.md](docs/SECURITY_AUDIT_2026-08-22.md).
 
 Report suspected vulnerabilities privately through GitHub's **Security → Report a vulnerability** workflow. Do not place credentials, peer invitations, Onion authorization material, private keys, or personal filenames in a public issue.
 
-## Security boundaries in 0.26.19
+## Security boundaries in 0.26.20
 
 - Update metadata is signed by the offline Ed25519 release key, expires, and binds the version, URL, package digest and release notes. A fixed privileged helper independently verifies that manifest, copies the package to a root-only staging directory, and checks the immutable copy before APT installation.
 - Provider credentials are held in rclone's encrypted configuration. A random configuration password is stored in GNOME Secret Service. Independently encrypted rclone configurations are not overwritten.
@@ -18,13 +26,13 @@ Report suspected vulnerabilities privately through GitHub's **Security → Repor
 - One global bandwidth/admission controller covers synchronization, streaming, scans, verification, updates, GitHub, Proton, and Android. It reduces congestion and duplicate jobs but is not an authentication, integrity, or firewall boundary.
 - A LAN share may advertise its name before a collaborator is known, but it exposes no file endpoint until the owner approves the requesting device fingerprint. Requests expire, deduplicate, are globally capped and rate-limited by source; approved advertisements are recipient-scoped, router mapping is opt-in, and the listener still requires the complete approved SSH key.
 - Encrypted mobile-profile transfer remains end-to-end protected whether moved as a searchable `.tdx` file or bounded multi-frame QR sequence. Android verifies the envelope, independent rclone unlock key, remote availability, frame sequence and digest before replacing working state.
-- The optional server preview is disabled in the client by default. It binds to loopback by default, requires TLS for non-loopback binds, stores only token digests, isolates opaque data and audit records per tenant, applies quotas/expiry/rate limits, and restricts headless job control to the bootstrap `owner` token. The separately installed service starts only after an administrator explicitly enables it.
+- The optional server preview is disabled in the client by default. It binds to loopback by default, requires TLS for non-loopback binds, stores only token digests, isolates opaque data and audit records per tenant, applies quotas/expiry/rate limits, and restricts headless job control to the bootstrap `owner` token. Its configuration is root-owned and atomically replaced without following temporary links; request and relay concurrency, deadlines, bandwidth and service resources are bounded. It remains a preview rather than an internet-scale public service.
 
 The detailed control inventory, credential locations, upgrade checklist, dependency response, verification procedure, and operator guidance are maintained in [docs/SECURITY_HARDENING.md](docs/SECURITY_HARDENING.md). Implementation is described in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), operational response in [docs/OPERATIONS.md](docs/OPERATIONS.md), and signing/publication in [docs/RELEASES.md](docs/RELEASES.md).
 
 ## Known limitation intentionally retained
 
-TuxInDrive 0.26.19 retains a separate listener and one-key authorization file for every enabled peer. Read-only/receive-only listeners are server read-only; send-only and one-time-drop listeners are rooted in dedicated inboxes. This prevents a modified generic SFTP client from using a role-limited key to browse the containing workspace. One-time-drop byte/file quotas and immediate completed-upload session termination remain defense-in-depth roadmap work.
+TuxInDrive 0.26.20 retains a separate listener and one-key authorization file for every enabled peer. Read-only/receive-only listeners are server read-only; send-only and one-time-drop listeners are rooted in dedicated inboxes. This prevents a modified generic SFTP client from using a role-limited key to browse the containing workspace. One-time-drop byte/file quotas and immediate completed-upload session termination remain defense-in-depth roadmap work.
 
 Do not grant a peer key to an untrusted person under the assumption that the current role label is a hostile-client sandbox. Current per-device roots and server-side authorization reduce role bypass; resource quotas, hostile-client isolation and the future headless peer layer remain separate hardening work.
 

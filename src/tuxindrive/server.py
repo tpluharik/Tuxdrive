@@ -20,6 +20,7 @@ import selectors
 import signal
 import socket
 import ssl
+import stat
 import sys
 import threading
 import time
@@ -49,6 +50,8 @@ DEFAULT_ROLES = (
 )
 MAX_JSON = 16 * 1024 * 1024
 MAX_OPAQUE = 12 * 1024 * 1024
+MAX_RELAY_BYTES = 1024 * 1024 * 1024
+MAX_RELAY_SECONDS = 3600
 
 
 class ServerError(RuntimeError):
@@ -69,6 +72,12 @@ class ServerConfig:
     quota_mib_per_tenant: int = 512
     default_ttl_seconds: int = 86400
     global_bandwidth_limit: str = "10M"
+    max_concurrent_requests: int = 16
+    max_requests_per_source: int = 4
+    request_timeout_seconds: int = 30
+    max_relay_connections: int = 4
+    max_relay_connections_per_tenant: int = 2
+    relay_idle_timeout_seconds: int = 30
     relay_targets: list[str] = field(default_factory=list)
     update_manifests: list[str] = field(default_factory=list)
 
@@ -88,6 +97,18 @@ class ServerConfig:
         result.quota_mib_per_tenant = max(16, min(1024 * 1024, int(result.quota_mib_per_tenant)))
         result.default_ttl_seconds = max(60, min(30 * 86400, int(result.default_ttl_seconds)))
         result.global_bandwidth_limit = normalize_bandwidth_limit(result.global_bandwidth_limit)
+        result.max_concurrent_requests = max(4, min(256, int(result.max_concurrent_requests)))
+        result.max_requests_per_source = max(
+            1,
+            min(result.max_concurrent_requests, int(result.max_requests_per_source)),
+        )
+        result.request_timeout_seconds = max(5, min(300, int(result.request_timeout_seconds)))
+        result.max_relay_connections = max(1, min(64, int(result.max_relay_connections)))
+        result.max_relay_connections_per_tenant = max(
+            1,
+            min(result.max_relay_connections, int(result.max_relay_connections_per_tenant)),
+        )
+        result.relay_idle_timeout_seconds = max(5, min(300, int(result.relay_idle_timeout_seconds)))
         unknown = set(result.enabled_roles) - set(DEFAULT_ROLES)
         if unknown:
             raise ServerError("Unknown server role(s): " + ", ".join(sorted(unknown)))
@@ -104,9 +125,10 @@ class ServerConfig:
                 raise ServerError("Invalid API token mapping")
         if bool(result.tls_certificate) != bool(result.tls_private_key):
             raise ServerError("Both TLS certificate and private key are required together")
-        for tls_path in (result.tls_certificate, result.tls_private_key):
-            if tls_path and not Path(tls_path).expanduser().is_file():
-                raise ServerError(f"TLS file does not exist: {tls_path}")
+        _validate_regular_file(result.tls_certificate, "TLS certificate")
+        _validate_regular_file(result.tls_private_key, "TLS private key", private=True)
+        _validate_regular_file(result.client_config, "Headless client configuration", private=True)
+        _validate_regular_file(result.database, "Server database", allow_missing=True, private=True)
         loopback = result.bind == "localhost"
         if not loopback:
             loopback = ipaddress.ip_address(result.bind).is_loopback
@@ -119,19 +141,90 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def _private_write(path: Path, data: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    temporary = path.with_name(path.name + ".tmp")
-    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+def _validate_regular_file(
+    value: str,
+    label: str,
+    *,
+    allow_missing: bool = False,
+    private: bool = False,
+) -> None:
+    if not value:
+        return
+    path = Path(value).expanduser()
     try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        if allow_missing:
+            parent = path.parent
+            try:
+                parent_metadata = parent.lstat()
+            except FileNotFoundError as exc:
+                raise ServerError(f"{label} parent does not exist: {parent}") from exc
+            if not stat.S_ISDIR(parent_metadata.st_mode) or stat.S_ISLNK(parent_metadata.st_mode):
+                raise ServerError(f"{label} parent must be a real directory")
+            return
+        raise ServerError(f"{label} does not exist: {path}")
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        raise ServerError(f"{label} must be a regular non-symlink file")
+    allowed_owners = {0, os.geteuid()}
+    if os.name == "posix":
+        try:
+            import pwd
+            allowed_owners.add(pwd.getpwnam("tuxindrive-server").pw_uid)
+        except (ImportError, KeyError):
+            pass
+    if metadata.st_uid not in allowed_owners:
+        raise ServerError(f"{label} has an unexpected owner")
+    if metadata.st_mode & 0o022:
+        raise ServerError(f"{label} must not be writable by group or other users")
+    if private and metadata.st_mode & 0o007:
+        raise ServerError(f"{label} must not be accessible to other users")
+
+
+def _private_write(
+    path: Path,
+    data: str,
+    *,
+    mode: int = 0o600,
+    uid: int | None = None,
+    gid: int | None = None,
+    require_root_parent: bool = False,
+) -> None:
+    """Atomically replace a private file without following a temporary symlink."""
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    parent_metadata = path.parent.lstat()
+    if stat.S_ISLNK(parent_metadata.st_mode) or not stat.S_ISDIR(parent_metadata.st_mode):
+        raise ServerError("Private file parent must be a real directory")
+    if require_root_parent and (
+        parent_metadata.st_uid != 0 or parent_metadata.st_mode & 0o022
+    ):
+        raise ServerError("Server configuration directory must be root-owned and non-writable by the service")
+
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    directory = os.open(path.parent, directory_flags)
+    temporary = f".{path.name}.{secrets.token_hex(16)}.tmp"
+    descriptor = -1
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(temporary, flags, mode, dir_fd=directory)
+        os.fchmod(descriptor, mode)
+        if uid is not None or gid is not None:
+            os.fchown(descriptor, -1 if uid is None else uid, -1 if gid is None else gid)
         with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
+            descriptor = -1
             handle.write(data)
-            handle.flush(); os.fsync(handle.fileno())
-        os.replace(temporary, path)
-        os.chmod(path, 0o600)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
+        os.fsync(directory)
     finally:
-        try: temporary.unlink()
-        except FileNotFoundError: pass
+        if descriptor >= 0:
+            os.close(descriptor)
+        try:
+            os.unlink(temporary, dir_fd=directory)
+        except FileNotFoundError:
+            pass
+        os.close(directory)
 
 
 def initialize(config_path: Path, state_path: Path, token_file: Path | None = None) -> str:
@@ -266,6 +359,13 @@ class TuxInDriveServer(ThreadingHTTPServer):
         self.store = ServerStore(Path(config.database).expanduser(), config.quota_mib_per_tenant * 1024 * 1024)
         self.agent = HeadlessAgent(config.client_config, config.global_bandwidth_limit) if "agent" in config.enabled_roles else None
         self.limiter = RateLimiter()
+        self.bandwidth = GlobalBandwidthController(config.global_bandwidth_limit)
+        self._request_slots = threading.BoundedSemaphore(config.max_concurrent_requests)
+        self._request_lock = threading.Lock()
+        self._requests_by_source: dict[str, int] = {}
+        self._relay_slots = threading.BoundedSemaphore(config.max_relay_connections)
+        self._relay_lock = threading.Lock()
+        self._relays_by_tenant: dict[str, int] = {}
         self.address_family = socket.AF_INET6 if ":" in config.bind else socket.AF_INET
         super().__init__((config.bind, config.port), RequestHandler)
         if config.tls_certificate:
@@ -273,6 +373,64 @@ class TuxInDriveServer(ThreadingHTTPServer):
             context.minimum_version = ssl.TLSVersion.TLSv1_2
             context.load_cert_chain(config.tls_certificate, config.tls_private_key)
             self.socket = context.wrap_socket(self.socket, server_side=True)
+
+    def get_request(self):
+        request, address = super().get_request()
+        request.settimeout(self.config.request_timeout_seconds)
+        return request, address
+
+    def process_request(self, request, client_address) -> None:
+        source = str(client_address[0])
+        if not self._request_slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        with self._request_lock:
+            active = self._requests_by_source.get(source, 0)
+            if active >= self.config.max_requests_per_source:
+                self._request_slots.release()
+                self.shutdown_request(request)
+                return
+            self._requests_by_source[source] = active + 1
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self._release_request(source)
+            raise
+
+    def process_request_thread(self, request, client_address) -> None:
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._release_request(str(client_address[0]))
+
+    def _release_request(self, source: str) -> None:
+        with self._request_lock:
+            active = self._requests_by_source.get(source, 0)
+            if active <= 1:
+                self._requests_by_source.pop(source, None)
+            else:
+                self._requests_by_source[source] = active - 1
+        self._request_slots.release()
+
+    def reserve_relay(self, tenant: str) -> bool:
+        if not self._relay_slots.acquire(blocking=False):
+            return False
+        with self._relay_lock:
+            active = self._relays_by_tenant.get(tenant, 0)
+            if active >= self.config.max_relay_connections_per_tenant:
+                self._relay_slots.release()
+                return False
+            self._relays_by_tenant[tenant] = active + 1
+        return True
+
+    def release_relay(self, tenant: str) -> None:
+        with self._relay_lock:
+            active = self._relays_by_tenant.get(tenant, 0)
+            if active <= 1:
+                self._relays_by_tenant.pop(tenant, None)
+            else:
+                self._relays_by_tenant[tenant] = active - 1
+        self._relay_slots.release()
 
     def start_roles(self) -> None:
         if self.agent: self.agent.start()
@@ -332,10 +490,16 @@ class RequestHandler(BaseHTTPRequestHandler):
         return tenant == "owner"
 
     def _body(self) -> dict:
-        try: length = int(self.headers.get("Content-Length", "0"))
+        if self.headers.get("Transfer-Encoding"):
+            raise ServerError("Transfer-Encoding is not supported")
+        raw_length = self.headers.get("Content-Length")
+        if raw_length is None:
+            raise ServerError("Content-Length is required")
+        try: length = int(raw_length)
         except ValueError: raise ServerError("Invalid Content-Length")
         if length < 0 or length > MAX_JSON: raise ServerError("Request body is too large")
         raw = self.rfile.read(length)
+        if len(raw) != length: raise ServerError("Request body ended before Content-Length")
         try: value = json.loads(raw.decode("utf-8")) if raw else {}
         except (UnicodeDecodeError, json.JSONDecodeError) as exc: raise ServerError("Request body is invalid JSON") from exc
         if not isinstance(value, dict): raise ServerError("Request body must be a JSON object")
@@ -441,29 +605,48 @@ class RequestHandler(BaseHTTPRequestHandler):
 
     def do_CONNECT(self) -> None:
         tenant = self._tenant()
-        if tenant is None or not self._role("relay"): return
+        if tenant is None: return
+        if not self._role("relay"):
+            self._error(404, "Endpoint not found"); return
+        if not self.server.reserve_relay(tenant):
+            self._error(429, "Relay connection limit exceeded"); return
         target = self.path.strip()
-        if target not in self.server.config.relay_targets:
-            self.server.store.audit(tenant, "CONNECT relay", "rejected", "target not allowlisted")
-            self._error(403, "Relay target is not allowlisted"); return
+        upstream = None
         try:
-            host, port_text = target.rsplit(":", 1); upstream = socket.create_connection((host, int(port_text)), timeout=10)
-        except (OSError, ValueError) as exc:
-            self._error(502, f"Relay connection failed: {exc}"); return
-        self.send_response(200, "Connection established"); self.send_header("Cache-Control", "no-store"); self.end_headers()
-        self.connection.setblocking(False); upstream.setblocking(False)
-        selector = selectors.DefaultSelector(); selector.register(self.connection, selectors.EVENT_READ, upstream); selector.register(upstream, selectors.EVENT_READ, self.connection)
-        deadline = time.monotonic() + 3600; transferred = 0
-        try:
-            while time.monotonic() < deadline and transferred < 1024 * 1024 * 1024:
-                events = selector.select(30)
-                if not events: continue
-                for key, _mask in events:
-                    chunk = key.fileobj.recv(65536)
-                    if not chunk: return
-                    key.data.sendall(chunk); transferred += len(chunk)
+            if target not in self.server.config.relay_targets:
+                self.server.store.audit(tenant, "CONNECT relay", "rejected", "target not allowlisted")
+                self._error(403, "Relay target is not allowlisted"); return
+            try:
+                host, port_text = target.rsplit(":", 1)
+                upstream = socket.create_connection((host, int(port_text)), timeout=10)
+            except (OSError, ValueError) as exc:
+                self._error(502, f"Relay connection failed: {exc}"); return
+            self.send_response(200, "Connection established"); self.send_header("Cache-Control", "no-store"); self.end_headers()
+            idle_timeout = self.server.config.relay_idle_timeout_seconds
+            self.connection.settimeout(idle_timeout); upstream.settimeout(idle_timeout)
+            selector = selectors.DefaultSelector(); selector.register(self.connection, selectors.EVENT_READ, upstream); selector.register(upstream, selectors.EVENT_READ, self.connection)
+            deadline = time.monotonic() + MAX_RELAY_SECONDS; last_activity = time.monotonic(); transferred = 0
+            try:
+                while time.monotonic() < deadline and transferred < MAX_RELAY_BYTES:
+                    events = selector.select(min(5, idle_timeout))
+                    if not events:
+                        if time.monotonic() - last_activity >= idle_timeout: return
+                        continue
+                    for key, _mask in events:
+                        chunk = key.fileobj.recv(65536)
+                        if not chunk: return
+                        if key.fileobj is self.connection:
+                            self.server.bandwidth.throttle_upload(len(chunk))
+                        else:
+                            self.server.bandwidth.throttle_download(len(chunk))
+                        key.data.sendall(chunk); transferred += len(chunk); last_activity = time.monotonic()
+            finally:
+                selector.close()
         finally:
-            selector.close(); upstream.close(); self.server.store.audit(tenant, "CONNECT relay", "closed", f"bytes={transferred}")
+            if upstream is not None:
+                upstream.close()
+            self.server.release_relay(tenant)
+            self.server.store.audit(tenant, "CONNECT relay", "closed")
 
     def _mcp(self, request: dict, tenant: str) -> None:
         request_id = request.get("id")

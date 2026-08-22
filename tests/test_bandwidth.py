@@ -44,6 +44,17 @@ class GlobalBandwidthControllerTests(unittest.TestCase):
             controller.throttle_download(1024)
         sleep.assert_called_once_with(1.0)
 
+    def test_upload_and_download_use_independent_directional_clocks(self):
+        controller = GlobalBandwidthController("1:2")
+        with patch("tuxindrive.bandwidth.time.monotonic", return_value=10.0), patch(
+            "tuxindrive.bandwidth.time.sleep"
+        ) as sleep:
+            controller.throttle_upload(1024)
+            controller.throttle_upload(1024)
+            controller.throttle_download(2048)
+            controller.throttle_download(2048)
+        self.assertEqual([call.args[0] for call in sleep.call_args_list], [1.0, 1.0])
+
     def test_zero_unlimited_and_empty_downloads_do_not_sleep(self):
         with patch("tuxindrive.bandwidth.time.sleep") as sleep:
             for limit, count in (("", 1024), ("off", 1024), ("0", 1024), ("1M", 0), ("1M", -1)):

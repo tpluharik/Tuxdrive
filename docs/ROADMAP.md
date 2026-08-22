@@ -7,7 +7,33 @@ This document records completed safety work and proposes future work. Suggestion
 
 The longer-term product direction is a **“Signal for files and cooperation”**: private workspaces in which people verify devices, exchange files and messages, synchronize offline changes, and—where a format supports it—edit together in real time. This is a design goal, not a present security claim. Every feature must ship with an explicit threat model and must identify which content and metadata remain visible to endpoints, relays, storage providers, Tor observers, and workspace administrators.
 
-## Current baseline: 0.26.19
+## Current baseline: 0.26.20
+
+### Completed in 0.26.20: 2026-08-22 audit remediation
+
+The current security review is recorded in
+[`SECURITY_AUDIT_2026-08-22.md`](SECURITY_AUDIT_2026-08-22.md). Version 0.26.20
+completed the application-controlled work:
+
+1. **P0 — restore the server privilege boundary:** root-owned read-only service
+   configuration, descriptor-based no-follow atomic writes, safe ownership
+   migration, removal of `/etc` from the service write set, and privileged VM
+   regression tests.
+2. **P1 — bound hostile network use:** fixed worker/admission limits, request and
+   relay deadlines, per-tenant connection/byte quotas, streaming bounded decode,
+   relay bandwidth control, and systemd task/file/memory ceilings.
+3. **P1 — strengthen releases:** exact Python CI/release tools, suppressed
+   package-manager auto-updates, dependency SBOM, release environment and
+   version-bound checksums. Fully immutable Windows/macOS package inputs,
+   signed provenance, Authenticode and Developer ID signing/notarization remain
+   external release-infrastructure gates requiring platform identities.
+4. **P2 — defense in depth:** generated-token-only policy and rotation, Android
+   redirect/final-origin enforcement with flavor-scoped install permission, and
+   no-follow owner/mode validation for server TLS/private paths.
+
+The server and Android controls have automated regression coverage. Privileged
+package installation, hostile sustained network load and native signing remain
+part of the manual release matrix until dedicated isolated runners are available.
 
 ### Completed in 0.26.19: bidirectional integrity repair and quieter bulk protection
 

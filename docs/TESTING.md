@@ -11,21 +11,21 @@ python3 -m pip install .
 PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m compileall -q src
 cd android
-gradle :app:testDebugUnitTest
+gradle :app:testSideloadDebugUnitTest
 ```
 
 The dependency-install step is required when using an isolated Python environment such as GitHub Actions. Python-package builds require `cryptography>=50.0.0,<51`; Ubuntu `.deb` installations use the distribution-maintained `python3-cryptography` package so official Ubuntu backported security fixes are recognized by APT rather than compared only by the upstream version string.
 
 CI pins third-party actions by immutable commit, runs high-severity Bandit checks and `pip-audit`, and publishes a CycloneDX dependency SBOM with the package.
 
-The TuxInDrive development suite contains **364 automated tests: 353 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding, private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, authenticated loopback HTTP, default-off client integration, relay rejection, read-only MCP, graphical package integration and its fixed no-shell privilege boundary. Desktop layout coverage verifies bounded dialogs, resizable client/server windows, and isolated scrolling for wide synchronized-folder actions. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
+The TuxInDrive development suite contains **381 automated tests: 370 Python tests and 11 Android JVM tests**. Tests use temporary directories and mocked cloud/Git/Tor processes where possible, so they do not require or expose real credentials or personal files. Server coverage adds private initialization, launcher argument forwarding and private package-library isolation, schema/TLS/token validation, tenant-isolated opaque storage, expiry/quota bounds, bounded authenticated requests and relays, authenticated loopback HTTP, default-off client integration, relay rejection, read-only MCP, graphical package integration and its fixed no-shell privilege boundary. Desktop layout coverage verifies bounded dialogs, resizable client/server windows, and isolated scrolling for wide synchronized-folder actions. The server API integration tests use only a temporary loopback listener and random ciphertext-like bytes.
 
 ## Test groups
 
 | Test module | Tests | What it verifies |
 |---|---:|---|
 | `test_audit.py` | 2 | Private audit persistence, filtering and malformed historical-line handling. |
-| `test_bandwidth.py` | 10 | Directional syntax and invalid values, stricter global/job limits, network-slot admission and release, update byte clock and bounded scan jitter. |
+| `test_bandwidth.py` | 12 | Directional syntax and invalid values, stricter global/job limits, independent upload/download clocks, network-slot admission and release, update byte clock and bounded scan jitter. |
 | `test_bootstrap.py` | 7 | Linux/macOS transfer-engine selection, rejection and identity-cached revalidation of incompatible/replaced rclone versions, supported CPU architectures, and pinned release checksums. |
 | `test_capabilities.py` | 3 | Complete provider records and conservative adaptive-mode restrictions. |
 | `test_config.py` | 11 | Round-trip persistence, bandwidth/theme/cache/visibility validation, legacy path compatibility, unchanged-write suppression, private permissions, and invalid configuration quarantine. |
@@ -51,13 +51,13 @@ The TuxInDrive development suite contains **364 automated tests: 353 Python test
 | `test_policies.py` | 7 | Maximum-usage defaults plus controlled battery, metered-network and normal/overnight schedule decisions, including fail-open probe handling. |
 | `test_recovery.py` | 8 | Local archive/restore behavior, disabled retention, malformed/foreign record rejection, expiry pruning, mass-change and ransomware-suffix blocking, and integrity-audit parsing. |
 | `test_security.py` | 8 | Empty/absolute/parent path rejection, symlink refusal, confined atomic installation, Ed25519-only keys and signed transaction tamper detection. |
-| `test_server.py` | 20 | Private initialization, package-launcher forwarding and private library isolation, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, authenticated HTTP, relay rejection, read-only MCP, GUI/desktop packaging and private staging-file permission rejection. |
+| `test_server.py` | 24 | Private initialization, race-resistant root configuration writes, package-launcher forwarding and private library isolation, TLS/URL/token validation, default-off client flag, opaque mailbox/object/rendezvous/collaboration isolation, expiry/quota bounds, bounded authenticated HTTP and relay admission, relay rejection, read-only MCP, GUI/desktop packaging and private staging-file permission rejection. |
 | `test_themes.py` | 5 | Nordic Glass, Bento Cloud and Midnight Sync registration; shared components and distinct palettes; Midnight-only dark preference; persisted selection; safe legacy/invalid fallback. |
 | `test_tor.py` | 4 | Fail-closed transport policy, private bridge handling, Onion client authorization validation and revocation. |
 | `test_rclone.py` | 19 | OAuth question parsing, callback handling, remote validation, provider behavior, Proton protection, and automatic Secret Service-backed rclone configuration encryption. |
 | `test_updater.py` | 16 | Version validation/comparison, platform-channel selection, trusted URLs, expiry/checksum/tamper rejection, globally rate-limited downloads, size/partial cleanup, privileged immutable staging and signed release coherence. |
 
-Android JVM coverage is kept beside the mobile source: `MobileValidationTest` contains 5 tests for bandwidth and version inputs, `MobileNetworkControllerTest` contains 2 tests for serialized access and exception-safe permit release, `ProfileQrTest` contains 2 cross-platform protocol/tamper tests, and `ProfileImporterTest` contains 2 tests for the encrypted rclone configuration plus its independent unlock key. Release CI runs `testReleaseUnitTest`; main-branch package CI runs `testDebugUnitTest` before lint and assembly. The Android build also needs the pinned `rclone.aar`; CI creates it before Gradle runs.
+Android JVM coverage is kept beside the mobile source: `MobileValidationTest` contains 5 tests for bandwidth and version inputs, `MobileNetworkControllerTest` contains 2 tests for serialized access and exception-safe permit release, `ProfileQrTest` contains 2 cross-platform protocol/tamper tests, and `ProfileImporterTest` contains 2 tests for the encrypted rclone configuration plus its independent unlock key. Release CI runs `testSideloadReleaseUnitTest`; main-branch package CI runs `testSideloadDebugUnitTest` before lint and assembly. The Android build also needs the pinned `rclone.aar`; CI creates it before Gradle runs.
 
 ## Important safety invariants covered
 
@@ -99,9 +99,9 @@ Android JVM coverage is kept beside the mobile source: `MobileValidationTest` co
 
 ```bash
 sh scripts/build-deb.sh
-dpkg-deb --info dist/tuxindrive_0.26.19_all.deb
-dpkg-deb --contents dist/tuxindrive_0.26.19_all.deb
-sha256sum dist/tuxindrive_0.26.19_all.deb
+dpkg-deb --info dist/tuxindrive_0.26.20_all.deb
+dpkg-deb --contents dist/tuxindrive_0.26.20_all.deb
+sha256sum dist/tuxindrive_0.26.20_all.deb
 ```
 
 The CI **Static security analysis** step must run before tests and packaging:
@@ -116,8 +116,8 @@ The release is blocked on any high-severity Bandit result or unresolved dependen
 Release manifests must be signed outside Git with the Ed25519 release key:
 
 ```bash
-python3 scripts/sign-update.py --version 0.26.19 \
-  --package dist/tuxindrive_0.26.19_all.deb \
+python3 scripts/sign-update.py --version 0.26.20 \
+  --package dist/tuxindrive_0.26.20_all.deb \
   --output update/latest-v2.json \
   --private-key /secure/offline/TuxInDrive-update-signing-private.pem
 ```
@@ -133,8 +133,8 @@ private bootstrap and installed module layout:
 
 ```bash
 sh scripts/build-server-deb.sh
-dpkg-deb --info dist/tuxindrive-server_0.26.19_all.deb
-dpkg-deb --contents dist/tuxindrive-server_0.26.19_all.deb
+dpkg-deb --info dist/tuxindrive-server_0.26.20_all.deb
+dpkg-deb --contents dist/tuxindrive-server_0.26.20_all.deb
 PYTHONPATH=src python3 -m unittest -v tests.test_server
 ```
 
@@ -193,7 +193,13 @@ The repository suite is primarily deterministic unit and command-construction te
 - compatibility testing against every provider account type and regional endpoint.
 - automatic interpretation of Ubuntu backported security patches from an upstream-looking package version;
 - automated privileged PolicyKit/real-APT race testing in an isolated VM;
-- sustained hostile peer/drop quota and session-termination testing beyond the dedicated-root authorization tests.
+- sustained hostile peer/drop quota and session-termination testing beyond the dedicated-root authorization tests;
+- sustained hostile authenticated slow-body and concurrent relay testing for the optional server beyond deterministic admission-limit tests;
+- real-VM installed-package tests that prove the server cannot write `/etc/tuxindrive-server`; deterministic package and symlink-boundary tests cover the same invariants in the repository suite;
+- reproducibility, native Windows/macOS signature, notarization and provenance verification for every platform release input.
+
+The remaining external and real-system checks are tracked in the
+[2026-08-22 security audit](SECURITY_AUDIT_2026-08-22.md).
 
 These gaps are tracked as roadmap work rather than implied coverage.
 
